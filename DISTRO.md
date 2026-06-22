@@ -16,7 +16,7 @@ approval: pending
 - Menulet: `cargo tauri build` → unsigned `.app`; drag to `/Applications`.
   - Bundles the `indiana` server binary as a Tauri sidecar inside the `.app` bundle. On launch, spawns it as a child if no daemon is already running.
 ## Next (early users)
-- CLI: Homebrew tap (`brew install niklas/indiana/indiana`).
+- CLI: Homebrew tap (`brew install niklasingvar/fmk-indiana`).
 - Menulet: code-signed + notarized `.dmg` (Developer ID) so Gatekeeper passes.
   - Self-contained: bundles the `indiana` server binary as a Tauri sidecar. No separate server install required.
   - On launch, checks for an existing daemon on the Unix socket. If alive, connects; if not, spawns the bundled `indiana serve`.
@@ -40,7 +40,7 @@ approval: pending
 | Who | How |
 |-----|-----|
 | Dogfood | `cargo build --release` + manual copy. |
-| CLI-native early user | `brew install niklas/indiana/indiana`. `indiana service install` to daemonize. |
+| CLI-native early user | `brew install niklasingvar/fmk-indiana`. `indiana service install` to daemonize. |
 | GUI early user | Download `.dmg`, drag to `/Applications`. Menulet self-contains — no terminal needed. |
 | Both | Homebrew for CLI + `.dmg` for menulet. Menulet detects `PATH` binary, prefers it. |
 ## Open questions

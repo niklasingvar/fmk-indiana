@@ -37,3 +37,9 @@ copy: build
 install: build
 	mkdir -p "$(HOME)/.local/bin"
 	cp "$(BIN)" "$(HOME)/.local/bin/indiana"
+
+.PHONY: release
+release: build
+	tar -czf indiana-aarch64-apple-darwin.tar.gz -C target/release indiana
+	@echo "SHA256:"
+	@shasum -a 256 indiana-aarch64-apple-darwin.tar.gz
