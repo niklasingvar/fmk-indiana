@@ -39,21 +39,77 @@ pub struct MarkerSpec {
 
 /// The table. Source of truth for the grammar.
 pub const TABLE: &[MarkerSpec] = &[
-    MarkerSpec { shorts: &["q", "?"], long: "question",  kind: Kind::Question,  msg: Msg::Optional, tracked: false },
-    MarkerSpec { shorts: &["h"],      long: "hate",      kind: Kind::Hate,      msg: Msg::None,     tracked: false },
-    MarkerSpec { shorts: &["l"],      long: "love",      kind: Kind::Love,      msg: Msg::None,     tracked: false },
-    MarkerSpec { shorts: &["k"],      long: "keep",      kind: Kind::Keep,      msg: Msg::None,     tracked: false },
-    MarkerSpec { shorts: &["f"],      long: "fix",       kind: Kind::Fix,       msg: Msg::Optional, tracked: false },
-    MarkerSpec { shorts: &["e"],      long: "elaborate", kind: Kind::Elaborate, msg: Msg::Optional, tracked: false },
-    MarkerSpec { shorts: &["n"],      long: "note",      kind: Kind::Note,      msg: Msg::Required, tracked: false },
-    MarkerSpec { shorts: &["a"],      long: "action",    kind: Kind::Action,    msg: Msg::Required, tracked: true  },
-    MarkerSpec { shorts: &["td"],     long: "todo",      kind: Kind::Todo,      msg: Msg::Required, tracked: true  },
+    MarkerSpec {
+        shorts: &["q", "?"],
+        long: "question",
+        kind: Kind::Question,
+        msg: Msg::Optional,
+        tracked: false,
+    },
+    MarkerSpec {
+        shorts: &["h"],
+        long: "hate",
+        kind: Kind::Hate,
+        msg: Msg::None,
+        tracked: false,
+    },
+    MarkerSpec {
+        shorts: &["l"],
+        long: "love",
+        kind: Kind::Love,
+        msg: Msg::None,
+        tracked: false,
+    },
+    MarkerSpec {
+        shorts: &["k"],
+        long: "keep",
+        kind: Kind::Keep,
+        msg: Msg::None,
+        tracked: false,
+    },
+    MarkerSpec {
+        shorts: &["f"],
+        long: "fix",
+        kind: Kind::Fix,
+        msg: Msg::Optional,
+        tracked: false,
+    },
+    MarkerSpec {
+        shorts: &["e"],
+        long: "elaborate",
+        kind: Kind::Elaborate,
+        msg: Msg::Optional,
+        tracked: false,
+    },
+    MarkerSpec {
+        shorts: &["n"],
+        long: "note",
+        kind: Kind::Note,
+        msg: Msg::Required,
+        tracked: false,
+    },
+    MarkerSpec {
+        shorts: &["a"],
+        long: "action",
+        kind: Kind::Action,
+        msg: Msg::Required,
+        tracked: true,
+    },
+    MarkerSpec {
+        shorts: &["td"],
+        long: "todo",
+        kind: Kind::Todo,
+        msg: Msg::Required,
+        tracked: true,
+    },
 ];
 
 /// Resolve a token (without `::`, any case) to its spec. Short or long form.
 pub fn lookup(token: &str) -> Option<&'static MarkerSpec> {
     let t = token.to_ascii_lowercase();
-    TABLE.iter().find(|s| s.long == t || s.shorts.contains(&t.as_str()))
+    TABLE
+        .iter()
+        .find(|s| s.long == t || s.shorts.contains(&t.as_str()))
 }
 
 #[cfg(test)]

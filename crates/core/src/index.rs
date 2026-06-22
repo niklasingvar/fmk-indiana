@@ -3,7 +3,9 @@
 
 use crate::markers::Kind;
 use crate::parser::{parse_line, FenceState, LineResult, Marker, Status};
+use crate::scope::{self, Scope};
 use crate::walk::walk_markdown;
+use crate::write::{self, InjectRequest, WriteResult};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -13,13 +15,16 @@ use std::path::{Path, PathBuf};
 pub struct Located {
     pub path: PathBuf,
     pub line: usize,
+    pub column: usize,
     pub kind: Kind,
+    pub raw_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<Status>,
+    pub scope: Scope,
 }
 
 /// The scanned state.
@@ -58,16 +63,82 @@ impl Counts {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ScanOptions {
+    pub read_only: bool,
+}
+
+impl ScanOptions {
+    pub fn write_ids() -> Self {
+        Self { read_only: false }
+    }
+
+    pub fn read_only() -> Self {
+        Self { read_only: true }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ScanReport {
+    pub index: Index,
+    pub written_paths: Vec<PathBuf>,
+}
+
 impl Index {
-    /// Scan all markdown under `root` into a fresh index.
-    pub fn build(root: &Path) -> Index {
-        let mut idx = Index::default();
-        let mut paths = walk_markdown(root);
-        paths.sort();
-        for path in paths {
-            idx.scan_file(&path);
+    /// Build an index and perform the M7 tracked-id injection pass.
+    pub fn build(root: &Path) -> Self {
+        Self::build_with_options(root, ScanOptions::write_ids()).index
+    }
+
+    /// Build an index without mutating source markdown.
+    pub fn build_read_only(root: &Path) -> Self {
+        Self::build_with_options(root, ScanOptions::read_only()).index
+    }
+
+    /// Build an index, optionally writing IDs into tracked marker lines.
+    pub fn build_with_options(root: &Path, options: ScanOptions) -> ScanReport {
+        let mut first = Index::default();
+        for path in walk_markdown(root) {
+            first.scan_file(&path);
         }
-        idx
+
+        let requests: Vec<InjectRequest> = first
+            .markers
+            .iter()
+            .filter(|m| matches!(m.kind, Kind::Action | Kind::Todo))
+            .map(|m| InjectRequest {
+                path: m.path.clone(),
+                line_no: m.line,
+            })
+            .collect();
+
+        let results = write::inject(&requests, options.read_only);
+        let written_paths: Vec<PathBuf> = results
+            .iter()
+            .filter_map(|(path, result)| {
+                if *result == WriteResult::Written {
+                    Some(path.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if options.read_only || written_paths.is_empty() {
+            return ScanReport {
+                index: first,
+                written_paths,
+            };
+        }
+
+        let mut second = Index::default();
+        for path in walk_markdown(root) {
+            second.scan_file(&path);
+        }
+        ScanReport {
+            index: second,
+            written_paths,
+        }
     }
 
     /// Per-kind tallies over the current markers.
@@ -95,12 +166,15 @@ impl Index {
         let text = match std::fs::read_to_string(path) {
             Ok(t) => t,
             Err(e) => {
-                self.warnings.push(format!("{}: unreadable ({e})", path.display()));
+                self.warnings
+                    .push(format!("{}: unreadable ({e})", path.display()));
                 return;
             }
         };
         let mut st = FenceState::default();
-        for (i, line) in text.lines().enumerate() {
+        let start = self.markers.len();
+        let lines: Vec<&str> = text.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
             let line_no = i + 1;
             match parse_line(line, &mut st) {
                 LineResult::Marker(m) => self.markers.push(locate(path, line_no, m)),
@@ -110,6 +184,9 @@ impl Index {
                 )),
                 LineResult::None => {}
             }
+        }
+        for marker in &mut self.markers[start..] {
+            marker.scope = scope::resolve(&lines, marker.line, marker.column);
         }
         if st.unclosed_at_eof() {
             self.warnings
@@ -123,9 +200,15 @@ fn locate(path: &Path, line: usize, m: Marker) -> Located {
         path: path.to_path_buf(),
         line,
         kind: m.kind,
+        raw_token: m.raw_token,
         message: m.message,
         id: m.id,
         status: m.status,
+        column: m.column,
+        scope: Scope {
+            kind: scope::ScopeKind::NextRow,
+            content: String::new(),
+        },
     }
 }
 
@@ -230,6 +313,58 @@ mod tests {
         assert_eq!(m.id.as_deref(), Some("bear-mouse"));
         assert_eq!(m.status, Some(Status::Done));
         assert_eq!(m.message.as_deref(), Some("ship it"));
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn test_index_injects_tracked_ids() {
+        let d = tmp();
+        write(&d, "x.md", "::action ship it\n");
+        let idx = scan_fixture(&d);
+        assert_eq!(idx.markers[0].kind, Kind::Action);
+        assert!(idx.markers[0].id.is_some());
+        assert!(fs::read_to_string(d.join("x.md"))
+            .unwrap()
+            .starts_with("::action["));
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn test_index_only_tracked_get_ids() {
+        let d = tmp();
+        write(&d, "x.md", "::h\n::todo do it\n");
+        let idx = scan_fixture(&d);
+        assert_eq!(idx.markers.len(), 2);
+        assert_eq!(idx.markers[0].id, None);
+        assert!(idx.markers[1].id.is_some());
+        let text = fs::read_to_string(d.join("x.md")).unwrap();
+        assert!(text.starts_with("::h\n::todo["));
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn test_index_read_only_no_write() {
+        let d = tmp();
+        write(&d, "x.md", "::action ship it\n");
+        let before = fs::read(d.join("x.md")).unwrap();
+        let idx = Index::build_read_only(&d);
+        assert_eq!(idx.markers[0].id, None);
+        assert_eq!(before, fs::read(d.join("x.md")).unwrap());
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn test_index_resolves_scope() {
+        let d = tmp();
+        write(
+            &d,
+            "x.md",
+            "Fix this ::f\n::n note\nnext line\n\n::k\n## Head\nbody\n## Next\n",
+        );
+        let idx = scan_fixture(&d);
+        assert_eq!(idx.markers[0].scope.content, "Fix this");
+        assert_eq!(idx.markers[1].scope.content, "next line");
+        assert_eq!(idx.markers[2].scope.content, "## Head\nbody");
         fs::remove_dir_all(&d).ok();
     }
 }

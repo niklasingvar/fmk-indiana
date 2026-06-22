@@ -30,6 +30,7 @@ impl Status {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Marker {
     pub kind: Kind,
+    pub raw_token: String,
     pub message: Option<String>,
     pub id: Option<String>,
     pub status: Option<Status>,
@@ -66,7 +67,12 @@ pub struct FenceState {
 
 impl Default for FenceState {
     fn default() -> Self {
-        FenceState { backtick: false, tilde: false, fm: Fm::NotStarted, line_no: 0 }
+        FenceState {
+            backtick: false,
+            tilde: false,
+            fm: Fm::NotStarted,
+            line_no: 0,
+        }
     }
 }
 
@@ -195,7 +201,9 @@ fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
     let (token, rest) = if let Some(r) = after.strip_prefix('?') {
         ("?", r)
     } else {
-        let end = after.find(|c: char| !c.is_ascii_alphabetic()).unwrap_or(after.len());
+        let end = after
+            .find(|c: char| !c.is_ascii_alphabetic())
+            .unwrap_or(after.len());
         (&after[..end], &after[end..])
     };
     if token.is_empty() {
@@ -228,7 +236,14 @@ fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
         _ => Some(msg_text.to_string()),
     };
 
-    Some(Marker { kind: spec.kind, message, id, status, column: at })
+    Some(Marker {
+        kind: spec.kind,
+        raw_token: format!("::{token}"),
+        message,
+        id,
+        status,
+        column: at,
+    })
 }
 
 #[cfg(test)]
@@ -357,7 +372,10 @@ mod tests {
     fn test_inline_code_ignored() {
         // `::` quoted in an inline code span is sample text, not a command.
         assert_eq!(parse("the token `::hate` means dislike"), LineResult::None);
-        assert_eq!(parse("- `::action[happy-otter] buy milk`."), LineResult::None);
+        assert_eq!(
+            parse("- `::action[happy-otter] buy milk`."),
+            LineResult::None
+        );
         // Two quoted markers in a table cell → not ambiguous, just ignored.
         assert_eq!(parse("| `::q`, `::?` | question |"), LineResult::None);
     }
@@ -390,8 +408,15 @@ mod tests {
     #[test]
     fn test_parse_line_pure() {
         let samples = [
-            "::h", "  ::l", "text ::f msg", "```", "::action[x:done] y",
-            "no marker here", "::q", "::h ::l", "::n note ::fix two",
+            "::h",
+            "  ::l",
+            "text ::f msg",
+            "```",
+            "::action[x:done] y",
+            "no marker here",
+            "::q",
+            "::h ::l",
+            "::n note ::fix two",
         ];
         for s in samples {
             let mut a = FenceState::default();
