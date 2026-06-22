@@ -1,8 +1,15 @@
-//! indiana — one binary, multi-mode (IN_PRD.md): serve | scan | copy | service.
+//! indiana — one binary, multi-mode (IN_PRD.md): serve | scan | add.
 //! Faces only render; all domain logic lives in indiana_core.
 
+mod config;
+mod daemon;
+mod paths;
+mod protocol;
+
 use clap::{Parser, Subcommand};
+use config::Config;
 use indiana_core::index::Index;
+use indiana_core::markers::Kind;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -15,32 +22,52 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Walk markdown under a path and list every marker (one pass).
+    /// Run the daemon: bind the socket and hold the index in memory.
+    Serve {
+        /// Folder to monitor for this run (default: configured folders, else cwd).
+        root: Option<PathBuf>,
+    },
+    /// Walk markdown and list every marker. With no path, asks a running daemon.
     Scan {
-        /// Repo root to scan (default: current directory).
+        /// Repo root to scan (forces a standalone scan of this path).
         path: Option<PathBuf>,
         /// Emit JSON instead of the human list.
         #[arg(long)]
         json: bool,
     },
+    /// Add a folder to the monitored-folders config.
+    Add {
+        /// Folder to monitor across daemon restarts.
+        path: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
     match Cli::parse().cmd {
-        Cmd::Scan { path, json } => scan(path.unwrap_or_else(|| PathBuf::from(".")), json),
+        Cmd::Serve { root } => match daemon::serve(root) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("indiana: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Cmd::Scan { path, json } => scan(path, json),
+        Cmd::Add { path } => add(path),
     }
 }
 
-fn scan(root: PathBuf, json: bool) -> ExitCode {
-    let idx = Index::build(&root);
+fn scan(path: Option<PathBuf>, json: bool) -> ExitCode {
+    // Explicit path → standalone. No path → daemon view, else cwd standalone.
+    let idx = match &path {
+        Some(p) => Index::build(p),
+        None => daemon::client_scan().unwrap_or_else(|| Index::build(&PathBuf::from("."))),
+    };
 
     if json {
-        // Core computes; the face only serializes what it computed.
         println!("{}", serde_json::to_string_pretty(&idx).unwrap());
         return ExitCode::SUCCESS;
     }
 
-    // Human view: grouped by file, in path order.
     let mut last: Option<&PathBuf> = None;
     for m in &idx.markers {
         if last != Some(&m.path) {
@@ -57,22 +84,39 @@ fn scan(root: PathBuf, json: bool) -> ExitCode {
     eprintln!(
         "{} marker(s){}",
         idx.markers.len(),
-        if idx.warnings.is_empty() { String::new() } else { format!(", {} warning(s)", idx.warnings.len()) }
+        if idx.warnings.is_empty() {
+            String::new()
+        } else {
+            format!(", {} warning(s)", idx.warnings.len())
+        }
     );
     ExitCode::SUCCESS
 }
 
-fn kind_name(k: indiana_core::markers::Kind) -> &'static str {
-    use indiana_core::markers::Kind::*;
+fn add(path: PathBuf) -> ExitCode {
+    let mut cfg = Config::load();
+    if cfg.add_folder(&path) {
+        if let Err(e) = cfg.save() {
+            eprintln!("indiana: could not save config: {e}");
+            return ExitCode::FAILURE;
+        }
+        eprintln!("indiana: monitoring {}", path.display());
+    } else {
+        eprintln!("indiana: already monitoring {}", path.display());
+    }
+    ExitCode::SUCCESS
+}
+
+fn kind_name(k: Kind) -> &'static str {
     match k {
-        Question => "question",
-        Hate => "hate",
-        Love => "love",
-        Keep => "keep",
-        Fix => "fix",
-        Elaborate => "elaborate",
-        Note => "note",
-        Action => "action",
-        Todo => "todo",
+        Kind::Question => "question",
+        Kind::Hate => "hate",
+        Kind::Love => "love",
+        Kind::Keep => "keep",
+        Kind::Fix => "fix",
+        Kind::Elaborate => "elaborate",
+        Kind::Note => "note",
+        Kind::Action => "action",
+        Kind::Todo => "todo",
     }
 }

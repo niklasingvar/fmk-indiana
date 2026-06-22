@@ -4,12 +4,12 @@
 use crate::markers::Kind;
 use crate::parser::{parse_line, FenceState, LineResult, Marker, Status};
 use crate::walk::walk_markdown;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 /// A marker located in the source. Carries path + line so a face can point at
 /// it (IN_PRD.md: each indiana carries path, line, id).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Located {
     pub path: PathBuf,
     pub line: usize,
@@ -23,7 +23,7 @@ pub struct Located {
 }
 
 /// The scanned state.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Index {
     pub markers: Vec<Located>,
     pub warnings: Vec<String>,

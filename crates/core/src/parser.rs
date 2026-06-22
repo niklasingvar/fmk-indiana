@@ -9,7 +9,7 @@
 
 use crate::markers::{self, Kind, Msg};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
     Done,
@@ -192,8 +192,8 @@ fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
     let after = &line[at + 2..];
 
     // Token: `?` or a run of ascii letters.
-    let (token, rest) = if after.starts_with('?') {
-        ("?", &after[1..])
+    let (token, rest) = if let Some(r) = after.strip_prefix('?') {
+        ("?", r)
     } else {
         let end = after.find(|c: char| !c.is_ascii_alphabetic()).unwrap_or(after.len());
         (&after[..end], &after[end..])

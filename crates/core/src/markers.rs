@@ -3,7 +3,7 @@
 //! Adding a marker is one row here (IN_COMMANDS.md "The set").
 
 /// What a marker means. One variant per row of the IN_COMMANDS.md table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
     Question,
