@@ -18,6 +18,11 @@ approval: pending
 - This is input, not derived state — it is not in any markdown and not rebuildable from source.
 - The one legitimate non-source state ([IN_PRINCIPLES.md](IN_PRINCIPLES.md): source is truth applies to the index, not to user config).
 - The index stays throwaway; config is user choice and persists across restarts.
+- Empty config monitors nothing — a folder must be selected before the daemon scans anything.
+
+## Folder selection
+- `indiana add <path>` selects a folder. Against a running daemon it is a live command: the daemon persists `config.json`, starts watching the folder, and rebuilds the index immediately (no restart).
+- With no daemon running, `add` only writes `config.json`; the next `serve` picks it up.
 
 ## Socket binding
 - One process binds the socket. A second `indiana serve` must fail to bind with a clean error, not clobber.
@@ -36,5 +41,5 @@ approval: pending
 - An in-flight operation (a copy compile) completes regardless of whether the client is still attached.
 
 ## Open
-- Whether config edits hot-reload, or require a daemon signal / restart.
-- Whether `config.json` is the daemon's to write, or only the menulet/CLI mutate it.
+- Whether a `remove`/stop-monitoring command mirrors `add` (live unwatch + rebuild).
+- Whether external edits to `config.json` (not via `add`) hot-reload, or require a restart.

@@ -2,6 +2,7 @@
 purpose: Specify the scan engine — how Indiana finds indianas, fast, without owning the truth.
 max_lines: 70
 status: draft
+approval: pending
 ---
 
 # IN_SCAN — scan engine
@@ -12,6 +13,7 @@ status: draft
 - Markdown is the source of truth. The index is a throwaway view, rebuilt each scan.
 - Read-only by default. The only write is a one-time ID injection ([IN_IDENTITY.md](IN_IDENTITY.md)).
 - Cheap enough to run on every keystroke-debounced save.
+- Any scan (not just the daemon) may inject IDs ([plan-to-plan-i-cozy-lecun.md](../plan-to-plan-i-cozy-lecun.md) D5). A `--read-only` flag suppresses writes.
 
 ## Find
 - An indiana sits at column 0, or inline at end of a content line.

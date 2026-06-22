@@ -41,4 +41,4 @@ approval: pending
 - Agents emit Casablanca-formatted terse output.
 - Indiana visualizes it; markers become first-class.
 
-> Detail lives in each PRD: [IN_PRD.md](INDIANA/IN_PRD.md), [CASABLANCA_PRD.md](CASABLANCA_PRD.md).
+> Detail lives in each PRD: [IN_PRD.md](INDIANA/IN_PRD.md), [MENULET_PRD.md](MENULET/MENULET_PRD.md), [CASABLANCA_PRD.md](CASABLANCA/CASABLANCA_PRD.md).

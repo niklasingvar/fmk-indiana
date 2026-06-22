@@ -1,6 +1,12 @@
+---
+status: draft
+purpose: Specify the macOS menulet face for Indiana.
+approval: pending
+---
+
 # MENULET — PRD
 
-> A UI representation of [Indiana](INDIANA/IN_PRD.md). It shows; it does not compute. Markers: [COMMANDS.md](INDIANA/IN_COMMANDS.md).
+> A UI representation of [Indiana](../INDIANA/IN_PRD.md). It shows; it does not compute. Markers: [COMMANDS.md](../INDIANA/IN_COMMANDS.md).
 
 ## What it is
 - A macOS menulet (menu-bar item, no Dock icon).
@@ -29,6 +35,6 @@
 - Reuses patterns from `old/adhd-menulet-focus-finder` (tray, NSPanel, hide-on-blur).
 ## Phase 1 (first deliverable)
 - Menulet exists; monitor one folder; list monitored folders.
-- Copy lands in a later phase — see [PHASES.md](PHASES.md).
+- Copy lands in a later phase — see [PHASES.md](../PHASES.md).
 ## Open questions
 - Copy scope: whole folder vs per-file.

@@ -43,3 +43,5 @@ approval: pending
 - MCP and `indiana copy` share one compiled payload model.
 - Copy formatting is a renderer. MCP output is structured payload.
 - Agent-native means no clipboard dependency when the agent supports MCP.
+- Transport is stdio JSON-RPC via `indiana mcp`; it reads compiled payload from the daemon socket and falls back to a local scan when no daemon is running.
+- Implementation is manual JSON-RPC for now, not `rmcp`. Keep the surface small until the tool contract stabilizes.

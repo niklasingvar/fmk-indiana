@@ -30,5 +30,5 @@ approval: pending
 - The bracket moves with the line — copy the line to another file, identity and status travel with it.
 - Parsing strips the bracket before reading the marker's message, so the ID never leaks into the payload.
 
-## Open
-- Whether a human hand-editing the bracket (wrong id, bad status word) should be repaired or trusted as source truth.
+## Repair (D7)
+- Malformed brackets are repaired, not trusted. An id failing `[a-z]+-[a-z]+(-[0-9]+)?` gets a fresh id; an unknown status word is dropped to open. Must stay idempotent (a repaired line rescans clean).

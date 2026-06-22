@@ -30,8 +30,8 @@ approved_file_length: 50 rows
 
 ## The products
 - [Indiana](INDIANA/IN_PRD.md) — the server. Monitors repos, compiles `::` markers, exposes the payload through MCP, copies the bundle as fallback. Owns the markers end to end. CLI + menulet.
-- [Menulet](MENULET_PRD.md) — a UI view onto Indiana: monitored folders, one-click copy. Shows, never computes.
-- [Casablanca](CASABLANCA_PRD.md) — a separate sub-product: visualizes what the coding agent outputs. Nothing to do with the markers.
+- [Menulet](MENULET/MENULET_PRD.md) — a UI view onto Indiana: monitored folders, one-click copy. Shows, never computes.
+- [Casablanca](CASABLANCA/CASABLANCA_PRD.md) — a separate sub-product: visualizes what the coding agent outputs. Nothing to do with the markers.
 
 ## Direction
 - Built in steps — see [PHASES.md](PHASES.md). Rome isn't built in a day.

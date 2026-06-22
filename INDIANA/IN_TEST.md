@@ -47,7 +47,7 @@ approval: pending
 |-----|-------------|------|
 | [IN_SCOPE.md](IN_SCOPE.md) | Inline: marker at end of content line targets that line | `test_scope_inline` — `Fix this ::f` → scope is the line text (minus the marker and tail) |
 | [IN_SCOPE.md](IN_SCOPE.md) | Next-row: marker alone on a line targets the next block until blank line | `test_scope_next_row` — `::n` on own line, then a paragraph of 3 lines, then blank → scope is the 3-line paragraph |
-| [IN_SCOPE.md](IN_SCOPE.md) | Section: marker on heading targets section until equal/higher heading | `test_scope_section` — `## Intro ::k`, then text, then `## Next` → scope is text under Intro |
+| [IN_SCOPE.md](IN_SCOPE.md) | Section: marker alone before an ATX heading targets section until equal/higher heading | `test_scope_section` — `::k`, then `## Intro`, then text, then `## Next` → scope is Intro section |
 | [IN_SCOPE.md](IN_SCOPE.md) | Most-specific wins: inline inside section keeps own span | `test_scope_most_specific` — `## Section ::k` with an inline `::f` on a line inside → the `::f` scope is its line only, not the section |
 | [IN_SCOPE.md](IN_SCOPE.md) | Spans never cross file boundaries | `test_scope_file_bound` — next-row marker at end of file → scope stops at EOF, no error |
 | [IN_SCOPE.md](IN_SCOPE.md) | Range: deferred to later phase | No test yet. Placeholder: `test_scope_range_deferred` — `::end` not implemented, does not crash |
@@ -70,6 +70,9 @@ approval: pending
 | [IN_SCAN.md](IN_SCAN.md) | Atomic write: temp → fsync → rename | `test_write_atomic` — verify temp file exists briefly, then renamed; original never corrupted |
 | [IN_SCAN.md](IN_SCAN.md) | mtime guard: file changed under us → abort | `test_mtime_guard` — modify file between scan and injection → injection aborted, file re-queued |
 | [IN_SCAN.md](IN_SCAN.md) | Own-write suppressed for ~500ms | `test_suppress_own_write` — after injection, the FSEvent on that path does not trigger a rescan within 500ms |
+| [plan-to-plan-i-cozy-lecun.md](../plan-to-plan-i-cozy-lecun.md) | Malformed id repaired with fresh one | `test_bracket_repair_bad_id` — `::action[not-valid] do it` → written with valid id |
+| [plan-to-plan-i-cozy-lecun.md](../plan-to-plan-i-cozy-lecun.md) | Unknown status dropped to open | `test_bracket_repair_bad_status` — `::action[valid-id:unknown] do it` → written as `::action[valid-id] do it` |
+| [plan-to-plan-i-cozy-lecun.md](../plan-to-plan-i-cozy-lecun.md) | --read-only suppresses writes | `test_scan_read_only_no_write` — `::action do thing` with --read-only → no file modified |
 
 ## E7 — Compiler: copy bundle
 | Ref | Requirement | Test |
@@ -87,6 +90,9 @@ approval: pending
 | [IN_DAEMON.md](IN_DAEMON.md) | One daemon binds socket; second fails cleanly | `test_socket_single_bind` — start daemon A, try to start daemon B → B exits with "already running" |
 | [IN_DAEMON.md](IN_DAEMON.md) | Stale socket detected and cleaned | `test_stale_socket` — create a socket file, no daemon behind it → daemon connects, gets refused, unlinks, binds |
 | [IN_DAEMON.md](IN_DAEMON.md) | Config lives in `~/.indiana/config.json` | `test_config_persists` — add a folder via CLI, restart daemon → folder still monitored |
+| [IN_DAEMON.md](IN_DAEMON.md) | Empty config monitors nothing | `test_serve_empty_no_folders` — serve with no config → scan reports zero markers |
+| [IN_DAEMON.md](IN_DAEMON.md) | Live `add` watches + rescans without restart | `test_live_add_autoscan` — add a folder to a running daemon → its markers appear with no restart |
+| [IN_DAEMON.md](IN_DAEMON.md) | Live `add` is idempotent | `test_live_add_idempotent` — re-adding a monitored folder → "already monitoring" |
 | [IN_DAEMON.md](IN_DAEMON.md) | Client disconnect doesn't lose state | `test_client_reconnect` — CLI queries, disconnects, reconnects → same counts |
 
 ## E9 — Invariants
@@ -119,5 +125,4 @@ approval: pending
 - External tool behavior: `rg` output format, clipboard API on macOS — integration smoke, not unit coverage.
 
 ## Open
-- Whether E6 (ID injection) tests run against real temp dirs or an in-memory filesystem abstraction. Real temp dirs are simpler and test the actual OS path; they also leave cleanup cruft on failure.
-- Whether E11 (watch) tests are flaky by nature and belong in CI at all, or are manual-only.
+- E11 watch tests may be flaky by nature. Keep in CI while fast and stable; move to manual-only if they start failing nondeterministically.

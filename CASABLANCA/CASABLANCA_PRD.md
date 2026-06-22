@@ -1,6 +1,12 @@
+---
+status: draft
+purpose: Specify Casablanca as a separate sub-product for terse agent output.
+approval: pending
+---
+
 # CASABLANCA — PRD
 
-> A sub-product. Why it exists: [PURPOSE.md](PURPOSE.md). Where it's headed: [GOAL.md](GOAL.md) · [PHASES.md](PHASES.md).
+> A sub-product. Why it exists: [PURPOSE.md](../PURPOSE.md). Where it's headed: [GOAL.md](../GOAL.md) · [PHASES.md](../PHASES.md).
 
 ## What it is
 - A template system for what the coding agent spits out.
@@ -12,7 +18,7 @@
 
 ## Scope
 - In: the terse output format/templates; rendering the agent's output.
-- Out: the `::` markers — those are [Indiana](INDIANA/IN_PRD.md)'s. Casablanca has nothing to do with them.
+- Out: the `::` markers — those are [Indiana](../INDIANA/IN_PRD.md)'s. Casablanca has nothing to do with them.
 
 ## Relationship to Indiana
 - Independent products that share the same workflow.

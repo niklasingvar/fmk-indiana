@@ -2,6 +2,7 @@
 purpose: Specify which indianas get a tracked identity, and why identity lives in the source.
 max_lines: 50
 status: draft
+approval: pending
 ---
 
 # IN_IDENTITY — tracked vs ephemeral
@@ -42,3 +43,6 @@ status: draft
 ## Decided
 - Generated pronounceable tokens. Readable, memorable, no dictionary to bundle or drift — unlimited pool by construction.
 - Ephemeral indianas get no handle. A handle is state outside source; the bundle addresses them by position.
+
+## Repair (D7)
+- Malformed brackets are repaired, not trusted. An id failing `[a-z]+-[a-z]+(-[0-9]+)?` gets a fresh id; an unknown status word is dropped to open. Must stay idempotent (a repaired line rescans clean).
