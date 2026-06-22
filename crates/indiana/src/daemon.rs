@@ -7,10 +7,13 @@ use crate::config::Config;
 use crate::paths::{indiana_dir, socket_path};
 use crate::protocol::{Request, Response};
 use indiana_core::index::Index;
+use notify::{RecursiveMode, Watcher};
+use notify_debouncer_full::new_debouncer;
 use std::io::{self, BufRead, BufReader, ErrorKind, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 /// Build one index across several roots (the daemon may monitor many folders).
 fn build_index(roots: &[PathBuf]) -> Index {
@@ -54,6 +57,12 @@ pub fn serve(root: Option<PathBuf>) -> io::Result<()> {
     };
 
     let index = Arc::new(Mutex::new(build_index(&roots)));
+
+    // Watch the roots; refresh the held index on debounced changes (M5,
+    // IN_SCAN.md ~300 ms). The debouncer coalesces bursts into one rebuild.
+    // `_debouncer` must stay alive for the daemon's lifetime or watching stops.
+    let _debouncer = start_watch(roots.clone(), Arc::clone(&index))?;
+
     let listener = UnixListener::bind(&sock)?;
     eprintln!("indiana: serving {} folder(s) on {}", roots.len(), sock.display());
 
@@ -71,6 +80,34 @@ pub fn serve(root: Option<PathBuf>) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Start watching `roots`; on each debounced batch, rebuild the held index.
+/// Returns the debouncer, which the caller must keep alive.
+fn start_watch(
+    roots: Vec<PathBuf>,
+    index: Arc<Mutex<Index>>,
+) -> io::Result<impl Sized> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut debouncer =
+        new_debouncer(Duration::from_millis(300), None, tx).map_err(io::Error::other)?;
+    for r in &roots {
+        debouncer
+            .watcher()
+            .watch(r, RecursiveMode::Recursive)
+            .map_err(io::Error::other)?;
+        debouncer.cache().add_root(r, RecursiveMode::Recursive);
+    }
+    std::thread::spawn(move || {
+        // One message per debounced batch — bursts coalesce to one rebuild.
+        for res in rx {
+            if res.is_ok() {
+                let fresh = build_index(&roots);
+                *index.lock().unwrap() = fresh;
+            }
+        }
+    });
+    Ok(debouncer)
 }
 
 fn handle(stream: UnixStream, index: &Mutex<Index>) -> io::Result<()> {

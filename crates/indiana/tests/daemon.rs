@@ -119,6 +119,69 @@ fn test_config_persists() {
     assert!(scan_json(&home).contains("\"keep\""));
 }
 
+fn wait_until<F: Fn(&str) -> bool>(home: &Path, pred: F) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(8);
+    while Instant::now() < deadline {
+        if pred(&scan_json(home)) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    false
+}
+
+fn count_markers(json: &str) -> usize {
+    json.matches("\"kind\"").count()
+}
+
+// E11: a new file's markers are detected.
+#[test]
+fn test_watch_new_file() {
+    let home = unique("home");
+    let repo = repo_with(""); // doc.md with no markers
+    let _a = spawn_serve(&home, Some(&repo));
+    assert!(wait_socket(&home));
+    std::fs::write(repo.join("new.md"), "::h\n").unwrap();
+    assert!(wait_until(&home, |j| j.contains("\"hate\"")), "new file not picked up");
+}
+
+// E11: a modified file is re-scanned.
+#[test]
+fn test_watch_modify() {
+    let home = unique("home");
+    let repo = repo_with("::h\n");
+    let _a = spawn_serve(&home, Some(&repo));
+    assert!(wait_socket(&home));
+    assert!(wait_until(&home, |j| j.contains("\"hate\"")));
+    std::fs::write(repo.join("doc.md"), "::h\n::l\n").unwrap();
+    assert!(wait_until(&home, |j| j.contains("\"love\"")), "modification not picked up");
+}
+
+// E11: a deleted file's markers leave the index.
+#[test]
+fn test_watch_delete() {
+    let home = unique("home");
+    let repo = repo_with("::h\n");
+    let _a = spawn_serve(&home, Some(&repo));
+    assert!(wait_socket(&home));
+    assert!(wait_until(&home, |j| j.contains("\"hate\"")));
+    std::fs::remove_file(repo.join("doc.md")).unwrap();
+    assert!(wait_until(&home, |j| !j.contains("\"hate\"")), "deletion not picked up");
+}
+
+// E11: a burst of writes coalesces; final state has all markers.
+#[test]
+fn test_watch_debounce() {
+    let home = unique("home");
+    let repo = repo_with("");
+    let _a = spawn_serve(&home, Some(&repo));
+    assert!(wait_socket(&home));
+    for i in 0..10 {
+        std::fs::write(repo.join(format!("f{i}.md")), "::h\n").unwrap();
+    }
+    assert!(wait_until(&home, |j| count_markers(j) == 10), "burst not fully indexed");
+}
+
 // E8: a client that disconnects and reconnects sees the same state.
 #[test]
 fn test_client_reconnect() {

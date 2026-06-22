@@ -14,3 +14,5 @@ indiana-core = { path = "../core" }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+notify = "6"
+notify-debouncer-full = "0.3"
