@@ -8,6 +8,10 @@
 ### End with
 - Documenting the learnings, caveats, new principles in the relevant markdown file
 - Point out consistency issues, violations, caveats or simpler way of doing things
+### Commit
+- Commit often: small, focused commits, one logical change each.
+- Commit after every passing step/milestone — don't batch unrelated work.
+- Keep docs and code in separate commits.
 
 ## Principles
 - Document WHY, INTENT and DIRECTION, never what the code already proves.
