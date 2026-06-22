@@ -81,14 +81,23 @@ fn scan(path: Option<PathBuf>, json: bool) -> ExitCode {
     for w in &idx.warnings {
         eprintln!("warning: {w}");
     }
-    eprintln!(
-        "{} marker(s){}",
-        idx.markers.len(),
-        if idx.warnings.is_empty() {
-            String::new()
-        } else {
-            format!(", {} warning(s)", idx.warnings.len())
+    // Core computes the tallies; the face only prints them.
+    let c = idx.counts();
+    let mut parts = Vec::new();
+    for (label, n) in [
+        ("hate", c.hate), ("love", c.love), ("keep", c.keep),
+        ("fix", c.fix), ("elaborate", c.elaborate), ("question", c.question),
+        ("note", c.note), ("action", c.action), ("todo", c.todo),
+    ] {
+        if n > 0 {
+            parts.push(format!("{label}:{n}"));
         }
+    }
+    eprintln!(
+        "{} marker(s){}{}",
+        c.total(),
+        if parts.is_empty() { String::new() } else { format!(" ({})", parts.join(" ")) },
+        if idx.warnings.is_empty() { String::new() } else { format!(", {} warning(s)", idx.warnings.len()) },
     );
     ExitCode::SUCCESS
 }

@@ -29,6 +29,35 @@ pub struct Index {
     pub warnings: Vec<String>,
 }
 
+/// Per-kind tallies (IN_PRD.md: copy and counts). Computed by the core; a face
+/// only displays this, never counts itself (IN_PRINCIPLES.md: faces render).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Counts {
+    pub question: usize,
+    pub hate: usize,
+    pub love: usize,
+    pub keep: usize,
+    pub fix: usize,
+    pub elaborate: usize,
+    pub note: usize,
+    pub action: usize,
+    pub todo: usize,
+}
+
+impl Counts {
+    pub fn total(&self) -> usize {
+        self.question
+            + self.hate
+            + self.love
+            + self.keep
+            + self.fix
+            + self.elaborate
+            + self.note
+            + self.action
+            + self.todo
+    }
+}
+
 impl Index {
     /// Scan all markdown under `root` into a fresh index.
     pub fn build(root: &Path) -> Index {
@@ -39,6 +68,25 @@ impl Index {
             idx.scan_file(&path);
         }
         idx
+    }
+
+    /// Per-kind tallies over the current markers.
+    pub fn counts(&self) -> Counts {
+        let mut c = Counts::default();
+        for m in &self.markers {
+            match m.kind {
+                Kind::Question => c.question += 1,
+                Kind::Hate => c.hate += 1,
+                Kind::Love => c.love += 1,
+                Kind::Keep => c.keep += 1,
+                Kind::Fix => c.fix += 1,
+                Kind::Elaborate => c.elaborate += 1,
+                Kind::Note => c.note += 1,
+                Kind::Action => c.action += 1,
+                Kind::Todo => c.todo += 1,
+            }
+        }
+        c
     }
 
     /// Scan one file's markers into the index (used by the walk and, later, by
@@ -154,6 +202,20 @@ mod tests {
         write(&d, "b.rs", "::h\n");
         write(&d, "c.json", "::h\n");
         assert!(scan_fixture(&d).markers.is_empty());
+        fs::remove_dir_all(&d).ok();
+    }
+
+    // IN_PRD.md / E9: core computes per-kind tallies; faces just read them.
+    #[test]
+    fn test_counts() {
+        let d = tmp();
+        write(&d, "m.md", "::h\n::h\n::l\n::fix go\n::action[x] do\n");
+        let c = scan_fixture(&d).counts();
+        assert_eq!(c.hate, 2);
+        assert_eq!(c.love, 1);
+        assert_eq!(c.fix, 1);
+        assert_eq!(c.action, 1);
+        assert_eq!(c.total(), 5);
         fs::remove_dir_all(&d).ok();
     }
 
