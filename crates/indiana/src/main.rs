@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 #[derive(Parser)]
-#[command(name = "indiana", about = "Scan markdown for :: markers")]
+#[command(name = "indiana", about = "Scan markdown for :: markers", version)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
