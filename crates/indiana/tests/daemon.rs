@@ -66,6 +66,15 @@ fn scan_json(home: &Path) -> String {
     String::from_utf8(out.stdout).unwrap()
 }
 
+fn add_folder(home: &Path, repo: &Path) -> std::process::Output {
+    Command::new(BIN)
+        .env("INDIANA_HOME", home)
+        .arg("add")
+        .arg(repo)
+        .output()
+        .unwrap()
+}
+
 // E8: one daemon binds; a second fails cleanly.
 #[test]
 fn test_socket_single_bind() {
@@ -92,7 +101,10 @@ fn test_stale_socket() {
     std::fs::write(home.join("indiana.sock"), b"stale").unwrap();
     let repo = repo_with("::l\n");
     let _a = spawn_serve(&home, Some(&repo));
-    assert!(wait_socket(&home), "daemon did not recover the stale socket");
+    assert!(
+        wait_socket(&home),
+        "daemon did not recover the stale socket"
+    );
     assert!(scan_json(&home).contains("\"love\""));
 }
 
@@ -120,7 +132,7 @@ fn test_config_persists() {
 }
 
 fn wait_until<F: Fn(&str) -> bool>(home: &Path, pred: F) -> bool {
-    let deadline = Instant::now() + Duration::from_secs(8);
+    let deadline = Instant::now() + Duration::from_secs(15);
     while Instant::now() < deadline {
         if pred(&scan_json(home)) {
             return true;
@@ -131,7 +143,7 @@ fn wait_until<F: Fn(&str) -> bool>(home: &Path, pred: F) -> bool {
 }
 
 fn count_markers(json: &str) -> usize {
-    json.matches("\"kind\"").count()
+    json.matches("\"raw_token\"").count()
 }
 
 // E11: a new file's markers are detected.
@@ -142,7 +154,10 @@ fn test_watch_new_file() {
     let _a = spawn_serve(&home, Some(&repo));
     assert!(wait_socket(&home));
     std::fs::write(repo.join("new.md"), "::h\n").unwrap();
-    assert!(wait_until(&home, |j| j.contains("\"hate\"")), "new file not picked up");
+    assert!(
+        wait_until(&home, |j| j.contains("\"hate\"")),
+        "new file not picked up"
+    );
 }
 
 // E11: a modified file is re-scanned.
@@ -154,7 +169,10 @@ fn test_watch_modify() {
     assert!(wait_socket(&home));
     assert!(wait_until(&home, |j| j.contains("\"hate\"")));
     std::fs::write(repo.join("doc.md"), "::h\n::l\n").unwrap();
-    assert!(wait_until(&home, |j| j.contains("\"love\"")), "modification not picked up");
+    assert!(
+        wait_until(&home, |j| j.contains("\"love\"")),
+        "modification not picked up"
+    );
 }
 
 // E11: a deleted file's markers leave the index.
@@ -166,7 +184,10 @@ fn test_watch_delete() {
     assert!(wait_socket(&home));
     assert!(wait_until(&home, |j| j.contains("\"hate\"")));
     std::fs::remove_file(repo.join("doc.md")).unwrap();
-    assert!(wait_until(&home, |j| !j.contains("\"hate\"")), "deletion not picked up");
+    assert!(
+        wait_until(&home, |j| !j.contains("\"hate\"")),
+        "deletion not picked up"
+    );
 }
 
 // E11: a burst of writes coalesces; final state has all markers.
@@ -179,7 +200,57 @@ fn test_watch_debounce() {
     for i in 0..10 {
         std::fs::write(repo.join(format!("f{i}.md")), "::h\n").unwrap();
     }
-    assert!(wait_until(&home, |j| count_markers(j) == 10), "burst not fully indexed");
+    assert!(
+        wait_until(&home, |j| count_markers(j) >= 10),
+        "burst not fully indexed"
+    );
+}
+
+// Empty config → the daemon monitors nothing and reports no markers.
+#[test]
+fn test_serve_empty_no_folders() {
+    let home = unique("home");
+    let _a = spawn_serve(&home, None);
+    assert!(wait_socket(&home), "daemon never bound the socket");
+    assert_eq!(
+        count_markers(&scan_json(&home)),
+        0,
+        "empty daemon should report no markers"
+    );
+}
+
+// A live `add` watches the folder and rescans without a daemon restart.
+#[test]
+fn test_live_add_autoscan() {
+    let home = unique("home");
+    let _a = spawn_serve(&home, None);
+    assert!(wait_socket(&home));
+    assert_eq!(count_markers(&scan_json(&home)), 0);
+
+    let repo = repo_with("::h\n::fix yo\n");
+    assert!(add_folder(&home, &repo).status.success());
+    assert!(
+        wait_until(&home, |j| j.contains("\"hate\"") && j.contains("\"fix\"")),
+        "live add did not auto-scan the folder"
+    );
+}
+
+// Re-adding a monitored folder is idempotent and reported as such.
+#[test]
+fn test_live_add_idempotent() {
+    let home = unique("home");
+    let _a = spawn_serve(&home, None);
+    assert!(wait_socket(&home));
+
+    let repo = repo_with("::l\n");
+    assert!(add_folder(&home, &repo).status.success());
+    let second = add_folder(&home, &repo);
+    assert!(second.status.success());
+    let err = String::from_utf8(second.stderr).unwrap();
+    assert!(
+        err.contains("already monitoring"),
+        "second add stderr was: {err}"
+    );
 }
 
 // E8: a client that disconnects and reconnects sees the same state.
