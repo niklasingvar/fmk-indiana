@@ -10,16 +10,16 @@
     "beforeBuildCommand": "npm run ui:build"
   },
   "app": {
-    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Indiana",
-        "width": 320,
-        "height": 400,
+        "width": 290,
+        "height": 260,
         "decorations": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "visible": false
+        "visible": false,
+        "transparent": true
       }
     ],
     "security": {
@@ -28,7 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["app", "dmg"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -39,17 +39,5 @@
     "externalBin": [
       "binaries/indiana"
     ]
-  },
-  "plugins": {
-    "shell": {
-      "sidecar": true,
-      "scope": [
-        {
-          "name": "binaries/indiana",
-          "sidecar": true,
-          "args": true
-        }
-      ]
-    }
   }
 }

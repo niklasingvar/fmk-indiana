@@ -7,26 +7,13 @@ let daemonIsOurs = false;
 let homeDir = "";
 
 // DOM
-const focusInput = document.getElementById("focus");
 const foldersList = document.getElementById("folders");
-const emptyState = document.getElementById("empty-state");
-const addBtn = document.getElementById("add-btn");
+const emptyState = document.getElementById("empty");
+const addBtn = document.getElementById("add-item");
 const statusDot = document.getElementById("status-dot");
 const statusLabel = document.getElementById("status-label");
 const statusAction = document.getElementById("status-action");
 const copiedFlash = document.getElementById("copied-flash");
-
-// Focus persistence
-async function loadFocus() {
-  try { focusInput.value = await invoke("read_focus"); } catch (_) {}
-}
-async function saveFocus() {
-  try { await invoke("save_focus", { text: focusInput.value }); } catch (_) {}
-}
-focusInput.addEventListener("blur", saveFocus);
-focusInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") { focusInput.blur(); saveFocus(); }
-});
 
 // Check if we own the daemon
 async function checkOwnership() {
@@ -59,17 +46,17 @@ function renderFolders(folders) {
     foldersList.hidden = false;
     for (const f of folders) {
       const li = document.createElement("li");
-      li.className = "folder";
+      li.className = "menu-item";
 
-      const name = document.createElement("span");
-      name.className = "basename";
-      name.textContent = basename(f.path);
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = basename(f.path);
 
       const count = document.createElement("span");
-      count.className = "count";
+      count.className = "meta";
       count.textContent = f.count + "\u00D7";
 
-      li.appendChild(name);
+      li.appendChild(label);
       li.appendChild(count);
 
       li.addEventListener("click", async () => {
@@ -117,22 +104,19 @@ function setRunning(running) {
 function updateActionButton(running) {
   if (running) {
     if (daemonIsOurs) {
-      statusAction.textContent = "\u23F9";
-      statusAction.title = "Stop server";
+      statusAction.textContent = "Stop";
       statusAction.style.display = "";
     } else {
       statusAction.style.display = "none";
     }
   } else {
-    statusAction.textContent = "\u25B6";
-    statusAction.title = "Start server";
+    statusAction.textContent = "Start";
     statusAction.style.display = "";
   }
 }
 
 function setConnecting() {
-  statusDot.className = "";
-  statusDot.innerHTML = '<span class="spinner"></span>';
+  statusDot.className = "spinning";
   statusLabel.textContent = "Starting\u2026";
   statusAction.style.display = "none";
 }
@@ -183,7 +167,6 @@ statusAction.addEventListener("click", async () => {
 });
 
 // Init
-loadFocus();
 loadHomeDir().then(async () => {
   setConnecting();
   for (let i = 0; i < 20; i++) {
@@ -197,3 +180,6 @@ loadHomeDir().then(async () => {
   }
   setRunning(false);
 });
+
+// Periodic polling
+setInterval(refreshFolders, 3000);
