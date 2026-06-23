@@ -184,17 +184,16 @@ statusAction.addEventListener("click", async () => {
 
 // Init
 loadFocus();
-loadHomeDir().then(() =>
-  checkOwnership().then(async () => {
-    setConnecting();
-    for (let i = 0; i < 20; i++) {
-      try {
-        await invoke("status");
-        await refreshFolders();
-        return;
-      } catch (_) {}
-      await new Promise(r => setTimeout(r, 500));
-    }
-    setRunning(false);
-  })
-);
+loadHomeDir().then(async () => {
+  setConnecting();
+  for (let i = 0; i < 20; i++) {
+    try {
+      await invoke("status");
+      await checkOwnership();
+      await refreshFolders();
+      return;
+    } catch (_) {}
+    await new Promise(r => setTimeout(r, 500));
+  }
+  setRunning(false);
+});
