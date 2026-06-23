@@ -15,3 +15,7 @@ menulet/src-tauri/binaries/indiana-aarch64-apple-darwin
 
 # Tauri-generated schemas (regenerated each build)
 MENULET/src-tauri/gen/
+
+# Menulet frontend deps + Vite build output
+MENULET/node_modules/
+MENULET/dist/

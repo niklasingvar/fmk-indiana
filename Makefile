@@ -1,7 +1,7 @@
 TEST_DIR ?= tmp/indiana-test
 BIN := target/release/indiana
 
-.PHONY: build scratch serve add scan copy install help
+.PHONY: build scratch serve add scan copy install help menulet
 
 help:
 	@echo "make scratch  Create a test markdown folder"
@@ -10,6 +10,7 @@ help:
 	@echo "make scan     Scan the running server's monitored folders"
 	@echo "make copy     Copy compiled bundle from the running server"
 	@echo "make install  Copy release binary to ~/.local/bin/indiana"
+	@echo "make menulet  Build daemon, bundle as sidecar, launch menulet (tauri dev)"
 
 build:
 	cargo build --release
@@ -37,6 +38,11 @@ copy: build
 install: build
 	mkdir -p "$(HOME)/.local/bin"
 	cp "$(BIN)" "$(HOME)/.local/bin/indiana"
+
+# Build the daemon, refresh the bundled sidecar, launch the menulet (foreground).
+menulet: build
+	cp "$(BIN)" MENULET/src-tauri/binaries/indiana-aarch64-apple-darwin
+	cd MENULET && npm install && npm run dev
 
 .PHONY: release
 release: build

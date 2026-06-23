@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.indiana.menulet",
   "build": {
-    "frontendDist": "../src",
+    "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "beforeDevCommand": "npm run ui:dev",
+    "beforeBuildCommand": "npm run ui:build"
   },
   "app": {
     "withGlobalTauri": true,

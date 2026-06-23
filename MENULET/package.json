@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build"
+    "build": "tauri build",
+    "ui:dev": "vite",
+    "ui:build": "vite build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",
@@ -14,6 +16,7 @@
     "@tauri-apps/plugin-clipboard-manager": "^2.2.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.0"
+    "@tauri-apps/cli": "^2.11.0",
+    "vite": "^6.0.0"
   }
 }
