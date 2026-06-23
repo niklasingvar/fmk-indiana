@@ -8,3 +8,6 @@
 .DS_Store
 .cursor/
 indiana-aarch64-apple-darwin.tar.gz
+menulet/node_modules/
+menulet/src-tauri/target/
+menulet/src-tauri/binaries/indiana-aarch64-apple-darwin
