@@ -12,16 +12,17 @@ use tauri::{
 
 mod socket;
 
-/// Tracks whether we spawned the daemon (so we know whether to offer stop).
+/// Tracks whether we spawned the daemon, and whether a native dialog is open.
 pub(crate) struct DaemonState {
     pub(crate) ours: bool,
+    pub(crate) dialog_open: bool,
 }
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(Mutex::new(DaemonState { ours: false }))
+        .manage(Mutex::new(DaemonState { ours: false, dialog_open: false }))
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -53,8 +54,16 @@ fn main() {
                 .build(app)?;
 
             let wh = window.clone();
+            let handle = app.handle().clone();
             window.on_window_event(move |event| {
                 if let WindowEvent::Focused(false) = event {
+                    if handle
+                        .try_state::<Mutex<DaemonState>>()
+                        .map(|s| s.lock().unwrap().dialog_open)
+                        .unwrap_or(false)
+                    {
+                        return;
+                    }
                     let _ = wh.hide();
                 }
             });
@@ -78,6 +87,7 @@ fn main() {
             socket::commands::save_focus,
             socket::commands::daemon_is_ours,
             socket::commands::home_dir,
+            socket::commands::set_dialog_open,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -124,12 +124,14 @@ function setConnecting() {
 // Add folder
 addBtn.addEventListener("click", async () => {
   try {
+    try { await invoke("set_dialog_open", { open: true }); } catch (_) {}
     const dir = await open({ directory: true, multiple: false, title: "Monitor a folder" });
     if (dir) {
       await invoke("add_folder", { path: dir });
       await refreshFolders();
     }
   } catch (e) { console.error("add folder failed:", e); }
+  finally { try { await invoke("set_dialog_open", { open: false }); } catch (_) {} }
 });
 
 emptyState.addEventListener("click", () => addBtn.click());

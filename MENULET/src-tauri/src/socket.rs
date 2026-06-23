@@ -162,6 +162,14 @@ pub mod commands {
             .unwrap_or(false)
     }
 
+    /// Signal that a native dialog is about to open (prevents auto-hide on focus loss).
+    #[tauri::command]
+    pub fn set_dialog_open(open: bool, app: tauri::AppHandle) {
+        if let Some(state) = app.try_state::<std::sync::Mutex<crate::DaemonState>>() {
+            state.lock().unwrap().dialog_open = open;
+        }
+    }
+
     #[tauri::command]
     pub fn home_dir() -> String {
         std::env::var("HOME").unwrap_or_default()
