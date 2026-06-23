@@ -82,6 +82,7 @@ pub fn shutdown() -> bool {
 
 pub mod commands {
     use super::*;
+    use tauri::Manager;
     use tauri_plugin_shell::ShellExt;
 
     #[tauri::command]
@@ -120,7 +121,19 @@ pub mod commands {
             .args(["serve"])
             .spawn()
             .map_err(|e| format!("spawn failed: {e}"))?;
+        // Mark daemon as ours.
+        if let Some(state) = app.try_state::<std::sync::Mutex<crate::DaemonState>>() {
+            state.lock().unwrap().ours = true;
+        }
         Ok(true)
+    }
+
+    /// Returns true if the menulet spawned the running daemon.
+    #[tauri::command]
+    pub fn daemon_is_ours(app: tauri::AppHandle) -> bool {
+        app.try_state::<std::sync::Mutex<crate::DaemonState>>()
+            .map(|s| s.lock().unwrap().ours)
+            .unwrap_or(false)
     }
 
     #[tauri::command]

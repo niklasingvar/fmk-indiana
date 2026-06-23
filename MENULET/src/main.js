@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
 // State
-let _$daemonIsOurs = false;
+let daemonIsOurs = false;
 
 // DOM
 const focusInput = document.getElementById("focus");
@@ -16,34 +16,28 @@ const copiedFlash = document.getElementById("copied-flash");
 
 // Focus persistence
 async function loadFocus() {
-  try {
-    focusInput.value = await invoke("read_focus");
-  } catch (_) {}
+  try { focusInput.value = await invoke("read_focus"); } catch (_) {}
 }
-
 async function saveFocus() {
-  try {
-    await invoke("save_focus", { text: focusInput.value });
-  } catch (_) {}
+  try { await invoke("save_focus", { text: focusInput.value }); } catch (_) {}
 }
-
 focusInput.addEventListener("blur", saveFocus);
 focusInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    focusInput.blur();
-    saveFocus();
-  }
+  if (e.key === "Enter") { focusInput.blur(); saveFocus(); }
 });
+
+// Check if we own the daemon
+async function checkOwnership() {
+  try { daemonIsOurs = await invoke("daemon_is_ours"); } catch (_) { daemonIsOurs = false; }
+}
 
 // Refresh folder list from daemon
 async function refreshFolders() {
   try {
     const resp = await invoke("status");
-    const folders = resp.folders || [];
-    renderFolders(folders);
+    renderFolders(resp.folders || []);
     setRunning(true);
   } catch (_) {
-    // Daemon not running
     setRunning(false);
   }
 }
@@ -66,30 +60,26 @@ function renderFolders(folders) {
 
       const count = document.createElement("span");
       count.className = "count";
-      count.textContent = f.count + "×";
+      count.textContent = f.count + "\u00D7";
 
       li.appendChild(name);
       li.appendChild(count);
 
-      // Click to copy
       li.addEventListener("click", async () => {
         try {
-          await invoke("copy_folder", { path: f.path });
+          const text = await invoke("copy_folder", { path: f.path });
+          // Write to clipboard via the web API
+          await navigator.clipboard.writeText(text);
           flashCopied();
-        } catch (e) {
-          console.error("copy failed:", e);
-        }
+        } catch (e) { console.error("copy failed:", e); }
       });
 
-      // Right-click to remove
       li.addEventListener("contextmenu", async (e) => {
         e.preventDefault();
         try {
           await invoke("remove_folder", { path: f.path });
           await refreshFolders();
-        } catch (err) {
-          console.error("remove failed:", err);
-        }
+        } catch (err) { console.error("remove failed:", err); }
       });
 
       foldersList.appendChild(li);
@@ -98,11 +88,10 @@ function renderFolders(folders) {
 }
 
 function basename(path) {
-  // Show ~/ for home dir, else basename
-  const home = "/Users/" + (new URLSearchParams(window.location.search).get("user") || "");
-  if (home && path.startsWith(home)) {
-    return "~" + path.slice(home.length);
-  }
+  try {
+    const home = Deno?.env?.get("HOME") || "";
+    if (home && path.startsWith(home)) return "~" + path.slice(home.length);
+  } catch (_) {}
   const parts = path.split("/");
   return parts[parts.length - 1] || path;
 }
@@ -112,24 +101,38 @@ function flashCopied() {
   setTimeout(() => copiedFlash.classList.remove("show"), 1200);
 }
 
-// Server status display
 function setRunning(running) {
-  if (running) {
-    statusDot.className = "running";
-    statusLabel.textContent = "Server running";
-  } else {
-    statusDot.className = "stopped";
-    statusLabel.textContent = "Server stopped";
-    // Grey out folder list
-    renderFolders([]);
+  statusDot.className = running ? "running" : "stopped";
+  statusLabel.textContent = running ? "Server running" : "Server stopped";
+  if (!running) {
+    foldersList.innerHTML = "";
     emptyState.hidden = true;
+    daemonIsOurs = false;
+  }
+  updateActionButton(running);
+}
+
+function updateActionButton(running) {
+  if (running) {
+    if (daemonIsOurs) {
+      statusAction.textContent = "\u23F9";
+      statusAction.title = "Stop server";
+      statusAction.style.display = "";
+    } else {
+      statusAction.style.display = "none";
+    }
+  } else {
+    statusAction.textContent = "\u25B6";
+    statusAction.title = "Start server";
+    statusAction.style.display = "";
   }
 }
 
 function setConnecting() {
   statusDot.className = "";
   statusDot.innerHTML = '<span class="spinner"></span>';
-  statusLabel.textContent = "Starting…";
+  statusLabel.textContent = "Starting\u2026";
+  statusAction.style.display = "none";
 }
 
 // Add folder
@@ -140,9 +143,7 @@ addBtn.addEventListener("click", async () => {
       await invoke("add_folder", { path: dir });
       await refreshFolders();
     }
-  } catch (e) {
-    console.error("add folder failed:", e);
-  }
+  } catch (e) { console.error("add folder failed:", e); }
 });
 
 emptyState.addEventListener("click", () => addBtn.click());
@@ -150,16 +151,17 @@ emptyState.addEventListener("click", () => addBtn.click());
 // Start/stop button
 statusAction.addEventListener("click", async () => {
   const isRunning = statusDot.className === "running";
-  if (isRunning) {
+  if (isRunning && daemonIsOurs) {
     try {
       await invoke("shutdown");
+      daemonIsOurs = false;
       setRunning(false);
     } catch (_) {}
-  } else {
+  } else if (!isRunning) {
     setConnecting();
     try {
       await invoke("spawn_sidecar");
-      // Poll for daemon to come up
+      daemonIsOurs = true;
       for (let i = 0; i < 20; i++) {
         await new Promise((r) => setTimeout(r, 500));
         try {
@@ -178,4 +180,4 @@ statusAction.addEventListener("click", async () => {
 
 // Init
 loadFocus();
-refreshFolders();
+checkOwnership().then(() => refreshFolders());
