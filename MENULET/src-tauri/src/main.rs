@@ -1,0 +1,75 @@
+//! Indiana menulet — Tauri 2 system tray app.
+//! Thin face onto the Indiana daemon; shows, never computes.
+
+// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use tauri::{
+    image::Image,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager, WindowEvent,
+};
+mod protocol;
+mod socket;
+
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .setup(|app| {
+            // LSUIElement: no Dock icon, no app menu — accessory mode.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // Build the tray icon from the bundled PNG template.
+            let icon = Image::from_bytes(include_bytes!("../icons/tray.png"))
+                .expect("tray icon not found");
+
+            let window = app.get_webview_window("main").unwrap();
+
+            let _tray = TrayIconBuilder::new()
+                .icon(icon)
+                .icon_as_template(true) // macOS monochrome template tinting
+                .on_tray_icon_event(move |tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let w = tray.app_handle().get_webview_window("main").unwrap();
+                        if w.is_visible().unwrap_or(false) {
+                            let _ = w.hide();
+                        } else {
+                            // Position under the menu bar icon.
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // Hide panel when it loses focus.
+            let wh = window.clone();
+            window.on_window_event(move |event| {
+                if let WindowEvent::Focused(false) = event {
+                    let _ = wh.hide();
+                }
+            });
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            socket::commands::status,
+            socket::commands::add_folder,
+            socket::commands::remove_folder,
+            socket::commands::copy_folder,
+            socket::commands::shutdown,
+            socket::commands::spawn_sidecar,
+            socket::commands::read_focus,
+            socket::commands::save_focus,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
