@@ -36,4 +36,11 @@ impl Config {
         self.folders.push(abs);
         true
     }
+
+    /// Remove a folder by its canonical path. Returns false if it wasn't present.
+    pub fn remove_folder(&mut self, path: &Path) -> bool {
+        let len_before = self.folders.len();
+        self.folders.retain(|p| p != path);
+        self.folders.len() < len_before
+    }
 }

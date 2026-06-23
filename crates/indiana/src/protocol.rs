@@ -15,6 +15,14 @@ pub enum Request {
     Payload,
     /// Monitor a new folder: persist it, watch it, and rescan now.
     Add { path: PathBuf },
+    /// Return per-folder status — paths and marker counts (menulet face).
+    Status,
+    /// Stop monitoring a folder: remove from config, unwatch, rebuild index.
+    Remove { path: PathBuf },
+    /// Return the compiled bundle for one folder as ready-to-paste text.
+    Copy { path: PathBuf },
+    /// Graceful shutdown: ack, unlink the socket, exit.
+    Shutdown,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,4 +40,28 @@ pub struct AddResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PayloadResponse {
     pub payload: CompiledPayload,
+}
+
+/// A monitored folder + its live marker count. Computed by the daemon so the
+/// menulet never counts (MENULET_PRD).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FolderInfo {
+    pub path: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StatusResponse {
+    pub folders: Vec<FolderInfo>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RemoveResponse {
+    pub removed: bool,
+    pub index: Index,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CopyResponse {
+    pub text: String,
 }

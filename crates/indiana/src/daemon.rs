@@ -6,8 +6,8 @@
 
 use crate::config::Config;
 use crate::paths::{indiana_dir, socket_path};
-use crate::protocol::{AddResponse, PayloadResponse, Request, Response};
-use indiana_core::compile::{compile, CompiledPayload};
+use crate::protocol::{AddResponse, CopyResponse, FolderInfo, PayloadResponse, RemoveResponse, Request, Response, StatusResponse};
+use indiana_core::compile::{compile, render_text, CompiledPayload};
 use indiana_core::index::{Index, ScanReport};
 use indiana_core::write::OwnWriteTracker;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -191,6 +191,42 @@ fn add_folder_live(
     })
 }
 
+/// Stop monitoring a folder while the daemon runs: persist config, unwatch,
+/// rebuild index, and report whether it was present.
+fn remove_folder_live(
+    path: &Path,
+    roots: &Mutex<Vec<PathBuf>>,
+    index: &Mutex<Index>,
+    own_writes: &Mutex<OwnWriteTracker>,
+    debouncer: &mut Deb,
+) -> io::Result<RemoveResponse> {
+    let abs = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let mut cfg = Config::load();
+    let removed = cfg.remove_folder(&abs);
+    if removed {
+        cfg.save()?;
+        {
+            let mut r = roots.lock().unwrap();
+            r.retain(|p| p != &abs);
+        }
+        // Unwatch the root: inverse of watch_root.
+        let _ = debouncer.watcher().unwatch(&abs);
+        debouncer.cache().remove_root(&abs);
+        let snapshot = roots.lock().unwrap().clone();
+        let fresh = build_index(&snapshot);
+        {
+            let mut tracker = own_writes.lock().unwrap();
+            for path in &fresh.written_paths {
+                tracker.record(path);
+            }
+        }
+        *index.lock().unwrap() = fresh.index;
+    }
+    Ok(RemoveResponse {
+        removed,
+        index: index.lock().unwrap().clone(),
+    })
+}
 fn handle(
     stream: UnixStream,
     roots: &Mutex<Vec<PathBuf>>,
@@ -226,6 +262,53 @@ fn handle(
         Request::Add { path } => {
             let resp = add_folder_live(&path, roots, index, own_writes, debouncer)?;
             serde_json::to_string(&resp).map_err(io::Error::other)?
+        }
+        Request::Status => {
+            let snap = roots.lock().unwrap().clone();
+            let idx = index.lock().unwrap().clone();
+            let folders: Vec<FolderInfo> = snap
+                .iter()
+                .map(|r| {
+                    let count = idx
+                        .markers
+                        .iter()
+                        .filter(|m| m.path.starts_with(r))
+                        .count();
+                    FolderInfo {
+                        path: r.display().to_string(),
+                        count,
+                    }
+                })
+                .collect();
+            serde_json::to_string(&StatusResponse { folders }).map_err(io::Error::other)?
+        }
+        Request::Remove { path } => {
+            let resp = remove_folder_live(&path, roots, index, own_writes, debouncer)?;
+            serde_json::to_string(&resp).map_err(io::Error::other)?
+        }
+        Request::Copy { path } => {
+            let idx = index.lock().unwrap().clone();
+            let filtered: Vec<_> = idx
+                .markers
+                .iter()
+                .filter(|m| m.path.starts_with(path.as_path()))
+                .cloned()
+                .collect();
+            let sub = Index {
+                markers: filtered,
+                warnings: vec![],
+            };
+            let text = render_text(&compile(&sub));
+            serde_json::to_string(&CopyResponse { text }).map_err(io::Error::other)?
+        }
+        Request::Shutdown => {
+            let ack = r#"{"ok":true}"#;
+            let mut stream = stream;
+            stream.write_all(ack.as_bytes())?;
+            stream.write_all(b"\n")?;
+            stream.flush()?;
+            let _ = std::fs::remove_file(socket_path());
+            std::process::exit(0);
         }
     };
     let mut stream = stream;
@@ -284,4 +367,84 @@ pub fn client_add(path: &Path) -> Option<AddResponse> {
     reader.read_line(&mut line).ok()?;
     let resp: AddResponse = serde_json::from_str(line.trim()).ok()?;
     Some(resp)
+}
+
+/// Ask a running daemon for its per-folder status. `None` if no daemon answers.
+pub fn client_status() -> Option<StatusResponse> {
+    let stream = UnixStream::connect(socket_path()).ok()?;
+    let mut writer = stream.try_clone().ok()?;
+    let req = serde_json::to_string(&Request::Status).ok()?;
+    writer.write_all(req.as_bytes()).ok()?;
+    writer.write_all(b"\n").ok()?;
+    writer.flush().ok()?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).ok()?;
+    serde_json::from_str(line.trim()).ok()
+}
+
+/// Tell a running daemon to stop monitoring `path`. `None` if no daemon answers.
+pub fn client_remove(path: &Path) -> Option<RemoveResponse> {
+    let stream = UnixStream::connect(socket_path()).ok()?;
+    let mut writer = stream.try_clone().ok()?;
+    let req = serde_json::to_string(&Request::Remove {
+        path: path.to_path_buf(),
+    })
+    .ok()?;
+    writer.write_all(req.as_bytes()).ok()?;
+    writer.write_all(b"\n").ok()?;
+    writer.flush().ok()?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).ok()?;
+    serde_json::from_str(line.trim()).ok()
+}
+
+/// Ask a running daemon for the compiled bundle of one folder. `None` if no daemon
+/// answers.
+pub fn client_copy(path: &Path) -> Option<String> {
+    let stream = UnixStream::connect(socket_path()).ok()?;
+    let mut writer = stream.try_clone().ok()?;
+    let req = serde_json::to_string(&Request::Copy {
+        path: path.to_path_buf(),
+    })
+    .ok()?;
+    writer.write_all(req.as_bytes()).ok()?;
+    writer.write_all(b"\n").ok()?;
+    writer.flush().ok()?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).ok()?;
+    let resp: CopyResponse = serde_json::from_str(line.trim()).ok()?;
+    Some(resp.text)
+}
+
+/// Tell a running daemon to shut down gracefully. `false` if no daemon answers.
+pub fn client_shutdown() -> bool {
+    let stream = match UnixStream::connect(socket_path()) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    let mut writer = match stream.try_clone() {
+        Ok(w) => w,
+        Err(_) => return false,
+    };
+    let req = match serde_json::to_string(&Request::Shutdown) {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    if writer.write_all(req.as_bytes()).is_err() {
+        return false;
+    }
+    if writer.write_all(b"\n").is_err() {
+        return false;
+    }
+    if writer.flush().is_err() {
+        return false;
+    }
+    // The daemon exits after ack; we don't need the response.
+    true
 }

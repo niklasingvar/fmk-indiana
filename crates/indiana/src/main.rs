@@ -46,6 +46,13 @@ enum Cmd {
         /// Folder to monitor across daemon restarts.
         path: PathBuf,
     },
+    /// Remove a folder from the monitored-folders config.
+    Remove {
+        /// Folder to stop monitoring.
+        path: PathBuf,
+    },
+    /// Show the daemon's monitored folders and marker counts.
+    Status,
     /// Compile markers and copy the bundle to the clipboard.
     Copy {
         /// Repo root to scan (forces a standalone scan of this path).
@@ -81,6 +88,8 @@ fn main() -> ExitCode {
             read_only,
         } => scan(path, json, read_only),
         Cmd::Add { path } => add(path),
+        Cmd::Remove { path } => remove(path),
+        Cmd::Status => status(),
         Cmd::Copy { path } => copy(path),
         Cmd::Mcp => match mcp::run() {
             Ok(()) => ExitCode::SUCCESS,
@@ -191,6 +200,58 @@ fn add(path: PathBuf) -> ExitCode {
         eprintln!("indiana: already monitoring {}", path.display());
     }
     ExitCode::SUCCESS
+}
+
+fn remove(path: PathBuf) -> ExitCode {
+    // A running daemon owns the live remove: it persists config, un-watches,
+    // and rescans now. Without one, fall back to config-only.
+    if let Some(resp) = daemon::client_remove(&path) {
+        if resp.removed {
+            eprintln!(
+                "indiana: stopped monitoring {} ({} marker(s) remaining)",
+                path.display(),
+                resp.index.markers.len()
+            );
+        } else {
+            eprintln!("indiana: not monitoring {}", path.display());
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    let mut cfg = Config::load();
+    if cfg.remove_folder(&path) {
+        if let Err(e) = cfg.save() {
+            eprintln!("indiana: could not save config: {e}");
+            return ExitCode::FAILURE;
+        }
+        eprintln!(
+            "indiana: stopped monitoring {} (daemon not running; scans on next serve)",
+            path.display()
+        );
+    } else {
+        eprintln!("indiana: not monitoring {}", path.display());
+    }
+    ExitCode::SUCCESS
+}
+
+fn status() -> ExitCode {
+    match daemon::client_status() {
+        Some(s) => {
+            if s.folders.is_empty() {
+                println!("indiana: running, no folders monitored");
+            } else {
+                for f in &s.folders {
+                    println!("{}  ({})", f.path, f.count);
+                }
+                println!("{} folder(s)", s.folders.len());
+            }
+            ExitCode::SUCCESS
+        }
+        None => {
+            eprintln!("indiana: daemon not running");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn copy(path: Option<PathBuf>) -> ExitCode {
