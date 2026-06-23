@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Indiana",
-        "width": 290,
-        "height": 260,
+        "width": 300,
+        "height": 240,
         "decorations": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,

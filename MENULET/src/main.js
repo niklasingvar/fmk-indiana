@@ -46,26 +46,31 @@ function renderFolders(folders) {
     foldersList.hidden = false;
     for (const f of folders) {
       const li = document.createElement("li");
-      li.className = "menu-item";
+      li.className = "folder";
 
-      const label = document.createElement("span");
-      label.className = "label";
-      label.textContent = basename(f.path);
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = basename(f.path);
 
       const count = document.createElement("span");
-      count.className = "meta";
-      count.textContent = f.count + "\u00D7";
+      count.className = "count";
+      count.textContent = f.count + " ::";
 
-      li.appendChild(label);
-      li.appendChild(count);
-
-      li.addEventListener("click", async () => {
+      const copy = document.createElement("button");
+      copy.className = "copy";
+      copy.textContent = "copy";
+      copy.addEventListener("click", async (e) => {
+        e.stopPropagation();
         try {
           const text = await invoke("copy_folder", { path: f.path });
           await writeText(text);
           flashCopied();
-        } catch (e) { console.error("copy failed:", e); }
+        } catch (err) { console.error("copy failed:", err); }
       });
+
+      li.appendChild(name);
+      li.appendChild(count);
+      li.appendChild(copy);
 
       li.addEventListener("contextmenu", async (e) => {
         e.preventDefault();
@@ -93,7 +98,7 @@ function flashCopied() {
 
 function setRunning(running) {
   statusDot.className = running ? "running" : "stopped";
-  statusLabel.textContent = running ? "Server running" : "Server stopped";
+  statusLabel.textContent = running ? "server running" : "server stopped";
   if (!running) {
     foldersList.innerHTML = "";
     emptyState.hidden = true;
@@ -104,20 +109,20 @@ function setRunning(running) {
 function updateActionButton(running) {
   if (running) {
     if (daemonIsOurs) {
-      statusAction.textContent = "Stop";
+      statusAction.textContent = "stop";
       statusAction.style.display = "";
     } else {
       statusAction.style.display = "none";
     }
   } else {
-    statusAction.textContent = "Start";
+    statusAction.textContent = "start";
     statusAction.style.display = "";
   }
 }
 
 function setConnecting() {
   statusDot.className = "spinning";
-  statusLabel.textContent = "Starting\u2026";
+  statusLabel.textContent = "starting\u2026";
   statusAction.style.display = "none";
 }
 
@@ -159,10 +164,10 @@ statusAction.addEventListener("click", async () => {
         } catch (_) {}
       }
       setRunning(false);
-      statusLabel.textContent = "Failed to start";
+      statusLabel.textContent = "failed to start";
     } catch (e) {
       setRunning(false);
-      statusLabel.textContent = "Failed to start";
+      statusLabel.textContent = "failed to start";
       console.error("spawn failed:", e);
     }
   }
@@ -182,6 +187,39 @@ loadHomeDir().then(async () => {
   }
   setRunning(false);
 });
+
+// Theme switcher (cogwheel)
+const themeCog = document.getElementById("theme-cog");
+const themeMenu = document.getElementById("theme-menu");
+
+function applyTheme(choice) {
+  document.documentElement.dataset.theme = choice;
+  try { localStorage.setItem("indiana.theme", choice); } catch (_) {}
+  markTheme(choice);
+}
+
+function markTheme(choice) {
+  for (const btn of themeMenu.querySelectorAll("[data-theme-choice]")) {
+    btn.querySelector(".mark").textContent =
+      btn.dataset.themeChoice === choice ? "›" : "";
+  }
+}
+
+themeCog.addEventListener("click", (e) => {
+  e.stopPropagation();
+  themeMenu.hidden = !themeMenu.hidden;
+});
+
+for (const btn of themeMenu.querySelectorAll("[data-theme-choice]")) {
+  btn.addEventListener("click", () => {
+    applyTheme(btn.dataset.themeChoice);
+    themeMenu.hidden = true;
+  });
+}
+
+document.addEventListener("click", () => { themeMenu.hidden = true; });
+
+markTheme(document.documentElement.dataset.theme || "system");
 
 // Periodic polling
 setInterval(refreshFolders, 3000);
