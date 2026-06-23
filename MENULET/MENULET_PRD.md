@@ -15,13 +15,24 @@ approval: pending
 
 ## The sign (menu-bar icon)
 - Template icon, always present.
-- Click → dropdown panel under the icon, right-aligned; hide on blur.
+- Click → dropdown panel anchored under the icon (positioned from the tray
+  event rect; correct across displays and Spaces). Hide on blur.
+- Panel is a non-activating NSPanel: never steals focus, appears on the
+  active Space (incl. over fullscreen apps) with no Space-switch jump.
+
+## Look
+- Boxed TUI / minimalist: monospace, 1px sharp border, no frost.
+- Theme switch via cogwheel: light / dark / system; persisted (localStorage).
 
 ## Panel contents
+- Top: server status + start/stop (start/stop only when the menulet owns
+  the daemon).
+- Add folder action, then a divider, then a "monitoring" header carrying
+  the theme cogwheel.
 - Monitored folders — list; add / remove a folder (registers it with Indiana).
-- Per folder: whatever Indiana reports (e.g. tallies by kind) — displayed, not computed here.
-- Copy button per folder → puts Indiana's compiled bundle on the clipboard.
-- Empty state: "Monitor a folder" picker.
+- Per folder row: name · count (`N ::`) · copy. Copy puts Indiana's compiled
+  bundle on the clipboard; right-click removes the folder.
+- Empty state: "monitor a folder" picker.
 
 ## Behavior
 - All data comes from the Indiana core. The menulet never scans or counts.
@@ -32,7 +43,8 @@ approval: pending
 ## Stack
 - Tauri 2 (Rust + web UI), accessory activation policy.
 - Bundles the `indiana` server binary as a Tauri sidecar inside the `.app` bundle.
-- Reuses patterns from `old/adhd-menulet-focus-finder` (tray, NSPanel, hide-on-blur).
+- `tauri-nspanel` (v2 branch) converts the window to a non-activating NSPanel
+  for tray-anchored, multi-Space, focus-preserving presentation.
 ## Phase 1 (first deliverable)
 - Menulet exists; monitor one folder; list monitored folders.
 - Copy lands in a later phase — see [PHASES.md](../PHASES.md).
