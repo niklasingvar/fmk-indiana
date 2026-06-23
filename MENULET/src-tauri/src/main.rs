@@ -9,9 +9,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WindowEvent,
 };
-use tauri_plugin_shell::ShellExt;
 
-mod protocol;
 mod socket;
 
 /// Tracks whether we spawned the daemon (so we know whether to offer stop).
@@ -64,33 +62,7 @@ fn main() {
             // M12.5.1 — Connect-or-spawn on launch.
             let handle = app.handle().clone();
             std::thread::spawn(move || {
-                // Check if a daemon is already alive.
-                if socket::status().is_some() {
-                    return;
-                }
-
-                // No daemon → try spawning the sidecar.
-                let shell = match handle.shell().sidecar("indiana") {
-                    Ok(s) => s,
-                    Err(_) => return,
-                };
-                let (_rx, _child) = match shell.args(["serve"]).spawn() {
-                    Ok(s) => s,
-                    Err(_) => return,
-                };
-
-                // Mark daemon as ours (we spawned it).
-                if let Some(state) = handle.try_state::<Mutex<DaemonState>>() {
-                    state.lock().unwrap().ours = true;
-                }
-
-                // Poll for daemon to come up.
-                for _ in 0..20 {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    if socket::status().is_some() {
-                        break;
-                    }
-                }
+                socket::spawn_daemon(&handle);
             });
 
             Ok(())

@@ -401,3 +401,39 @@ pub fn client_remove(path: &Path) -> Option<RemoveResponse> {
     reader.read_line(&mut line).ok()?;
     serde_json::from_str(line.trim()).ok()
 }
+
+/// Ask a running daemon for the copy bundle of `path`. `None` if no daemon answers.
+#[allow(dead_code)]
+pub fn client_copy(path: &Path) -> Option<CopyResponse> {
+    let stream = UnixStream::connect(socket_path()).ok()?;
+    let mut writer = stream.try_clone().ok()?;
+    let req = serde_json::to_string(&Request::Copy {
+        path: path.to_path_buf(),
+    })
+    .ok()?;
+    writer.write_all(req.as_bytes()).ok()?;
+    writer.write_all(b"\n").ok()?;
+    writer.flush().ok()?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).ok()?;
+    serde_json::from_str(line.trim()).ok()
+}
+
+/// Tell a running daemon to shut down. Returns true if the request was sent.
+#[allow(dead_code)]
+pub fn client_shutdown() -> Option<()> {
+    let stream = UnixStream::connect(socket_path()).ok()?;
+    let mut writer = stream.try_clone().ok()?;
+    let req = serde_json::to_string(&Request::Shutdown).ok()?;
+    writer.write_all(req.as_bytes()).ok()?;
+    writer.write_all(b"\n").ok()?;
+    writer.flush().ok()?;
+
+    // Read the ack (optional — daemon may exit before we read).
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    let _ = reader.read_line(&mut line);
+    Some(())
+}

@@ -9,9 +9,8 @@ tmp_*
 .DS_Store
 .cursor/
 indiana-aarch64-apple-darwin.tar.gz
-menulet/node_modules/
-menulet/src-tauri/target/
-menulet/src-tauri/binaries/indiana-aarch64-apple-darwin
+MENULET/src-tauri/target/
+MENULET/src-tauri/binaries/indiana-*
 
 # Tauri-generated schemas (regenerated each build)
 MENULET/src-tauri/gen/

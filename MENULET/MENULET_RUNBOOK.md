@@ -263,6 +263,7 @@ The smoke test covers the wire; only a person can confirm the panel. With the da
 - Tauri 2 API drift. Earlier drafts named Tauri-1 paths. In Tauri 2: dialog/clipboard/shell are plugins (`tauri-plugin-*`), the sidecar is `app.shell().sidecar(..)` (not `Command::new_sidecar`), and tray icons are raster `Image`s with `icon_as_template(true)` (not PDFs). Verify exact names against the installed Tauri version when scaffolding.
 - NSPanel fidelity. A plain Tauri window (`always_on_top` + `skip_taskbar` + `decorations:false`) approximates a menu-bar panel but is not a true non-activating `NSPanel`. If blur/focus behaviour misbehaves, adopt the `tauri-nspanel` plugin or the native pattern from `old/adhd-menulet-focus-finder` (referenced in MENULET_PRD).
 - Copy phasing. MENULET_PRD "Phase 1" still says copy lands later, but GOAL/PHASES Phase 5 and this runbook treat one-click copy as core to the menulet (M12.0.4, M12.2.3). Reconcile MENULET_PRD if copy is truly first-deliverable.
+- TODO — confirm sidecar spawn under capabilities. `tauri.conf.json` dropped the `plugins.shell.scope` block; sidecar permission now lives only in `capabilities/default.json` as bare `shell:allow-spawn` / `shell:allow-execute` (no scoped sidecar entry). Verify `make menulet` → Start/Stop/Start actually respawns the daemon with no ACL "not allowed" error. If it fails, add a scoped-execute entry naming `binaries/indiana` (`sidecar: true`, args `["serve"]`).
 
 ---
 

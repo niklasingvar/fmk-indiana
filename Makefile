@@ -1,7 +1,9 @@
 TEST_DIR ?= tmp/indiana-test
+HOST := $(shell rustc -vV | sed -n 's/^host: //p')
+SIDECAR := MENULET/src-tauri/binaries/indiana-$(HOST)
 BIN := target/release/indiana
 
-.PHONY: build scratch serve add scan copy install help menulet
+.PHONY: build scratch serve add scan copy install help menulet sidecar-copy release
 
 help:
 	@echo "make scratch  Create a test markdown folder"
@@ -39,11 +41,14 @@ install: build
 	mkdir -p "$(HOME)/.local/bin"
 	cp "$(BIN)" "$(HOME)/.local/bin/indiana"
 
-# Build the daemon, refresh the bundled sidecar, launch the menulet (foreground).
-menulet: build
-	cp "$(BIN)" MENULET/src-tauri/binaries/indiana-aarch64-apple-darwin
-	cd MENULET && npm install && npm run dev
+# Copy the just-built daemon into the menulet sidecar slot.
+sidecar-copy: build
+	mkdir -p "$(dir $(SIDECAR))"
+	cp "$(BIN)" "$(SIDECAR)"
 
+# Build the daemon, refresh the bundled sidecar, launch the menulet (foreground).
+menulet: sidecar-copy
+	cd MENULET && npm install && npm run dev
 .PHONY: release
 release: build
 	tar -czf indiana-aarch64-apple-darwin.tar.gz -C target/release indiana

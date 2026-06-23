@@ -1,0 +1,11 @@
+[package]
+name = "indiana-protocol"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+indiana-core = { path = "../core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

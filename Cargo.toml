@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/indiana"]
+members = ["crates/core", "crates/indiana", "crates/indiana-protocol"]
 exclude = ["menulet/src-tauri"]
 
 [workspace.package]

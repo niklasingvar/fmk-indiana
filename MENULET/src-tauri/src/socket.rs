@@ -1,7 +1,11 @@
 //! Socket client — talks to the Indiana daemon over the Unix socket.
 //! Also provides Tauri commands (thin glue, no logic).
 
-use crate::protocol::*;
+use indiana_protocol::*;
+use tauri::Manager;
+use tauri_plugin_shell::ShellExt;
+
+
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -79,11 +83,42 @@ pub fn copy_folder(path: &Path) -> Option<String> {
 pub fn shutdown() -> bool {
     send_recv(&Request::Shutdown).is_some()
 }
+/// Spawn the daemon sidecar if not already running. Returns true if the daemon
+/// is reachable after spawning (or was already running). Sets `DaemonState::ours`
+/// when we spawned it.
+pub fn spawn_daemon(app: &tauri::AppHandle) -> bool {
+    // Already alive — nothing to do, not ours.
+    if status().is_some() {
+        return true;
+    }
+
+    let shell = match app.shell().sidecar("indiana") {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    let (_rx, _child) = match shell.args(["serve"]).spawn() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    // Mark daemon as ours.
+    if let Some(state) = app.try_state::<std::sync::Mutex<crate::DaemonState>>() {
+        state.lock().unwrap().ours = true;
+    }
+
+    // Poll for daemon to come up.
+    for _ in 0..20 {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        if status().is_some() {
+            return true;
+        }
+    }
+    false
+}
+
 
 pub mod commands {
     use super::*;
-    use tauri::Manager;
-    use tauri_plugin_shell::ShellExt;
 
     #[tauri::command]
     pub fn status() -> Result<StatusResponse, String> {
@@ -116,19 +151,7 @@ pub mod commands {
 
     #[tauri::command]
     pub async fn spawn_sidecar(app: tauri::AppHandle) -> Result<bool, String> {
-        let shell = app
-            .shell()
-            .sidecar("indiana")
-            .map_err(|e| format!("sidecar not found: {e}"))?;
-        let (_rx, _child) = shell
-            .args(["serve"])
-            .spawn()
-            .map_err(|e| format!("spawn failed: {e}"))?;
-        // Mark daemon as ours.
-        if let Some(state) = app.try_state::<std::sync::Mutex<crate::DaemonState>>() {
-            state.lock().unwrap().ours = true;
-        }
-        Ok(true)
+        Ok(super::spawn_daemon(&app))
     }
 
     /// Returns true if the menulet spawned the running daemon.
