@@ -3,6 +3,7 @@
 
 # Local scratch fixtures
 /tmp
+tmp_*
 
 # macOS
 .DS_Store
@@ -11,3 +12,6 @@ indiana-aarch64-apple-darwin.tar.gz
 menulet/node_modules/
 menulet/src-tauri/target/
 menulet/src-tauri/binaries/indiana-aarch64-apple-darwin
+
+# Tauri-generated schemas (regenerated each build)
+MENULET/src-tauri/gen/
