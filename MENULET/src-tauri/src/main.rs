@@ -7,7 +7,10 @@ use std::sync::Mutex;
 use tauri::{
     image::Image,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent,
+    Manager, PhysicalPosition, Rect, WebviewWindow,
+};
+use tauri_nspanel::{
+    cocoa::appkit::NSWindowCollectionBehavior, panel_delegate, ManagerExt, WebviewWindowExt,
 };
 
 mod socket;
@@ -17,8 +20,17 @@ pub(crate) struct DaemonState {
     pub(crate) ours: bool,
     pub(crate) dialog_open: bool,
 }
+
+/// Float above normal windows (NSFloatingWindowLevel region).
+#[allow(non_upper_case_globals)]
+const PANEL_LEVEL: i32 = 4;
+/// NSWindowStyleMaskNonactivatingPanel — panel never activates the app.
+#[allow(non_upper_case_globals)]
+const NONACTIVATING_PANEL_MASK: i32 = 1 << 7;
+
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_nspanel::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -32,6 +44,44 @@ fn main() {
 
             let window = app.get_webview_window("main").unwrap();
 
+            // Convert the pre-created window to a non-activating NSPanel so it
+            // never steals focus (no app-switch flash) and joins whatever Space
+            // is active, including over fullscreen apps — no Space-switch jump.
+            let panel = window.to_panel().unwrap();
+            panel.set_level(PANEL_LEVEL);
+            panel.set_style_mask(NONACTIVATING_PANEL_MASK);
+            // Join all Spaces and sit over fullscreen apps so the panel appears
+            // on whatever desktop is active, with no Space-switch animation.
+            panel.set_collection_behaviour(
+                NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary,
+            );
+
+            // Hide on blur. A non-activating panel never becomes key the way a
+            // normal window does, so WindowEvent::Focused(false) won't fire —
+            // use the panel's resign-key delegate instead. Respect the dialog
+            // guard so the native folder picker doesn't dismiss the panel.
+            let handle = app.handle().clone();
+            let delegate = panel_delegate!(IndianaPanelDelegate {
+                window_did_resign_key
+            });
+            delegate.set_listener(Box::new(move |name: String| {
+                if name != "window_did_resign_key" {
+                    return;
+                }
+                let dialog_open = handle
+                    .try_state::<Mutex<DaemonState>>()
+                    .map(|s| s.lock().unwrap().dialog_open)
+                    .unwrap_or(false);
+                if dialog_open {
+                    return;
+                }
+                if let Ok(panel) = handle.get_webview_panel("main") {
+                    panel.order_out(None);
+                }
+            }));
+            panel.set_delegate(delegate);
+
             let _tray = TrayIconBuilder::new()
                 .icon(icon)
                 .icon_as_template(true)
@@ -39,34 +89,26 @@ fn main() {
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
+                        position,
+                        rect,
                         ..
                     } = event
                     {
-                        let w = tray.app_handle().get_webview_window("main").unwrap();
-                        if w.is_visible().unwrap_or(false) {
-                            let _ = w.hide();
-                        } else {
-                            let _ = w.show();
-                            let _ = w.set_focus();
+                        let app = tray.app_handle();
+                        let Ok(panel) = app.get_webview_panel("main") else {
+                            return;
+                        };
+                        if panel.is_visible() {
+                            panel.order_out(None);
+                            return;
                         }
+                        if let Some(window) = app.get_webview_window("main") {
+                            position_panel(&window, &rect, position);
+                        }
+                        panel.show();
                     }
                 })
                 .build(app)?;
-
-            let wh = window.clone();
-            let handle = app.handle().clone();
-            window.on_window_event(move |event| {
-                if let WindowEvent::Focused(false) = event {
-                    if handle
-                        .try_state::<Mutex<DaemonState>>()
-                        .map(|s| s.lock().unwrap().dialog_open)
-                        .unwrap_or(false)
-                    {
-                        return;
-                    }
-                    let _ = wh.hide();
-                }
-            });
 
             // M12.5.1 — Connect-or-spawn on launch.
             let handle = app.handle().clone();
@@ -91,4 +133,34 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Anchor the panel centered under the tray icon, on the icon's own monitor.
+///
+/// Driven by the tray event `rect` (authoritative for whichever display the
+/// menu bar is on) rather than `tauri-plugin-positioner`'s `TrayCenter`, which
+/// silently fails on extended monitors (plugins-workspace#724).
+fn position_panel(window: &WebviewWindow, rect: &Rect, cursor: PhysicalPosition<f64>) {
+    // The cursor is physical; use it to find the icon's monitor for scale and
+    // work-area clamping.
+    let monitor = window.monitor_from_point(cursor.x, cursor.y).ok().flatten();
+    let scale = monitor.as_ref().map(|m| m.scale_factor()).unwrap_or(1.0);
+
+    let icon_pos = rect.position.to_physical::<f64>(scale);
+    let icon_size = rect.size.to_physical::<f64>(scale);
+    let win = window.outer_size().unwrap_or_default();
+
+    let mut x = icon_pos.x + icon_size.width / 2.0 - win.width as f64 / 2.0;
+    let y = icon_pos.y + icon_size.height;
+
+    // Clamp x so the panel never spills off an extended display.
+    if let Some(m) = monitor {
+        let min_x = m.position().x as f64;
+        let max_x = min_x + m.size().width as f64 - win.width as f64;
+        if max_x >= min_x {
+            x = x.clamp(min_x, max_x);
+        }
+    }
+
+    let _ = window.set_position(PhysicalPosition::new(x, y));
 }
