@@ -22,11 +22,7 @@
       --dot-stopped: #9b9b9b;
       --font-size: 12px;
     }
-    /* Forced dark, and system-dark when no explicit choice. */
-    :root[data-theme="dark"],
-    :root[data-theme="system"] {
-      --bg: #ffffff;
-    }
+    /* system mode follows the OS; an explicit choice forces the palette. */
     @media (prefers-color-scheme: dark) {
       :root[data-theme="system"] {
         --bg: #0d0d0d;
