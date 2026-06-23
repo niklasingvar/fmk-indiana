@@ -105,6 +105,7 @@ fn main() {
             socket::commands::read_focus,
             socket::commands::save_focus,
             socket::commands::daemon_is_ours,
+            socket::commands::home_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

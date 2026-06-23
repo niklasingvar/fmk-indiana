@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 // State
 let daemonIsOurs = false;
+let homeDir = "";
 
 // DOM
 const focusInput = document.getElementById("focus");
@@ -31,10 +33,15 @@ async function checkOwnership() {
   try { daemonIsOurs = await invoke("daemon_is_ours"); } catch (_) { daemonIsOurs = false; }
 }
 
+async function loadHomeDir() {
+  try { homeDir = await invoke("home_dir"); } catch (_) {}
+}
+
 // Refresh folder list from daemon
 async function refreshFolders() {
   try {
     const resp = await invoke("status");
+    try { daemonIsOurs = await invoke("daemon_is_ours"); } catch (_) {}
     renderFolders(resp.folders || []);
     setRunning(true);
   } catch (_) {
@@ -68,8 +75,7 @@ function renderFolders(folders) {
       li.addEventListener("click", async () => {
         try {
           const text = await invoke("copy_folder", { path: f.path });
-          // Write to clipboard via the web API
-          await navigator.clipboard.writeText(text);
+          await writeText(text);
           flashCopied();
         } catch (e) { console.error("copy failed:", e); }
       });
@@ -88,10 +94,7 @@ function renderFolders(folders) {
 }
 
 function basename(path) {
-  try {
-    const home = Deno?.env?.get("HOME") || "";
-    if (home && path.startsWith(home)) return "~" + path.slice(home.length);
-  } catch (_) {}
+  if (homeDir && (path === homeDir || path.startsWith(homeDir + "/"))) return "~" + path.slice(homeDir.length);
   const parts = path.split("/");
   return parts[parts.length - 1] || path;
 }
@@ -107,7 +110,6 @@ function setRunning(running) {
   if (!running) {
     foldersList.innerHTML = "";
     emptyState.hidden = true;
-    daemonIsOurs = false;
   }
   updateActionButton(running);
 }
@@ -170,8 +172,10 @@ statusAction.addEventListener("click", async () => {
           return;
         } catch (_) {}
       }
+      setRunning(false);
       statusLabel.textContent = "Failed to start";
     } catch (e) {
+      setRunning(false);
       statusLabel.textContent = "Failed to start";
       console.error("spawn failed:", e);
     }
@@ -180,4 +184,17 @@ statusAction.addEventListener("click", async () => {
 
 // Init
 loadFocus();
-checkOwnership().then(() => refreshFolders());
+loadHomeDir().then(() =>
+  checkOwnership().then(async () => {
+    setConnecting();
+    for (let i = 0; i < 20; i++) {
+      try {
+        await invoke("status");
+        await refreshFolders();
+        return;
+      } catch (_) {}
+      await new Promise(r => setTimeout(r, 500));
+    }
+    setRunning(false);
+  })
+);

@@ -107,7 +107,10 @@ pub mod commands {
     }
 
     #[tauri::command]
-    pub fn shutdown() -> Result<bool, String> {
+    pub fn shutdown(app: tauri::AppHandle) -> Result<bool, String> {
+        if let Some(state) = app.try_state::<std::sync::Mutex<crate::DaemonState>>() {
+            state.lock().unwrap().ours = false;
+        }
         Ok(super::shutdown())
     }
 
@@ -134,6 +137,11 @@ pub mod commands {
         app.try_state::<std::sync::Mutex<crate::DaemonState>>()
             .map(|s| s.lock().unwrap().ours)
             .unwrap_or(false)
+    }
+
+    #[tauri::command]
+    pub fn home_dir() -> String {
+        std::env::var("HOME").unwrap_or_default()
     }
 
     #[tauri::command]
