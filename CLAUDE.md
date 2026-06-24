@@ -2,9 +2,9 @@
 
 ## Always 
 ### Read first
-- [PURPOSE.md](PURPOSE.md) — why this exists
-- [GOAL.md](GOAL.md) — what success looks like
-- [PHASES.md](PHASES.md) — sequencing / roadmap
+- [docs/PURPOSE.md](docs/PURPOSE.md) — why this exists
+- [docs/GOAL.md](docs/GOAL.md) — what success looks like
+- [docs/PHASES.md](docs/PHASES.md) — sequencing / roadmap
 ### End with
 - Documenting the learnings, caveats, new principles in the relevant markdown file
 - Point out consistency issues, violations, caveats or simpler way of doing things
@@ -25,6 +25,15 @@
 - State your assumptions explicitly. If uncertain, ask.
 - If multiple interpretations exist, present them - don't pick silently.
 - If a simpler approach exists, say so. Push back when warranted.
+
+## CLI first
+- CLI is the primary interface. Every feature ships as a CLI command first.
+- Menulet replicates CLI features 1:1 — shows, never computes.
+- Every subcommand maps 1:1 to a core function; CLI never re-parses, re-counts, or re-compiles.
+- Adding a marker kind (a row in `markers.rs`) must not require a CLI change unless a new flag is explicitly requested.
+- CLI argument names match core enum / struct field names — no magic string translations.
+- A new core entry point must be wired into the CLI in the same PR.
+- `indiana help` must stay accurate after every change — stale help text is a bug.
 
 ## Writing rules
 - Never use bold in markdown
