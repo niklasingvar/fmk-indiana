@@ -104,6 +104,64 @@ pub const TABLE: &[MarkerSpec] = &[
     },
 ];
 
+/// Filter set for `--kind`: one logical group of marker kinds.
+/// Backed by TABLE tokens; parsing is table-driven, not hand-enumerated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KindFilter {
+    Action,
+    Note,
+    Question,
+    Hate,
+    Love,
+    Keep,
+    Fix,
+    Elaborate,
+}
+
+impl KindFilter {
+    /// Does this filter accept the given kind?
+    pub fn matches(self, k: Kind) -> bool {
+        match self {
+            KindFilter::Action => matches!(k, Kind::Action | Kind::Todo),
+            KindFilter::Note => matches!(k, Kind::Note),
+            KindFilter::Question => matches!(k, Kind::Question),
+            KindFilter::Hate => matches!(k, Kind::Hate),
+            KindFilter::Love => matches!(k, Kind::Love),
+            KindFilter::Keep => matches!(k, Kind::Keep),
+            KindFilter::Fix => matches!(k, Kind::Fix),
+            KindFilter::Elaborate => matches!(k, Kind::Elaborate),
+        }
+    }
+}
+
+/// Human-readable name for a kind, driven by the TABLE.
+pub fn long_name(k: Kind) -> &'static str {
+    for s in TABLE {
+        if s.kind == k {
+            return s.long;
+        }
+    }
+    unreachable!("every Kind variant appears in TABLE")
+}
+
+/// Parse a `--kind` token (short or long form from TABLE) into a KindFilter.
+/// Special-cases: `action` maps to Action+Todo.
+pub fn parse_kind_filter(token: &str) -> Option<KindFilter> {
+    let spec = lookup(token)?;
+    let f = match spec.kind {
+        Kind::Action => KindFilter::Action,
+        Kind::Todo => KindFilter::Action,
+        Kind::Note => KindFilter::Note,
+        Kind::Question => KindFilter::Question,
+        Kind::Hate => KindFilter::Hate,
+        Kind::Love => KindFilter::Love,
+        Kind::Keep => KindFilter::Keep,
+        Kind::Fix => KindFilter::Fix,
+        Kind::Elaborate => KindFilter::Elaborate,
+    };
+    Some(f)
+}
+
 /// Resolve a token (without `::`, any case) to its spec. Short or long form.
 pub fn lookup(token: &str) -> Option<&'static MarkerSpec> {
     let t = token.to_ascii_lowercase();
@@ -136,4 +194,44 @@ mod tests {
             assert_eq!(s.tracked, want, "{:?} tracked flag wrong", s.kind);
         }
     }
+
+    #[test]
+    fn test_parse_kind_filter_action() {
+        let f = parse_kind_filter("action").unwrap();
+        assert!(f.matches(Kind::Action));
+        assert!(f.matches(Kind::Todo));
+        assert!(!f.matches(Kind::Hate));
+        assert!(!f.matches(Kind::Note));
+    }
+
+    #[test]
+    fn test_parse_kind_filter_short_form() {
+        let f = parse_kind_filter("n").unwrap();
+        assert!(f.matches(Kind::Note));
+    }
+
+    #[test]
+    fn test_parse_kind_filter_unknown() {
+        assert!(parse_kind_filter("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_long_name_all_kinds() {
+        for s in TABLE {
+            assert_eq!(long_name(s.kind), s.long, "long_name should match TABLE: {:?}", s.kind);
+        }
+    }
+}
+
+/// Generate a human-readable list of valid `--kind` values from TABLE.
+/// Added here so adding a marker row updates help without touching CLI code.
+pub fn kind_help_string() -> String {
+    TABLE
+        .iter()
+        .map(|s| {
+            let shorts = s.shorts.join(", ");
+            format!("  {:<12} {}", s.long, shorts)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }

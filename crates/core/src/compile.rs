@@ -1,7 +1,7 @@
 //! Shared compiled payload. Copy renders this; MCP returns it as structure.
 
 use crate::index::{Index, Located};
-use crate::markers::Kind;
+use crate::markers::{Kind, KindFilter};
 use crate::parser::Status;
 use crate::scope::ScopeKind;
 use serde::{Deserialize, Serialize};
@@ -36,14 +36,31 @@ struct PromptFile {
 }
 
 pub fn compile(index: &Index) -> CompiledPayload {
+    compile_with_options(index, &CompileOptions::default())
+}
+
+/// Options that filter what `compile_with_options` includes.
+/// The core computes; faces supply options (IN_PRINCIPLES.md: core computes, faces render).
+#[derive(Debug, Clone, Default)]
+pub struct CompileOptions {
+    /// Only include markers matching this kind filter. None → all kinds.
+    pub kind: Option<KindFilter>,
+}
+
+/// Compile markers from the index, applying optional filters.
+/// Kept alongside `compile` for the unfiltered path.
+pub fn compile_with_options(index: &Index, options: &CompileOptions) -> CompiledPayload {
     let templates = templates();
-    CompiledPayload {
-        markers: index
-            .markers
-            .iter()
-            .map(|marker| compile_marker(marker, &templates))
-            .collect(),
-    }
+    let markers: Vec<CompiledMarker> = index
+        .markers
+        .iter()
+        .filter(|m| match options.kind {
+            Some(filter) => filter.matches(m.kind),
+            None => true,
+        })
+        .map(|marker| compile_marker(marker, &templates))
+        .collect();
+    CompiledPayload { markers }
 }
 
 pub fn render_text(payload: &CompiledPayload) -> String {
@@ -211,6 +228,46 @@ mod tests {
         assert!(rendered.contains("hate"));
         assert!(rendered.contains("Fix this. it"));
         assert!(rendered.contains("The user asks: why. Answer it."));
+        fs::remove_dir_all(d).ok();
+    }
+
+    // ── compile_with_options kind filter ──
+
+    #[test]
+    fn test_compile_kind_note_only() {
+        let (d, idx) = index("::h\n::note remember this\n::fix tighten\n");
+        let opts = CompileOptions {
+            kind: Some(KindFilter::Note),
+        };
+        let payload = compile_with_options(&idx, &opts);
+        assert_eq!(payload.markers.len(), 1);
+        assert_eq!(payload.markers[0].kind, Kind::Note);
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_compile_kind_action_includes_todo() {
+        let (d, idx) = index("::h\n::action fix this\n::todo remember\n::note log\n::love\n");
+        let opts = CompileOptions {
+            kind: Some(KindFilter::Action),
+        };
+        let payload = compile_with_options(&idx, &opts);
+        assert_eq!(payload.markers.len(), 2);
+        let kinds: Vec<Kind> = payload.markers.iter().map(|m| m.kind).collect();
+        assert!(kinds.contains(&Kind::Action));
+        assert!(kinds.contains(&Kind::Todo));
+        assert!(!kinds.contains(&Kind::Hate));
+        assert!(!kinds.contains(&Kind::Note));
+        assert!(!kinds.contains(&Kind::Love));
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_compile_no_kind_filter_equals_compile() {
+        let (d, idx) = index("::h\n::fix tighten\n::question why\n");
+        let all = compile(&idx);
+        let filtered = compile_with_options(&idx, &CompileOptions::default());
+        assert_eq!(all.markers.len(), filtered.markers.len());
         fs::remove_dir_all(d).ok();
     }
 }

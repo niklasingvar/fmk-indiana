@@ -8,11 +8,11 @@ mod paths;
 mod protocol;
 mod service;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, CommandFactory, FromArgMatches};
 use config::Config;
-use indiana_core::compile::{compile, render_text};
+use indiana_core::compile::{compile_with_options, render_text, CompileOptions};
 use indiana_core::index::Index;
-use indiana_core::markers::Kind;
+use indiana_core::markers::{parse_kind_filter, long_name};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -57,6 +57,9 @@ enum Cmd {
     Copy {
         /// Repo root to scan (forces a standalone scan of this path).
         path: Option<PathBuf>,
+        /// Copy only markers of this kind (action, note, fix, …).
+        #[arg(long, value_name = "KIND")]
+        kind: Option<String>,
     },
     /// Run the MCP stdio server.
     Mcp,
@@ -74,7 +77,11 @@ enum ServiceCmd {
 }
 
 fn main() -> ExitCode {
-    match Cli::parse().cmd {
+    let matches = <Cli as CommandFactory>::command()
+        .after_long_help(indiana_core::markers::kind_help_string())
+        .get_matches();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    match cli.cmd {
         Cmd::Serve { root } => match daemon::serve(root) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
@@ -90,7 +97,7 @@ fn main() -> ExitCode {
         Cmd::Add { path } => add(path),
         Cmd::Remove { path } => remove(path),
         Cmd::Status => status(),
-        Cmd::Copy { path } => copy(path),
+        Cmd::Copy { path, kind } => copy(path, kind),
         Cmd::Mcp => match mcp::run() {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
@@ -129,7 +136,7 @@ fn scan(path: Option<PathBuf>, json: bool, read_only: bool) -> ExitCode {
             m.id.as_deref()
                 .map(|i| format!(" [{i}]"))
                 .unwrap_or_default();
-        println!("  {:>4} · {:<10}{id} {msg}", m.line, kind_name(m.kind));
+        println!("  {:>4} · {:<10}{id} {msg}", m.line, long_name(m.kind));
     }
     for w in &idx.warnings {
         eprintln!("warning: {w}");
@@ -254,14 +261,25 @@ fn status() -> ExitCode {
     }
 }
 
-fn copy(path: Option<PathBuf>) -> ExitCode {
+fn copy(path: Option<PathBuf>, kind: Option<String>) -> ExitCode {
+    let opts = match kind.as_deref() {
+        Some(token) => match parse_kind_filter(token) {
+            Some(filter) => CompileOptions { kind: Some(filter) },
+            None => {
+                eprintln!("indiana: unknown marker kind '{}'", token);
+                return ExitCode::FAILURE;
+            }
+        },
+        None => CompileOptions::default(),
+    };
     let idx = match &path {
         Some(p) => Index::build(p),
         None => daemon::client_scan().unwrap_or_else(|| Index::build(&PathBuf::from("."))),
     };
-    let rendered = render_text(&compile(&idx));
+    let payload = compile_with_options(&idx, &opts);
+    let rendered = render_text(&payload);
     match arboard::Clipboard::new().and_then(|mut c| c.set_text(rendered.clone())) {
-        Ok(()) => eprintln!("indiana: copied {} marker(s)", idx.markers.len()),
+        Ok(()) => eprintln!("indiana: copied {} marker(s)", payload.markers.len()),
         Err(e) => eprintln!("indiana: clipboard unavailable: {e}"),
     }
     print!("{rendered}");
@@ -278,19 +296,5 @@ fn service_install() -> ExitCode {
             eprintln!("indiana: service install failed: {e}");
             ExitCode::FAILURE
         }
-    }
-}
-
-fn kind_name(k: Kind) -> &'static str {
-    match k {
-        Kind::Question => "question",
-        Kind::Hate => "hate",
-        Kind::Love => "love",
-        Kind::Keep => "keep",
-        Kind::Fix => "fix",
-        Kind::Elaborate => "elaborate",
-        Kind::Note => "note",
-        Kind::Action => "action",
-        Kind::Todo => "todo",
     }
 }

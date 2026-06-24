@@ -1,9 +1,9 @@
 //! Minimal stdio JSON-RPC MCP face. The daemon remains the data plane.
 
 use crate::daemon;
-use indiana_core::compile::{compile, CompiledPayload};
+use indiana_core::compile::{compile, compile_with_options, CompiledPayload, CompileOptions};
 use indiana_core::index::Index;
-use indiana_core::markers::TABLE;
+use indiana_core::markers::{TABLE, parse_kind_filter};
 use indiana_core::parser::Status;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
@@ -76,10 +76,21 @@ fn call_tool(id: Value, params: Value) -> Value {
                 None => error(id, -32602, "unknown indiana id"),
             }
         }
-        "read_payload" => tool_text(
-            id,
-            serde_json::to_string_pretty(&current_payload()).unwrap(),
-        ),
+        "read_payload" => {
+            let kind_token = args.get("kind").and_then(Value::as_str);
+            let opts = match kind_token {
+                Some(token) => match parse_kind_filter(token) {
+                    Some(filter) => CompileOptions { kind: Some(filter) },
+                    None => return error(id, -32602, &format!("unknown marker kind '{token}'")),
+                },
+                None => CompileOptions::default(),
+            };
+            let payload = compile_with_options(
+                &Index::build(&PathBuf::from(".")),
+                &opts,
+            );
+            tool_text(id, serde_json::to_string_pretty(&payload).unwrap())
+        }
         "marker_grammar" => tool_text(id, marker_grammar()),
         _ => error(id, -32602, "unknown tool"),
     }
@@ -94,7 +105,16 @@ fn tools() -> Value {
         "tools": [
             tool("list_pending_indianas", "List pending compiled Indiana markers."),
             tool("read_indiana", "Read one compiled Indiana marker by tracked id."),
-            tool("read_payload", "Read the full compiled Indiana payload."),
+            {
+                "name": "read_payload",
+                "description": "Read the full compiled Indiana payload. Optionally filter by marker kind.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "kind": { "type": "string", "description": "Filter to this marker kind (e.g. action, note, fix)" }
+                    }
+                }
+            },
             tool("marker_grammar", "Read marker grammar and prompt meanings.")
         ]
     })

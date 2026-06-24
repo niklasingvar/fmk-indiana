@@ -87,3 +87,29 @@ fn test_cli_service_install() {
     assert!(body.contains("<key>KeepAlive</key>"));
     fs::remove_dir_all(&home).ok();
 }
+
+// E10 + CLI-first: `indiana help` must stay accurate — snapshot enforced.
+#[test]
+fn test_cli_help_snapshot() {
+    let out = Command::new(BIN).arg("help").output().unwrap();
+    assert!(out.status.success());
+    let got = String::from_utf8(out.stdout).unwrap();
+    let want = include_str!("cli_help.snap");
+    // Normalize: trim trailing whitespace per line, then compare.
+    let norm = |s: &str| -> String {
+        s.lines()
+            .map(|l| l.trim_end())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let got_norm = norm(&got);
+    let want_norm = norm(want);
+    if got_norm != want_norm {
+        eprintln!("=== snapshot mismatch ===");
+        eprintln!("--- expected (snapshot) ---");
+        eprintln!("{want_norm}");
+        eprintln!("--- got ---");
+        eprintln!("{got_norm}");
+        panic!("cli help snapshot mismatch — update tests/cli_help.snap if the change is intentional");
+    }
+}
