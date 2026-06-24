@@ -1,18 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { getVersion } from "@tauri-apps/api/app";
 
 // State
 let daemonIsOurs = false;
 let homeDir = "";
+let openFolderMenu = null;
 
 // DOM
 const foldersList = document.getElementById("folders");
-const emptyState = document.getElementById("empty");
 const addBtn = document.getElementById("add-item");
 const statusDot = document.getElementById("status-dot");
 const statusLabel = document.getElementById("status-label");
 const statusAction = document.getElementById("status-action");
+const versionEl = document.getElementById("version");
 const copiedFlash = document.getElementById("copied-flash");
 
 // Check if we own the daemon
@@ -36,15 +38,23 @@ async function refreshFolders() {
   }
 }
 
+
+function closeFolderMenu() {
+  if (openFolderMenu) {
+    openFolderMenu.hidden = true;
+    openFolderMenu = null;
+  }
+}
+
+function flashText(msg) {
+  copiedFlash.textContent = msg;
+  copiedFlash.classList.add("show");
+  setTimeout(() => copiedFlash.classList.remove("show"), 1200);
+}
 function renderFolders(folders) {
   foldersList.innerHTML = "";
-  if (folders.length === 0) {
-    emptyState.hidden = false;
-    foldersList.hidden = true;
-  } else {
-    emptyState.hidden = true;
-    foldersList.hidden = false;
-    for (const f of folders) {
+  if (folders.length === 0) return;
+  for (const f of folders) {
       const li = document.createElement("li");
       li.className = "folder";
 
@@ -68,21 +78,53 @@ function renderFolders(folders) {
         } catch (err) { console.error("copy failed:", err); }
       });
 
-      li.appendChild(name);
-      li.appendChild(count);
-      li.appendChild(copy);
+      const menuBtn = document.createElement("button");
+      menuBtn.className = "menu-btn";
+      menuBtn.textContent = "\u22ef";
+      const menu = document.createElement("div");
+      menu.className = "folder-menu";
+      menu.hidden = true;
 
-      li.addEventListener("contextmenu", async (e) => {
-        e.preventDefault();
+      const refreshItem = document.createElement("button");
+      refreshItem.textContent = "update indiana commands";
+      refreshItem.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        closeFolderMenu();
+        try {
+          await invoke("refresh_templates", { path: f.path });
+          flashText("updated");
+        } catch (err) { console.error("refresh failed:", err); }
+      });
+      menu.appendChild(refreshItem);
+
+      const removeItem = document.createElement("button");
+      removeItem.textContent = "remove folder";
+      removeItem.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        closeFolderMenu();
         try {
           await invoke("remove_folder", { path: f.path });
           await refreshFolders();
         } catch (err) { console.error("remove failed:", err); }
       });
+      menu.appendChild(removeItem);
 
+      menuBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (openFolderMenu && openFolderMenu !== menu) {
+          openFolderMenu.hidden = true;
+        }
+        menu.hidden = !menu.hidden;
+        openFolderMenu = menu.hidden ? null : menu;
+      });
+
+      li.appendChild(name);
+      li.appendChild(count);
+      li.appendChild(copy);
+      li.appendChild(menuBtn);
+      li.appendChild(menu);
       foldersList.appendChild(li);
     }
-  }
 }
 
 function basename(path) {
@@ -101,7 +143,6 @@ function setRunning(running) {
   statusLabel.textContent = running ? "server running" : "server stopped";
   if (!running) {
     foldersList.innerHTML = "";
-    emptyState.hidden = true;
   }
   updateActionButton(running);
 }
@@ -139,7 +180,6 @@ addBtn.addEventListener("click", async () => {
   finally { try { await invoke("set_dialog_open", { open: false }); } catch (_) {} }
 });
 
-emptyState.addEventListener("click", () => addBtn.click());
 
 // Start/stop button
 statusAction.addEventListener("click", async () => {
@@ -181,11 +221,16 @@ loadHomeDir().then(async () => {
       await invoke("status");
       await checkOwnership();
       await refreshFolders();
-      return;
+      break;
     } catch (_) {}
     await new Promise(r => setTimeout(r, 500));
   }
   setRunning(false);
+  try {
+    versionEl.textContent = "v" + await getVersion();
+  } catch (_) {
+    versionEl.textContent = "v0.1.0";
+  }
 });
 
 // Theme switcher (cogwheel)
@@ -217,7 +262,7 @@ for (const btn of themeMenu.querySelectorAll("[data-theme-choice]")) {
   });
 }
 
-document.addEventListener("click", () => { themeMenu.hidden = true; });
+document.addEventListener("click", () => { themeMenu.hidden = true; closeFolderMenu(); });
 
 markTheme(document.documentElement.dataset.theme || "system");
 
