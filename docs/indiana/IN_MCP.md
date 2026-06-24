@@ -37,11 +37,12 @@ approval: pending
 - MCP never edits user files directly.
 - MCP never invents marker meaning.
 - MCP never returns stale state without saying scan status.
+- MCP never computes: no local-scan fallback. The daemon is the single data plane; with no daemon, tools return an error, not a cwd scan.
 - Completion writes, if any, still flow through Indiana's single write chokepoint ([IN_PRINCIPLES.md](IN_PRINCIPLES.md)).
 
 ## Decided
 - MCP and `indiana copy` share one compiled payload model.
 - Copy formatting is a renderer. MCP output is structured payload.
 - Agent-native means no clipboard dependency when the agent supports MCP.
-- Transport is stdio JSON-RPC via `indiana mcp`; it reads compiled payload from the daemon socket and falls back to a local scan when no daemon is running.
+- Transport is stdio JSON-RPC via `indiana mcp`; it reads the compiled payload from the daemon socket. No local-scan fallback: the agent face must not compute, and the process cwd is not a monitored repo. No daemon → error telling the caller to `indiana serve`.
 - Implementation is manual JSON-RPC for now, not `rmcp`. Keep the surface small until the tool contract stabilizes.

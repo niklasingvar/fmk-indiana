@@ -1,7 +1,7 @@
 //! Shared compiled payload. Copy renders this; MCP returns it as structure.
 
 use crate::index::{Index, Located};
-use crate::markers::{Kind, KindFilter};
+use crate::markers::{kind_matches_filter, Kind};
 use crate::parser::Status;
 use crate::scope::ScopeKind;
 use serde::{Deserialize, Serialize};
@@ -43,8 +43,9 @@ pub fn compile(index: &Index) -> CompiledPayload {
 /// The core computes; faces supply options (IN_PRINCIPLES.md: core computes, faces render).
 #[derive(Debug, Clone, Default)]
 pub struct CompileOptions {
-    /// Only include markers matching this kind filter. None → all kinds.
-    pub kind: Option<KindFilter>,
+    /// Only include markers matching this kind. None → all kinds.
+    /// `action`/`todo` are aliases (see `markers::kind_matches_filter`).
+    pub kind: Option<Kind>,
 }
 
 /// Compile markers from the index, applying optional filters.
@@ -55,7 +56,7 @@ pub fn compile_with_options(index: &Index, options: &CompileOptions) -> Compiled
         .markers
         .iter()
         .filter(|m| match options.kind {
-            Some(filter) => filter.matches(m.kind),
+            Some(filter) => kind_matches_filter(filter, m.kind),
             None => true,
         })
         .map(|marker| compile_marker(marker, &templates))
@@ -237,7 +238,7 @@ mod tests {
     fn test_compile_kind_note_only() {
         let (d, idx) = index("::h\n::note remember this\n::fix tighten\n");
         let opts = CompileOptions {
-            kind: Some(KindFilter::Note),
+            kind: Some(Kind::Note),
         };
         let payload = compile_with_options(&idx, &opts);
         assert_eq!(payload.markers.len(), 1);
@@ -249,7 +250,7 @@ mod tests {
     fn test_compile_kind_action_includes_todo() {
         let (d, idx) = index("::h\n::action fix this\n::todo remember\n::note log\n::love\n");
         let opts = CompileOptions {
-            kind: Some(KindFilter::Action),
+            kind: Some(Kind::Action),
         };
         let payload = compile_with_options(&idx, &opts);
         assert_eq!(payload.markers.len(), 2);

@@ -20,6 +20,7 @@ Options:
   -V, --version
           Print version
 
+Kinds (for --kind):
   question     q, ?
   hate         h
   love         l

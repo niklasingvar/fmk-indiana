@@ -12,7 +12,7 @@ use clap::{Parser, Subcommand, CommandFactory, FromArgMatches};
 use config::Config;
 use indiana_core::compile::{compile_with_options, render_text, CompileOptions};
 use indiana_core::index::Index;
-use indiana_core::markers::{parse_kind_filter, long_name};
+use indiana_core::markers::{parse_kind, long_name};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -263,8 +263,8 @@ fn status() -> ExitCode {
 
 fn copy(path: Option<PathBuf>, kind: Option<String>) -> ExitCode {
     let opts = match kind.as_deref() {
-        Some(token) => match parse_kind_filter(token) {
-            Some(filter) => CompileOptions { kind: Some(filter) },
+        Some(token) => match parse_kind(token) {
+            Some(k) => CompileOptions { kind: Some(k) },
             None => {
                 eprintln!("indiana: unknown marker kind '{}'", token);
                 return ExitCode::FAILURE;

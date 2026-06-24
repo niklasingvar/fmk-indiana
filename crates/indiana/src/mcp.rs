@@ -1,13 +1,11 @@
 //! Minimal stdio JSON-RPC MCP face. The daemon remains the data plane.
 
 use crate::daemon;
-use indiana_core::compile::{compile, compile_with_options, CompiledPayload, CompileOptions};
-use indiana_core::index::Index;
-use indiana_core::markers::{TABLE, parse_kind_filter};
+use indiana_core::compile::CompiledPayload;
+use indiana_core::markers::{TABLE, parse_kind, kind_matches_filter};
 use indiana_core::parser::Status;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
 
 pub fn run() -> io::Result<()> {
     let stdin = io::stdin();
@@ -57,47 +55,62 @@ fn call_tool(id: Value, params: Value) -> Value {
         .unwrap_or_default();
     let args = params.get("arguments").cloned().unwrap_or_default();
     match name {
-        "list_pending_indianas" => {
-            let mut payload = current_payload();
-            payload
-                .markers
-                .retain(|m| !matches!(m.status, Some(Status::Done | Status::Failed)));
-            tool_text(id, serde_json::to_string_pretty(&payload).unwrap())
-        }
+        "list_pending_indianas" => match current_payload() {
+            Some(mut payload) => {
+                payload
+                    .markers
+                    .retain(|m| !matches!(m.status, Some(Status::Done | Status::Failed)));
+                tool_text(id, serde_json::to_string_pretty(&payload).unwrap())
+            }
+            None => daemon_unavailable(id),
+        },
         "read_indiana" => {
             let needle = args.get("id").and_then(Value::as_str).unwrap_or_default();
-            let payload = current_payload();
-            match payload
-                .markers
-                .into_iter()
-                .find(|m| m.id.as_deref() == Some(needle))
-            {
-                Some(marker) => tool_text(id, serde_json::to_string_pretty(&marker).unwrap()),
-                None => error(id, -32602, "unknown indiana id"),
+            match current_payload() {
+                Some(payload) => match payload
+                    .markers
+                    .into_iter()
+                    .find(|m| m.id.as_deref() == Some(needle))
+                {
+                    Some(marker) => tool_text(id, serde_json::to_string_pretty(&marker).unwrap()),
+                    None => error(id, -32602, "unknown indiana id"),
+                },
+                None => daemon_unavailable(id),
             }
         }
         "read_payload" => {
-            let kind_token = args.get("kind").and_then(Value::as_str);
-            let opts = match kind_token {
-                Some(token) => match parse_kind_filter(token) {
-                    Some(filter) => CompileOptions { kind: Some(filter) },
+            let filter = match args.get("kind").and_then(Value::as_str) {
+                Some(token) => match parse_kind(token) {
+                    Some(k) => Some(k),
                     None => return error(id, -32602, &format!("unknown marker kind '{token}'")),
                 },
-                None => CompileOptions::default(),
+                None => None,
             };
-            let payload = compile_with_options(
-                &Index::build(&PathBuf::from(".")),
-                &opts,
-            );
-            tool_text(id, serde_json::to_string_pretty(&payload).unwrap())
+            match current_payload() {
+                Some(mut payload) => {
+                    if let Some(k) = filter {
+                        payload.markers.retain(|m| kind_matches_filter(k, m.kind));
+                    }
+                    tool_text(id, serde_json::to_string_pretty(&payload).unwrap())
+                }
+                None => daemon_unavailable(id),
+            }
         }
         "marker_grammar" => tool_text(id, marker_grammar()),
         _ => error(id, -32602, "unknown tool"),
     }
 }
 
-fn current_payload() -> CompiledPayload {
-    daemon::client_payload().unwrap_or_else(|| compile(&Index::build(&PathBuf::from("."))))
+/// Fetch the compiled payload from the daemon — the single data plane.
+/// No local fallback by design: the MCP face must not compute (IN_MCP.md,
+/// IN_PRINCIPLES.md). `None` when no daemon answers; callers return an error
+/// rather than scanning the process cwd, which is not a monitored repo.
+fn current_payload() -> Option<CompiledPayload> {
+    daemon::client_payload()
+}
+
+fn daemon_unavailable(id: Value) -> Value {
+    error(id, -32603, "indiana daemon unavailable: start it with `indiana serve`")
 }
 
 fn tools() -> Value {

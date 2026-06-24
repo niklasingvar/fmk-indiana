@@ -104,34 +104,16 @@ pub const TABLE: &[MarkerSpec] = &[
     },
 ];
 
-/// Filter set for `--kind`: one logical group of marker kinds.
-/// Backed by TABLE tokens; parsing is table-driven, not hand-enumerated.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KindFilter {
-    Action,
-    Note,
-    Question,
-    Hate,
-    Love,
-    Keep,
-    Fix,
-    Elaborate,
+/// Action and Todo are aliases: one tracked, actionable kind under two tokens
+/// (IN_IDENTITY.md). Filtering by either token returns both.
+fn is_actionable(k: Kind) -> bool {
+    matches!(k, Kind::Action | Kind::Todo)
 }
 
-impl KindFilter {
-    /// Does this filter accept the given kind?
-    pub fn matches(self, k: Kind) -> bool {
-        match self {
-            KindFilter::Action => matches!(k, Kind::Action | Kind::Todo),
-            KindFilter::Note => matches!(k, Kind::Note),
-            KindFilter::Question => matches!(k, Kind::Question),
-            KindFilter::Hate => matches!(k, Kind::Hate),
-            KindFilter::Love => matches!(k, Kind::Love),
-            KindFilter::Keep => matches!(k, Kind::Keep),
-            KindFilter::Fix => matches!(k, Kind::Fix),
-            KindFilter::Elaborate => matches!(k, Kind::Elaborate),
-        }
-    }
+/// Does a `--kind` filter (itself a Kind) accept the given kind?
+/// The only grouping is the action/todo alias; every other kind matches itself.
+pub fn kind_matches_filter(filter: Kind, k: Kind) -> bool {
+    filter == k || (is_actionable(filter) && is_actionable(k))
 }
 
 /// Human-readable name for a kind, driven by the TABLE.
@@ -144,22 +126,11 @@ pub fn long_name(k: Kind) -> &'static str {
     unreachable!("every Kind variant appears in TABLE")
 }
 
-/// Parse a `--kind` token (short or long form from TABLE) into a KindFilter.
-/// Special-cases: `action` maps to Action+Todo.
-pub fn parse_kind_filter(token: &str) -> Option<KindFilter> {
-    let spec = lookup(token)?;
-    let f = match spec.kind {
-        Kind::Action => KindFilter::Action,
-        Kind::Todo => KindFilter::Action,
-        Kind::Note => KindFilter::Note,
-        Kind::Question => KindFilter::Question,
-        Kind::Hate => KindFilter::Hate,
-        Kind::Love => KindFilter::Love,
-        Kind::Keep => KindFilter::Keep,
-        Kind::Fix => KindFilter::Fix,
-        Kind::Elaborate => KindFilter::Elaborate,
-    };
-    Some(f)
+/// Parse a `--kind` token (short or long form from TABLE) into a Kind.
+/// Pure table lookup — adding a marker row needs no change here.
+/// `action`/`todo` are aliases (see `kind_matches_filter`).
+pub fn parse_kind(token: &str) -> Option<Kind> {
+    lookup(token).map(|s| s.kind)
 }
 
 /// Resolve a token (without `::`, any case) to its spec. Short or long form.
@@ -196,23 +167,28 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_kind_filter_action() {
-        let f = parse_kind_filter("action").unwrap();
-        assert!(f.matches(Kind::Action));
-        assert!(f.matches(Kind::Todo));
-        assert!(!f.matches(Kind::Hate));
-        assert!(!f.matches(Kind::Note));
+    fn test_parse_kind_action_aliases_todo() {
+        let action = parse_kind("action").unwrap();
+        assert!(kind_matches_filter(action, Kind::Action));
+        assert!(kind_matches_filter(action, Kind::Todo));
+        assert!(!kind_matches_filter(action, Kind::Hate));
+        assert!(!kind_matches_filter(action, Kind::Note));
+        // `todo` is an alias for `action`: same group either way.
+        let todo = parse_kind("todo").unwrap();
+        assert!(kind_matches_filter(todo, Kind::Action));
+        assert!(kind_matches_filter(todo, Kind::Todo));
     }
 
     #[test]
-    fn test_parse_kind_filter_short_form() {
-        let f = parse_kind_filter("n").unwrap();
-        assert!(f.matches(Kind::Note));
+    fn test_parse_kind_short_form() {
+        let n = parse_kind("n").unwrap();
+        assert!(kind_matches_filter(n, Kind::Note));
+        assert!(!kind_matches_filter(n, Kind::Action));
     }
 
     #[test]
-    fn test_parse_kind_filter_unknown() {
-        assert!(parse_kind_filter("nonexistent").is_none());
+    fn test_parse_kind_unknown() {
+        assert!(parse_kind("nonexistent").is_none());
     }
 
     #[test]
@@ -226,12 +202,13 @@ mod tests {
 /// Generate a human-readable list of valid `--kind` values from TABLE.
 /// Added here so adding a marker row updates help without touching CLI code.
 pub fn kind_help_string() -> String {
-    TABLE
+    let rows = TABLE
         .iter()
         .map(|s| {
             let shorts = s.shorts.join(", ");
             format!("  {:<12} {}", s.long, shorts)
         })
         .collect::<Vec<_>>()
-        .join("\n")
+        .join("\n");
+    format!("Kinds (for --kind):\n{rows}")
 }
