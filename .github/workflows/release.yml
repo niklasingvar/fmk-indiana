@@ -1,0 +1,136 @@
+name: release
+
+# Tag-triggered release: builds the CLI tarball and the (unsigned) menulet .dmg
+# for Apple Silicon, publishes a GitHub release, and — if a tap token is set —
+# bumps the Homebrew tap so `brew upgrade` picks up the new version.
+#
+# Cut a release with:
+#   git tag v0.1.0 && git push origin v0.1.0
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14 # native arm64
+    env:
+      # Optional PAT with contents:write on niklasingvar/homebrew-fmk-indiana.
+      # When unset, the tap-bump step is skipped and you update the tap manually
+      # from the SHA256s printed in the job summary.
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build CLI (release)
+        run: cargo build --release --bin indiana
+
+      - name: Stage daemon as menulet sidecar
+        run: |
+          mkdir -p MENULET/src-tauri/binaries
+          cp target/release/indiana MENULET/src-tauri/binaries/indiana-aarch64-apple-darwin
+
+      - name: Build menulet (.app + .dmg)
+        working-directory: MENULET
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package CLI tarball
+        run: tar -czf indiana-aarch64-apple-darwin.tar.gz -C target/release indiana
+
+      - name: Collect artifacts and checksums
+        id: art
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          DMG="MENULET/src-tauri/target/release/bundle/dmg/Indiana_${VERSION}_aarch64.dmg"
+          if [ ! -f "$DMG" ]; then
+            echo "Expected dmg not found at $DMG; contents of bundle/dmg:" >&2
+            ls -la MENULET/src-tauri/target/release/bundle/dmg || true
+            exit 1
+          fi
+          CLI_TGZ="indiana-aarch64-apple-darwin.tar.gz"
+          CLI_SHA=$(shasum -a 256 "$CLI_TGZ" | awk '{print $1}')
+          DMG_SHA=$(shasum -a 256 "$DMG" | awk '{print $1}')
+          echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+          echo "cli_tgz=$CLI_TGZ" >> "$GITHUB_OUTPUT"
+          echo "cli_sha=$CLI_SHA" >> "$GITHUB_OUTPUT"
+          echo "dmg_sha=$DMG_SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release artifacts ($VERSION)"
+            echo "| artifact | sha256 |"
+            echo "|----------|--------|"
+            echo "| $CLI_TGZ | \`$CLI_SHA\` |"
+            echo "| $(basename "$DMG") | \`$DMG_SHA\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            "${{ steps.art.outputs.cli_tgz }}" \
+            "${{ steps.art.outputs.dmg }}"
+
+      - name: Bump Homebrew tap
+        if: env.TAP_TOKEN != ''
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          CLI_SHA="${{ steps.art.outputs.cli_sha }}"
+          DMG_SHA="${{ steps.art.outputs.dmg_sha }}"
+
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/niklasingvar/homebrew-fmk-indiana.git" tap
+          mkdir -p tap/Formula tap/Casks
+          cp dist/homebrew/Formula/indiana.rb tap/Formula/indiana.rb
+          cp dist/homebrew/Casks/indiana-menulet.rb tap/Casks/indiana-menulet.rb
+
+          # Fill in the per-release fields.
+          sed -i '' \
+            -e "s|version \"[^\"]*\"|version \"$VERSION\"|" \
+            -e "s|download/v[^/]*/indiana|download/v$VERSION/indiana|" \
+            -e "s|sha256 \"[^\"]*\"|sha256 \"$CLI_SHA\"|" \
+            tap/Formula/indiana.rb
+          sed -i '' \
+            -e "s|version \"[^\"]*\"|version \"$VERSION\"|" \
+            -e "s|sha256 \"[^\"]*\"|sha256 \"$DMG_SHA\"|" \
+            tap/Casks/indiana-menulet.rb
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/indiana.rb Casks/indiana-menulet.rb
+          if git diff --cached --quiet; then
+            echo "Tap already up to date."
+          else
+            git commit -m "indiana $VERSION"
+            git push
+          fi

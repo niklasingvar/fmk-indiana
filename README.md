@@ -60,9 +60,27 @@ The terminal stays attached — Ctrl-C quits the session.
 ## Install
 
 ### Homebrew (recommended)
+
 ```sh
-brew install niklasingvar/fmk-indiana
+brew tap niklasingvar/fmk-indiana
 ```
+
+Menubar app (bundles the daemon — nothing else to install):
+```sh
+brew install --cask --no-quarantine indiana-menulet
+```
+
+CLI / daemon only, for terminal users:
+```sh
+brew install niklasingvar/fmk-indiana/indiana
+```
+
+> The app is **unsigned**, so `--no-quarantine` is required — it tells macOS
+> Gatekeeper to trust the download. If you ever install without it and macOS
+> blocks the app, either right-click `Indiana.app` → **Open**, or run:
+> ```sh
+> xattr -dr com.apple.quarantine /Applications/Indiana.app
+> ```
 
 ### From source
 ```sh

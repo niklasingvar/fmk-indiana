@@ -15,14 +15,33 @@ approval: pending
   - Daemonize via `launchd` (`indiana service install`); CLI and menulet both talk to the daemon over a Unix domain socket at `~/.indiana/indiana.sock`.
 - Menulet: `cargo tauri build` → unsigned `.app`; drag to `/Applications`.
   - Bundles the `indiana` server binary as a Tauri sidecar inside the `.app` bundle. On launch, spawns it as a child if no daemon is already running.
-## Next (early users)
-- CLI: Homebrew tap (`brew install niklasingvar/fmk-indiana`).
-- Menulet: code-signed + notarized `.dmg` (Developer ID) so Gatekeeper passes.
-  - Self-contained: bundles the `indiana` server binary as a Tauri sidecar. No separate server install required.
-  - On launch, checks for an existing daemon on the Unix socket. If alive, connects; if not, spawns the bundled `indiana serve`.
-  - If `indiana` is on `PATH` and newer, prefers it over the bundled copy — decoupled upgrades for power users.
+## Now (friend testers) — Homebrew tap, unsigned
+
+Ship the current version to a handful of friends on Apple Silicon Macs:
+
+```sh
+brew tap niklasingvar/fmk-indiana
+brew install --cask --no-quarantine indiana-menulet   # GUI, bundles the daemon
+brew install niklasingvar/fmk-indiana/indiana          # optional standalone CLI
+```
+
+- Tag-triggered release: pushing `vX.Y.Z` runs `.github/workflows/release.yml`,
+  which builds the CLI tarball + unsigned menulet `.dmg` (aarch64), publishes a
+  GitHub release, and bumps the tap (`niklasingvar/homebrew-fmk-indiana`).
+- Authoritative formula/cask live in `dist/homebrew/`; the workflow copies them
+  into the tap with the per-release `url`/`sha256`/`version` filled in.
+- Unsigned: friends pass `--no-quarantine` (or right-click → Open). Signing is the
+  next step below.
+- Menulet self-contains: bundles `indiana` as a Tauri sidecar. On launch it connects
+  to an existing daemon on the Unix socket, else spawns the bundled `indiana serve`.
+  If `indiana` is on `PATH` and newer, it prefers that — decoupled upgrades.
+- Validate a build locally before tagging with `make dist` (same steps, prints SHA256s).
+
+## Next (public)
+- Menulet: code-signed + notarized `.dmg` (Developer ID) so Gatekeeper passes with no
+  `--no-quarantine`. Needs an Apple Developer account.
+- Intel / universal binaries (current testers are all Apple Silicon).
 - Auto-update channel (e.g. Sparkle / Tauri updater).
-- Versioned releases on GitHub — one `.dmg` (menulet) + one tarball (CLI binary).
 
 ## Sidecar (Tauri host)
 - Binary name: the bundled server is `Indiana.app/Contents/MacOS/indiana` — named `indiana`, not the target triple. Tauri's `tauri.conf.json` sidecar config must match.
@@ -40,8 +59,8 @@ approval: pending
 | Who | How |
 |-----|-----|
 | Dogfood | `cargo build --release` + manual copy. |
-| CLI-native early user | `brew install niklasingvar/fmk-indiana`. `indiana service install` to daemonize. |
-| GUI early user | Download `.dmg`, drag to `/Applications`. Menulet self-contains — no terminal needed. |
-| Both | Homebrew for CLI + `.dmg` for menulet. Menulet detects `PATH` binary, prefers it. |
+| CLI-native early user | `brew install niklasingvar/fmk-indiana/indiana`. `indiana service install` to daemonize. |
+| GUI early user | `brew install --cask --no-quarantine indiana-menulet`. Menulet self-contains — no terminal needed. |
+| Both | Cask for the menulet + formula for the CLI. Menulet detects the `PATH` binary, prefers it. |
 ## Open questions
 - Signing identity / Apple Developer account ownership.
