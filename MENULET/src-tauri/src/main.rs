@@ -2,6 +2,11 @@
 //! Thin face onto the Indiana daemon; shows, never computes.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// tauri-nspanel re-exports the deprecated `cocoa` crate, and its `panel_delegate!`
+// macro expands to `cocoa` types (`id`/`nil`) plus a `cargo-clippy` cfg check.
+// Both are upstream and unavoidable until the plugin migrates to objc2-app-kit,
+// so silence the resulting `deprecated` / `unexpected_cfgs` noise here.
+#![allow(deprecated, unexpected_cfgs)]
 
 use std::sync::Mutex;
 use tauri::{
@@ -15,9 +20,10 @@ use tauri_nspanel::{
 
 mod socket;
 
-/// Tracks whether we spawned the daemon, and whether a native dialog is open.
+/// Tracks whether a native dialog is open (so focus loss won't hide the panel).
+/// Daemon stoppability is reported by the daemon itself (StatusResponse), so the
+/// menulet keeps no lifecycle/ownership state of its own.
 pub(crate) struct DaemonState {
-    pub(crate) ours: bool,
     pub(crate) dialog_open: bool,
 }
 
@@ -28,19 +34,44 @@ const PANEL_LEVEL: i32 = 4;
 #[allow(non_upper_case_globals)]
 const NONACTIVATING_PANEL_MASK: i32 = 1 << 7;
 
+/// 32×32 template icon: two colons ("::"). Template (alpha mask):
+/// macOS tints black pixels to the menu bar color; transparent stays transparent.
+fn build_icon() -> Image<'static> {
+    const W: u32 = 32;
+    const H: u32 = 32;
+    // Four dots — two colons, each colon = two vertically stacked dots.
+    // Centers at x ∈ {9, 22}, y ∈ {9, 21}. Radius² = 5 (≈2.24 px radius, ~5 px diameter).
+    const CENTERS: [(i32, i32); 4] = [(9, 9), (9, 21), (22, 9), (22, 21)];
+    const R2: i32 = 5;
+
+    let mut pixels = Vec::with_capacity((W * H * 4) as usize);
+    for y in 0..H {
+        for x in 0..W {
+            let on = CENTERS
+                .iter()
+                .any(|(cx, cy)| (x as i32 - cx).pow(2) + (y as i32 - cy).pow(2) <= R2);
+            if on {
+                pixels.extend_from_slice(&[0, 0, 0, 255]);
+            } else {
+                pixels.extend_from_slice(&[0, 0, 0, 0]);
+            }
+        }
+    }
+    Image::new_owned(pixels, W, H)
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_nspanel::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(Mutex::new(DaemonState { ours: false, dialog_open: false }))
+        .manage(Mutex::new(DaemonState { dialog_open: false }))
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            let icon = Image::from_bytes(include_bytes!("../icons/tray.png"))
-                .expect("tray icon not found");
+            let icon = build_icon();
 
             let window = app.get_webview_window("main").unwrap();
 
@@ -113,7 +144,9 @@ fn main() {
             // M12.5.1 — Connect-or-spawn on launch.
             let handle = app.handle().clone();
             std::thread::spawn(move || {
-                socket::spawn_daemon(&handle);
+                if let Err(e) = socket::spawn_daemon(&handle) {
+                    eprintln!("indiana: auto-spawn failed: {e}");
+                }
             });
 
             Ok(())
@@ -125,9 +158,9 @@ fn main() {
             socket::commands::copy_folder,
             socket::commands::shutdown,
             socket::commands::spawn_sidecar,
+            socket::commands::refresh_templates,
             socket::commands::read_focus,
             socket::commands::save_focus,
-            socket::commands::daemon_is_ours,
             socket::commands::home_dir,
             socket::commands::set_dialog_open,
         ])

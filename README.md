@@ -21,6 +21,7 @@ Terminal 2 — make a fixture, select it, then read it:
 ```sh
 make scratch
 make add
+# This creates tmp/indiana-test/.indiana/ with per-command prompt templates.
 make scan
 make copy
 ```
@@ -113,6 +114,7 @@ printf '%s\n\n%s\n%s\n' \
   'Next block of context for the action.' \
   > tmp/indiana-test/review.md
 indiana add tmp/indiana-test
+# This creates tmp/indiana-test/.indiana/ with per-command prompt templates.
 indiana scan
 indiana copy
 ```

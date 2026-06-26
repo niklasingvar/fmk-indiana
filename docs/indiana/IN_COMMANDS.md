@@ -40,6 +40,7 @@ approval: pending
 | `::td` | `::todo` | message | user task | Alias for action. |
 
 ## Compiled prompts on copy
+- Prompt wording can come from repo-local templates ([IN_FOLDER.md](IN_FOLDER.md)). Defaults:
 - `::hate` → "The user tagged this as hate. Explain to the user in a numbered list why he hates it." — the why is generated, not user-written.
 - `::love` → "The user loves this. Keep it and apply the same pattern. Abstract the direction and update [IN_PRINCIPLES.md](IN_PRINCIPLES.md) or the nearest relevant spec so it stays directional."
 - `::keep` → "Do not modify this."

@@ -1,89 +1,33 @@
-# CLAUDE.md
+---
+status: draft
+purpose: Floor plan for agents working in this repo.
+approval: approved
+---
 
-## Always 
-### Read first
-- [docs/PURPOSE.md](docs/PURPOSE.md) — why this exists
-- [docs/GOAL.md](docs/GOAL.md) — what success looks like
-- [docs/PHASES.md](docs/PHASES.md) — sequencing / roadmap
-### End with
-- Documenting the learnings, caveats, new principles in the relevant markdown file
-- Point out consistency issues, violations, caveats or simpler way of doing things
-### Commit
-- Commit often: small, focused commits, one logical change each.
-- Commit after every passing step/milestone — don't batch unrelated work.
-- Keep docs and code in separate commits.
+# CLAUDE.md - floor plan
 
-## Principles
-- Document WHY, INTENT and DIRECTION, never what the code already proves.
-- Single source of truth; link to other docs.
-- Many small files over long documents.
-- Folder as architecture (group files into folders)
-- Keep intent and specs current as direction shifts.
-- Terse in chat. Brief in docs; precise words.
-- Bulleted lists over prose.
-- All markdown files must have YAML frontmatter (status, purpose, approval)
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
+## Start here
+- [docs/PURPOSE.md](docs/PURPOSE.md) - why this exists
+- [docs/GOAL.md](docs/GOAL.md) - what success looks like
+- [docs/PHASES.md](docs/PHASES.md) - sequencing and roadmap
 
-## CLI first
-- CLI is the primary interface. Every feature ships as a CLI command first.
-- Menulet replicates CLI features 1:1 — shows, never computes.
-- Every subcommand maps 1:1 to a core function; CLI never re-parses, re-counts, or re-compiles.
-- Adding a marker kind (a row in `markers.rs`) must not require a CLI change unless a new flag is explicitly requested.
-- CLI argument names match core enum / struct field names — no magic string translations.
-- A new core entry point must be wired into the CLI in the same PR.
-- `indiana help` must stay accurate after every change — stale help text is a bug.
+## Product maps
+- [docs/indiana/IN_ARCHITECTURE.md](docs/indiana/IN_ARCHITECTURE.md) - system shape and ownership boundaries
+- [docs/indiana/IN_PRINCIPLES.md](docs/indiana/IN_PRINCIPLES.md) - Indiana invariants
+- [docs/indiana/IN_TEST.md](docs/indiana/IN_TEST.md) - requirement-to-test map
+- [docs/menulet/MENULET_PRD.md](docs/menulet/MENULET_PRD.md) - menulet product contract
+- [docs/casablanca/CASABLANCA_PRD.md](docs/casablanca/CASABLANCA_PRD.md) - Casablanca product contract
 
-## Writing rules
-- Never use bold in markdown
-- Drop pleasantries: sure, certainly, of course, happy to
-- Technical terms: always exact and complete
-- Speak terse like smart caveman
+## Agent rules
+- [docs/AGENT_OPERATING.md](docs/AGENT_OPERATING.md) - read-first loop, assumptions, end-of-work
+- [docs/AGENT_CODING.md](docs/AGENT_CODING.md) - simplicity, CLI-first, surgical edits, verification
+- [docs/AGENT_WRITING.md](docs/AGENT_WRITING.md) - docs and chat language rules
+- [docs/AGENT_COMMIT.md](docs/AGENT_COMMIT.md) - small focused commits
 
-## Don't
-- Don't write implementation.
-- Don't duplicate code's truth in docs.
-- Don't pad specs with restated context.
-
-# Wrting code;
-
-## Simplicity First
-Minimum code that solves the problem. Nothing speculative.
-
-No features beyond what was asked.
-No abstractions for single-use code.
-No "flexibility" or "configurability" that wasn't requested.
-No error handling for impossible scenarios.
-If you write 200 lines and it could be 50, rewrite it.
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-## Surgical Changes
-Touch only what you must. Clean up only your own mess.
-
-When editing existing code:
-
-Don't "improve" adjacent code, comments, or formatting.
-Don't refactor things that aren't broken.
-Match existing style, even if you'd do it differently.
-If you notice unrelated dead code, mention it - don't delete it.
-When your changes create orphans:
-
-Remove imports/variables/functions that YOUR changes made unused.
-Don't remove pre-existing dead code unless asked.
-The test: Every changed line should trace directly to the user's request.
-
-## Goal-Driven Execution
-Define success criteria. Loop until verified.
-
-Transform tasks into verifiable goals:
-
-"Add validation" → "Write tests for invalid inputs, then make them pass"
-"Fix the bug" → "Write a test that reproduces it, then make it pass"
-"Refactor X" → "Ensure tests pass before and after"
-For multi-step tasks, state a brief plan:
-
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+## Always
+- Read the files above that match the task before editing.
+- State assumptions when uncertain.
+- If multiple interpretations exist, present them.
+- If a simpler approach exists, say so.
+- End by documenting learnings, caveats, or new principles in the relevant markdown file.
+- Point out consistency issues, violations, caveats, or simpler paths.

@@ -83,6 +83,8 @@ approval: pending
 | [IN_COMMANDS.md](IN_COMMANDS.md) | `::fix <msg>` → "Fix this." + msg | `test_compile_fix` — `::fix the loop condition` → prompt includes "Fix this. the loop condition" |
 | [IN_COMMANDS.md](IN_COMMANDS.md) | `::question <msg>` → "The user asks: <msg>. Answer it." | `test_compile_question` — message passed through verbatim |
 | [IN_SCOPE.md](IN_SCOPE.md) | Resolved scope travels into the bundle | `test_scope_in_bundle` — inline marker's line text appears in the compiled output |
+| [IN_FOLDER.md](IN_FOLDER.md) | Folder template overrides embedded default for its owning root | `test_compile_with_roots_uses_owning_root_template` — two roots, one override → only that root changes prompt |
+| [IN_FOLDER.md](IN_FOLDER.md) | Bad folder template falls back to embedded default with warning | `test_compile_with_roots_bad_template_warns_and_falls_back` |
 
 ## E8 — Daemon: lifecycle
 | Ref | Requirement | Test |
@@ -94,11 +96,17 @@ approval: pending
 | [IN_DAEMON.md](IN_DAEMON.md) | Live `add` watches + rescans without restart | `test_live_add_autoscan` — add a folder to a running daemon → its markers appear with no restart |
 | [IN_DAEMON.md](IN_DAEMON.md) | Live `add` is idempotent | `test_live_add_idempotent` — re-adding a monitored folder → "already monitoring" |
 | [IN_DAEMON.md](IN_DAEMON.md) | Client disconnect doesn't lose state | `test_client_reconnect` — CLI queries, disconnects, reconnects → same counts |
+| [IN_FOLDER.md](IN_FOLDER.md) | Monitoring a folder initializes `.indiana/` without overwriting | `test_cli_add_scaffolds_folder_templates_idempotently`, `test_live_add_autoscan` |
+
+Harness invariants (uphold for any new daemon test):
+- Readiness is a real round-trip, not a socket connect. Wait via `wait_ready` (polls `indiana status`, which talks only to the daemon). The listener backlog accepts a connection before the daemon can serve it, so a bare connect is "bound", not "ready" — trusting it raced tests under parallel load.
+- Read daemon state through `scan_json`, which runs `indiana scan` from `home` (no `.md`). `scan` with no path falls back to a standalone cwd scan when the daemon doesn't answer; running from a marker-free dir makes that fallback empty instead of a silent scan of the test runner's cwd.
+- Assert on content with `wait_until` (polling), never a single `scan_json` call — the initial scan may lag the socket under load.
 
 ## E9 — Invariants
 | Ref | Requirement | Test |
 |-----|-------------|------|
-| [IN_PRINCIPLES.md](IN_PRINCIPLES.md) | Source is truth: delete `.indiana/`, rescan, state is byte-identical | `test_source_is_truth` — scan, delete index dir, rescan → identical results |
+| [IN_PRINCIPLES.md](IN_PRINCIPLES.md) | Source is truth: delete derived scratch/index state, rescan, marker state is byte-identical | `test_source_is_truth` — scan, delete index dir, rescan → identical results |
 | [IN_PRINCIPLES.md](IN_PRINCIPLES.md) | One marker table drives everything | `test_marker_table_single_source` — adding a marker kind updates parser, compiler, and identity in one place |
 | [IN_PRINCIPLES.md](IN_PRINCIPLES.md) | Core computes, faces render | `test_faces_never_compute` — verify CLI and MCP output both derive from the same compiled payload, neither re-parses |
 | [IN_PRINCIPLES.md](IN_PRINCIPLES.md) | Write path is a single chokepoint | `test_write_path_single_function` — grep for file writes outside the chokepoint; fail if any exist |
@@ -109,6 +117,10 @@ approval: pending
 | [IN_PRD.md](IN_PRD.md) | `indiana scan` lists every marker | `test_cli_scan` — run against fixture, stdout contains all markers |
 | [IN_PRD.md](IN_PRD.md) | `indiana copy` puts bundle on clipboard | `test_cli_copy` — run against fixture, clipboard contains compiled bundle |
 | [IN_DAEMON.md](IN_DAEMON.md) | `indiana service install` registers launchd plist | `test_cli_service_install` — plist created at `~/Library/LaunchAgents/…`, valid XML |
+| [IN_FOLDER.md](IN_FOLDER.md) | `indiana copy <path>` uses repo-local templates | `test_cli_copy_uses_folder_template` |
+| [IN_FOLDER.md](IN_FOLDER.md) | User can edit generated prompt templates for existing commands | `test_cli_add_then_user_template_edit_affects_copy` |
+| [IN_FOLDER.md](IN_FOLDER.md) | `indiana templates refresh <path>` creates missing templates without overwriting edits | `test_cli_templates_refresh_restores_missing_without_overwrite` |
+| [IN_MCP.md](IN_MCP.md) | MCP reads daemon compiled payload with folder templates | `test_mcp_read_payload` |
 
 ## E11 — Watch (FSEvents)
 | Ref | Requirement | Test |

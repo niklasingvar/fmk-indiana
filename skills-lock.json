@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "domain-driven-design": {
+      "source": "wondelai/skills",
+      "sourceType": "github",
+      "skillPath": "domain-driven-design/SKILL.md",
+      "computedHash": "d0db87abe17b9af88353ab4cd5a869d728037c545fd8cdae3e1fe9268bc596c7"
+    }
+  }
+}

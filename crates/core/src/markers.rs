@@ -194,7 +194,12 @@ mod tests {
     #[test]
     fn test_long_name_all_kinds() {
         for s in TABLE {
-            assert_eq!(long_name(s.kind), s.long, "long_name should match TABLE: {:?}", s.kind);
+            assert_eq!(
+                long_name(s.kind),
+                s.long,
+                "long_name should match TABLE: {:?}",
+                s.kind
+            );
         }
     }
 }

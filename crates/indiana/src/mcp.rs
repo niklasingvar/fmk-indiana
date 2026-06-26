@@ -2,7 +2,7 @@
 
 use crate::daemon;
 use indiana_core::compile::CompiledPayload;
-use indiana_core::markers::{TABLE, parse_kind, kind_matches_filter};
+use indiana_core::markers::{kind_matches_filter, parse_kind, TABLE};
 use indiana_core::parser::Status;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
@@ -110,7 +110,11 @@ fn current_payload() -> Option<CompiledPayload> {
 }
 
 fn daemon_unavailable(id: Value) -> Value {
-    error(id, -32603, "indiana daemon unavailable: start it with `indiana serve`")
+    error(
+        id,
+        -32603,
+        "indiana daemon unavailable: start it with `indiana serve`",
+    )
 }
 
 fn tools() -> Value {

@@ -8,6 +8,7 @@ approval: pending
 
 ## Core
 - One daemon owns scan, index, scope, counts, compilation. Lifecycle: [IN_DAEMON.md](IN_DAEMON.md).
+- Folder-local template structure: [IN_FOLDER.md](IN_FOLDER.md).
 - Markdown stays source of truth. On-disk marker format: [IN_LINE.md](IN_LINE.md).
 - Derived state is rebuildable. User config (monitored folders) is input, not derived ([IN_DAEMON.md](IN_DAEMON.md)).
 

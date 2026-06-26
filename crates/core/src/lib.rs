@@ -4,10 +4,12 @@
 //! id + write chokepoint (M7), scope (M8), compiler (M9).
 
 pub mod compile;
+pub mod cursor;
 pub mod id;
 pub mod index;
 pub mod markers;
 pub mod parser;
 pub mod scope;
+pub mod templates;
 pub mod walk;
 pub mod write;

@@ -4,9 +4,9 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { getVersion } from "@tauri-apps/api/app";
 
 // State
-let daemonIsOurs = false;
 let homeDir = "";
 let openFolderMenu = null;
+let connecting = false;
 
 // DOM
 const foldersList = document.getElementById("folders");
@@ -17,22 +17,18 @@ const statusAction = document.getElementById("status-action");
 const versionEl = document.getElementById("version");
 const copiedFlash = document.getElementById("copied-flash");
 
-// Check if we own the daemon
-async function checkOwnership() {
-  try { daemonIsOurs = await invoke("daemon_is_ours"); } catch (_) { daemonIsOurs = false; }
-}
-
 async function loadHomeDir() {
   try { homeDir = await invoke("home_dir"); } catch (_) {}
 }
 
-// Refresh folder list from daemon
+// Refresh folder list from daemon. Always renders — the `connecting` guard
+// lives on the background poll (the only caller that must not clobber a
+// spawn-in-progress); explicit callers want the result immediately.
 async function refreshFolders() {
   try {
     const resp = await invoke("status");
-    try { daemonIsOurs = await invoke("daemon_is_ours"); } catch (_) {}
     renderFolders(resp.folders || []);
-    setRunning(true);
+    setRunning(true, resp.stoppable);
   } catch (_) {
     setRunning(false);
   }
@@ -53,7 +49,8 @@ function flashText(msg) {
 }
 function renderFolders(folders) {
   foldersList.innerHTML = "";
-  if (folders.length === 0) return;
+  if (folders.length === 0) { foldersList.hidden = true; return; }
+  foldersList.hidden = false;
   for (const f of folders) {
       const li = document.createElement("li");
       li.className = "folder";
@@ -66,17 +63,18 @@ function renderFolders(folders) {
       count.className = "count";
       count.textContent = f.count + " ::";
 
-      const copy = document.createElement("button");
-      copy.className = "copy";
-      copy.textContent = "copy";
-      copy.addEventListener("click", async (e) => {
+      const runBtn = document.createElement("button");
+      runBtn.className = "copy";
+      runBtn.textContent = "run";
+      runBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
         try {
           const text = await invoke("copy_folder", { path: f.path });
           await writeText(text);
-          flashCopied();
+          flashText("copied");
         } catch (err) { console.error("copy failed:", err); }
       });
+
 
       const menuBtn = document.createElement("button");
       menuBtn.className = "menu-btn";
@@ -91,11 +89,24 @@ function renderFolders(folders) {
         e.stopPropagation();
         closeFolderMenu();
         try {
-          await invoke("refresh_templates", { path: f.path });
-          flashText("updated");
+          const ok = await invoke("refresh_templates", { path: f.path });
+          if (ok) flashText("updated");
         } catch (err) { console.error("refresh failed:", err); }
       });
       menu.appendChild(refreshItem);
+
+      const copyActionsItem = document.createElement("button");
+      copyActionsItem.textContent = "copy actions";
+      copyActionsItem.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        closeFolderMenu();
+        try {
+          const text = await invoke("copy_folder", { path: f.path, kind: "action" });
+          await writeText(text);
+          flashText("copied");
+        } catch (err) { console.error("copy actions failed:", err); }
+      });
+      menu.appendChild(copyActionsItem);
 
       const removeItem = document.createElement("button");
       removeItem.textContent = "remove folder";
@@ -120,7 +131,7 @@ function renderFolders(folders) {
 
       li.appendChild(name);
       li.appendChild(count);
-      li.appendChild(copy);
+      li.appendChild(runBtn);
       li.appendChild(menuBtn);
       li.appendChild(menu);
       foldersList.appendChild(li);
@@ -133,35 +144,30 @@ function basename(path) {
   return parts[parts.length - 1] || path;
 }
 
-function flashCopied() {
-  copiedFlash.classList.add("show");
-  setTimeout(() => copiedFlash.classList.remove("show"), 1200);
-}
-
-function setRunning(running) {
+function setRunning(running, stoppable = false) {
+  connecting = false;
   statusDot.className = running ? "running" : "stopped";
   statusLabel.textContent = running ? "server running" : "server stopped";
   if (!running) {
     foldersList.innerHTML = "";
+    foldersList.hidden = true;
   }
-  updateActionButton(running);
+  updateActionButton(running, stoppable);
 }
 
-function updateActionButton(running) {
-  if (running) {
-    if (daemonIsOurs) {
-      statusAction.textContent = "stop";
-      statusAction.style.display = "";
-    } else {
-      statusAction.style.display = "none";
-    }
-  } else {
-    statusAction.textContent = "start";
-    statusAction.style.display = "";
+function updateActionButton(running, stoppable) {
+  // The daemon tells us whether it can be cleanly stopped (StatusResponse.
+  // stoppable). A supervised daemon (launchd KeepAlive) reports false, since a
+  // Shutdown would just be restarted — hide stop and let launchctl manage it.
+  if (running && !stoppable) {
+    statusAction.style.display = "none";
+    return;
   }
+  statusAction.textContent = running ? "stop" : "start";
+  statusAction.style.display = "";
 }
-
 function setConnecting() {
+  connecting = true;
   statusDot.className = "spinning";
   statusLabel.textContent = "starting\u2026";
   statusAction.style.display = "none";
@@ -184,27 +190,18 @@ addBtn.addEventListener("click", async () => {
 // Start/stop button
 statusAction.addEventListener("click", async () => {
   const isRunning = statusDot.className === "running";
-  if (isRunning && daemonIsOurs) {
+  if (isRunning) {
     try {
       await invoke("shutdown");
-      daemonIsOurs = false;
       setRunning(false);
     } catch (_) {}
-  } else if (!isRunning) {
+  } else {
     setConnecting();
+    // spawn_sidecar blocks until the daemon answers or errors, so we don't poll
+    // here — one source of truth. On failure it returns the real reason.
     try {
       await invoke("spawn_sidecar");
-      daemonIsOurs = true;
-      for (let i = 0; i < 20; i++) {
-        await new Promise((r) => setTimeout(r, 500));
-        try {
-          await invoke("status");
-          await refreshFolders();
-          return;
-        } catch (_) {}
-      }
-      setRunning(false);
-      statusLabel.textContent = "failed to start";
+      await refreshFolders();
     } catch (e) {
       setRunning(false);
       statusLabel.textContent = "failed to start";
@@ -216,16 +213,19 @@ statusAction.addEventListener("click", async () => {
 // Init
 loadHomeDir().then(async () => {
   setConnecting();
+  let connected = false;
   for (let i = 0; i < 20; i++) {
     try {
       await invoke("status");
-      await checkOwnership();
       await refreshFolders();
+      connected = true;
       break;
     } catch (_) {}
     await new Promise(r => setTimeout(r, 500));
   }
-  setRunning(false);
+  // Only fall to the stopped state if we never reached the daemon — otherwise
+  // refreshFolders() already rendered "running" and we'd clobber it.
+  if (!connected) setRunning(false);
   try {
     versionEl.textContent = "v" + await getVersion();
   } catch (_) {
@@ -266,5 +266,6 @@ document.addEventListener("click", () => { themeMenu.hidden = true; closeFolderM
 
 markTheme(document.documentElement.dataset.theme || "system");
 
-// Periodic polling
-setInterval(refreshFolders, 3000);
+// Periodic polling — skipped while a spawn is in flight so it can't overwrite
+// the "starting…" state with a transient "stopped".
+setInterval(() => { if (!connecting) refreshFolders(); }, 3000);

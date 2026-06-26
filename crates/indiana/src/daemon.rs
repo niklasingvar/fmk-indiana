@@ -6,9 +6,14 @@
 
 use crate::config::Config;
 use crate::paths::{indiana_dir, socket_path};
-use crate::protocol::{AddResponse, CopyResponse, FolderInfo, PayloadResponse, RemoveResponse, Request, Response, StatusResponse};
-use indiana_core::compile::{compile, render_text, CompiledPayload};
+use crate::protocol::{
+    AddResponse, CopyResponse, FolderInfo, PayloadResponse, RemoveResponse, Request, Response,
+    StatusResponse,
+};
+use indiana_core::compile::{compile_with_options, render_text, CompileOptions, CompiledPayload};
 use indiana_core::index::{Index, ScanReport};
+use indiana_core::markers::parse_kind;
+use indiana_core::templates::init_folder_indiana;
 use indiana_core::write::OwnWriteTracker;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
@@ -72,6 +77,27 @@ pub fn serve(root: Option<PathBuf>) -> io::Result<()> {
         Some(r) => vec![r],
         None => Config::load().folders,
     };
+    let initial_roots: Vec<PathBuf> = initial_roots
+        .into_iter()
+        .filter(|r| {
+            if !r.is_dir() {
+                eprintln!("indiana: skipping {} (not a directory)", r.display());
+                false
+            } else {
+                true
+            }
+        })
+        .collect();
+    for root in &initial_roots {
+        // A read-only or otherwise un-writable folder must not take the whole
+        // daemon down — scanning it still works. Log and carry on.
+        if let Err(e) = init_folder_indiana(root) {
+            eprintln!(
+                "indiana: skipping template init for {} ({e})",
+                root.display()
+            );
+        }
+    }
 
     let initial = build_index(&initial_roots);
     let roots = Arc::new(Mutex::new(initial_roots.clone()));
@@ -172,6 +198,7 @@ fn add_folder_live(
     let mut cfg = Config::load();
     let added = cfg.add_folder(&abs);
     if added {
+        init_folder_indiana(&abs)?;
         cfg.save()?;
         roots.lock().unwrap().push(abs.clone());
         watch_root(debouncer, &abs)?;
@@ -254,8 +281,9 @@ fn handle(
         }
         Request::Payload => {
             let idx = index.lock().unwrap().clone();
+            let snap = roots.lock().unwrap().clone();
             let resp = PayloadResponse {
-                payload: compile(&idx),
+                payload: compile_with_options(&idx, &CompileOptions { roots: Some(snap), ..Default::default() }),
             };
             serde_json::to_string(&resp).map_err(io::Error::other)?
         }
@@ -269,36 +297,49 @@ fn handle(
             let folders: Vec<FolderInfo> = snap
                 .iter()
                 .map(|r| {
-                    let count = idx
-                        .markers
-                        .iter()
-                        .filter(|m| m.path.starts_with(r))
-                        .count();
+                    let count = idx.markers.iter().filter(|m| m.path.starts_with(r)).count();
                     FolderInfo {
                         path: r.display().to_string(),
                         count,
                     }
                 })
                 .collect();
-            serde_json::to_string(&StatusResponse { folders }).map_err(io::Error::other)?
+            // A launchd-supervised daemon restarts after Shutdown, so a face
+            // cannot cleanly stop it (IN_DAEMON.md, MENULET_RUNBOOK.md).
+            let stoppable = !crate::service::is_installed();
+            serde_json::to_string(&StatusResponse { folders, stoppable })
+                .map_err(io::Error::other)?
         }
         Request::Remove { path } => {
             let resp = remove_folder_live(&path, roots, index, own_writes, debouncer)?;
             serde_json::to_string(&resp).map_err(io::Error::other)?
         }
-        Request::Copy { path } => {
+        Request::Copy { path, kind } => {
             let idx = index.lock().unwrap().clone();
+            let abs = path.canonicalize().unwrap_or(path);
             let filtered: Vec<_> = idx
                 .markers
                 .iter()
-                .filter(|m| m.path.starts_with(path.as_path()))
+                .filter(|m| m.path.starts_with(abs.as_path()))
                 .cloned()
                 .collect();
             let sub = Index {
                 markers: filtered,
                 warnings: vec![],
             };
-            let text = render_text(&compile(&sub));
+            let kind_filter = kind.as_deref().and_then(parse_kind);
+            // A provided-but-unparseable kind must not fall through to "copy
+            // everything" — return an empty bundle instead of a silent copy-all.
+            let text = if kind.is_some() && kind_filter.is_none() {
+                String::new()
+            } else {
+                let opts = CompileOptions {
+                    kind: kind_filter,
+                    roots: Some(vec![abs]),
+                    ..Default::default()
+                };
+                render_text(&compile_with_options(&sub, &opts))
+            };
             serde_json::to_string(&CopyResponse { text }).map_err(io::Error::other)?
         }
         Request::Shutdown => {
@@ -409,6 +450,7 @@ pub fn client_copy(path: &Path) -> Option<CopyResponse> {
     let mut writer = stream.try_clone().ok()?;
     let req = serde_json::to_string(&Request::Copy {
         path: path.to_path_buf(),
+        kind: None,
     })
     .ok()?;
     writer.write_all(req.as_bytes()).ok()?;

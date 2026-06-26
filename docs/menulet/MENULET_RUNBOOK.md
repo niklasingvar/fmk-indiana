@@ -12,7 +12,7 @@ approval: pending
 - Menulet may write `~/.indiana/focus.txt`; that is human scratch, not Indiana state.
 - The menulet duplicates only the daemon's primitive-typed protocol structs (`Request`, plus `StatusResponse`, `AddResponse`, `RemoveResponse`, `CopyResponse` defined here). It never sees `Index` or `CompiledPayload` — the daemon returns counts and rendered text instead. This keeps `indiana_core` out of the Tauri build (no second core build) and makes duplication trivial. Where a daemon response carries extra fields (e.g. `AddResponse.index`, for CLI ergonomics), the menulet's mirror omits them; serde ignores unknown fields on deserialize.
 - The tray icon is a monochrome template PNG (not PDF — Tauri's tray takes a raster `Image`; macOS auto-tints it via `icon_as_template(true)`). Exact glyph deferred to visual polish; a placeholder must exist for the scaffold to render.
-- The menulet only stops the daemon it spawned itself. Any daemon already alive at launch (a manual `indiana serve` or a launchd-managed one) is treated as externally managed: the panel shows status but offers no stop. This is simpler than sniffing the daemon's parentage over the socket, and correct — `launchd` runs with `KeepAlive=true` (service.rs), so a Shutdown would just be restarted.
+- The menulet offers stop whenever the daemon reports it is stoppable; it keeps no ownership state of its own. The daemon computes `StatusResponse.stoppable` = "not supervised" (`!service::is_installed()`): a launchd-managed daemon runs with `KeepAlive=true` (service.rs), so a Shutdown would just be restarted — it reports `stoppable: false` and the panel hides stop while still showing status. Any unsupervised daemon (the spawned sidecar, an orphaned sidecar from a previous menulet, or a manual `indiana serve`) reports `stoppable: true` and can be cleanly stopped. This puts the lifecycle judgement in the daemon (core computes, faces render) instead of the menulet sniffing parentage.
 
 ---
 
@@ -154,7 +154,7 @@ This is the "Running + empty" state and nothing more — no folder list, counts,
   - `[+]` click: native directory picker via `tauri-plugin-dialog`, then `invoke('add_folder', { path })`, then re-`invoke('status')`.
   - Folder row click: `invoke('copy_folder', { path })` → brief "Copied ✓" flash.
   - Folder row right-click: context menu → "Stop monitoring" → `invoke('remove_folder', { path })`, then re-`invoke('status')`.
-  - Stop button: `invoke('shutdown')` → stopped state (only shown for a daemon we spawned — see M12.5.2).
+  - Stop button: `invoke('shutdown')` → stopped state (only shown when `status.stoppable` is true — see M12.5.2).
   - Start button: `invoke('spawn_sidecar')` → poll `status` every 500ms until Some.
 - Verify: component test — render each state, click through transitions, assert correct invocations (mock `invoke`, or test against a running daemon).
 
@@ -171,23 +171,21 @@ This is the "Running + empty" state and nothing more — no folder list, counts,
 ### M12.5.1 — Connect-or-spawn on launch
 - On the Tauri `setup` hook:
   1. `status()`.
-  2. Some ⇒ running; render folders. Mark the daemon as not-ours (we did not spawn it).
-  3. None ⇒ spawn the bundled sidecar via the shell plugin (`app.shell().sidecar("indiana")?.args(["serve"]).spawn()`). Mark the daemon as ours.
+  2. Some ⇒ running; render folders.
+  3. None ⇒ spawn the bundled sidecar via the shell plugin (`app.shell().sidecar("indiana")?.args(["serve"]).spawn()`).
   4. Poll `status` every 500ms up to 10s. Some ⇒ running. Timeout ⇒ "Failed to start" error state.
 - PATH detection (DISTRO.md): before spawning the bundled binary, check `~/.local/bin/indiana`, `/usr/local/bin/indiana`, `$(brew --prefix)/bin/indiana`. If any exists and is newer (mtime), spawn it instead, so power users can upgrade the daemon independently.
 
 ### M12.5.2 — Process management
-- Track the spawned child (`CommandChild`) and whether the live daemon is ours.
+- The daemon reports `StatusResponse.stoppable` (`!service::is_installed()`); the menulet renders it and holds no ownership state.
 - Stop button:
-  - Daemon is ours ⇒ show stop. `shutdown()` over the socket; wait up to 2s for the socket to close; if still alive, `child.kill()`.
-  - Daemon is not ours (alive at launch, manual or launchd) ⇒ hide stop; show "Managed externally". We never kill a daemon we did not start; launchd would restart it regardless (`KeepAlive=true`).
-- Verify: spawn via sidecar, click stop, assert the process exits. Start daemon manually before launching the menulet, assert stop is hidden.
+  - `stoppable: true` (unsupervised — spawned sidecar, orphaned sidecar, or manual `indiana serve`) ⇒ show stop. `shutdown()` over the socket stops it cleanly.
+  - `stoppable: false` (launchd service installed, `KeepAlive=true`) ⇒ hide stop; the daemon is managed by launchctl, and a Shutdown would be restarted.
+- Verify: spawn via sidecar, click stop, assert the process exits. Install the launchd service, relaunch the menulet, assert stop is hidden.
 
 ### M12.5.3 — Crash recovery
 - Poll `status` every 30s while "running".
-- None (connection refused / timeout):
-  - Daemon was ours ⇒ "Server stopped" state with a "Restart" option.
-  - Daemon was not ours ⇒ "Server unreachable" message (do not auto-respawn what we did not own).
+- None (connection refused / timeout) ⇒ "Server stopped" state with a "Restart" option.
 - Restart re-runs the M12.5.1 connect-or-spawn logic.
 - Verify: kill the daemon, assert the panel transitions within 30s. Click restart, assert respawn.
 
@@ -263,7 +261,9 @@ The smoke test covers the wire; only a person can confirm the panel. With the da
 - Tauri 2 API drift. Earlier drafts named Tauri-1 paths. In Tauri 2: dialog/clipboard/shell are plugins (`tauri-plugin-*`), the sidecar is `app.shell().sidecar(..)` (not `Command::new_sidecar`), and tray icons are raster `Image`s with `icon_as_template(true)` (not PDFs). Verify exact names against the installed Tauri version when scaffolding.
 - NSPanel fidelity. A plain Tauri window (`always_on_top` + `skip_taskbar` + `decorations:false`) approximates a menu-bar panel but is not a true non-activating `NSPanel`. If blur/focus behaviour misbehaves, adopt the `tauri-nspanel` plugin or the native pattern from `old/adhd-menulet-focus-finder` (referenced in MENULET_PRD).
 - Copy phasing. MENULET_PRD "Phase 1" still says copy lands later, but GOAL/PHASES Phase 5 and this runbook treat one-click copy as core to the menulet (M12.0.4, M12.2.3). Reconcile MENULET_PRD if copy is truly first-deliverable.
-- TODO — confirm sidecar spawn under capabilities. `tauri.conf.json` dropped the `plugins.shell.scope` block; sidecar permission now lives only in `capabilities/default.json` as bare `shell:allow-spawn` / `shell:allow-execute` (no scoped sidecar entry). Verify `make menulet` → Start/Stop/Start actually respawns the daemon with no ACL "not allowed" error. If it fails, add a scoped-execute entry naming `binaries/indiana` (`sidecar: true`, args `["serve"]`).
+- Sidecar spawn under capabilities — confirmed working. Bare `shell:allow-spawn` / `shell:allow-execute` in `capabilities/default.json` (no scoped sidecar entry) is sufficient to spawn `binaries/indiana serve`; Start/Stop/Start respawns the daemon with no ACL error. If a future Tauri bump tightens this, add a scoped-execute entry naming `binaries/indiana` (`sidecar: true`, args `["serve"]`).
+- Spawn failures surface the real reason. `socket::spawn_daemon` returns `Result<(), String>` (not a bare `bool`), so `spawn_sidecar` propagates the actual error to the panel and auto-spawn logs it to stderr — no more silent "failed to start" with no cause.
+- `connecting` flag ownership. The "starting…" guard lives on the 3s background poll only, not inside `refreshFolders`. `refreshFolders` always renders; `setRunning` is the sole clearer of `connecting`. An earlier version guarded `refreshFolders` itself and leaned on an unconditional `setRunning(false)` after the init loop to clear the flag — which flashed "stopped" over a live daemon (the flaky "restart fixes it" symptom). Don't reintroduce a guard inside `refreshFolders`.
 
 ---
 

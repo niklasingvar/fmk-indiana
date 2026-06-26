@@ -71,9 +71,10 @@ pub fn remove_folder(path: &Path) -> Option<bool> {
         .ok()
 }
 
-pub fn copy_folder(path: &Path) -> Option<String> {
+pub fn copy_folder(path: &Path, kind: Option<&str>) -> Option<String> {
     let raw = send_recv(&Request::Copy {
         path: path.to_path_buf(),
+        kind: kind.map(|k| k.to_string()),
     })?;
     serde_json::from_str::<CopyResponse>(&raw)
         .map(|r| r.text)
@@ -83,37 +84,32 @@ pub fn copy_folder(path: &Path) -> Option<String> {
 pub fn shutdown() -> bool {
     send_recv(&Request::Shutdown).is_some()
 }
-/// Spawn the daemon sidecar if not already running. Returns true if the daemon
-/// is reachable after spawning (or was already running). Sets `DaemonState::ours`
-/// when we spawned it.
-pub fn spawn_daemon(app: &tauri::AppHandle) -> bool {
-    // Already alive — nothing to do, not ours.
+/// Spawn the bundled daemon sidecar if not already running, and wait for it to
+/// answer `Status`. The single source of truth for "did it come up" — the caller
+/// (and UI) just awaits this. On failure it returns the real reason, not a bare
+/// `false`, so the panel can show why instead of a generic "failed to start".
+pub fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
+    // Already alive — nothing to do.
     if status().is_some() {
-        return true;
+        return Ok(());
     }
 
-    let shell = match app.shell().sidecar("indiana") {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
-    let (_rx, _child) = match shell.args(["serve"]).spawn() {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
+    let (_rx, _child) = app
+        .shell()
+        .sidecar("indiana")
+        .map_err(|e| format!("locate sidecar: {e}"))?
+        .args(["serve"])
+        .spawn()
+        .map_err(|e| format!("spawn sidecar: {e}"))?;
 
-    // Mark daemon as ours.
-    if let Some(state) = app.try_state::<std::sync::Mutex<crate::DaemonState>>() {
-        state.lock().unwrap().ours = true;
-    }
-
-    // Poll for daemon to come up.
+    // Poll for the daemon to bind its socket and answer Status.
     for _ in 0..20 {
         std::thread::sleep(std::time::Duration::from_millis(500));
         if status().is_some() {
-            return true;
+            return Ok(());
         }
     }
-    false
+    Err("daemon did not respond within 10s".into())
 }
 
 
@@ -136,30 +132,24 @@ pub mod commands {
     }
 
     #[tauri::command]
-    pub fn copy_folder(path: String) -> Result<String, String> {
-        super::copy_folder(Path::new(&path))
+    pub fn copy_folder(path: String, kind: Option<String>) -> Result<String, String> {
+        super::copy_folder(Path::new(&path), kind.as_deref())
             .ok_or_else(|| "daemon not running".into())
     }
 
     #[tauri::command]
-    pub fn shutdown(app: tauri::AppHandle) -> Result<bool, String> {
-        if let Some(state) = app.try_state::<std::sync::Mutex<crate::DaemonState>>() {
-            state.lock().unwrap().ours = false;
-        }
+    pub fn shutdown() -> Result<bool, String> {
         Ok(super::shutdown())
     }
 
     #[tauri::command]
-    pub async fn spawn_sidecar(app: tauri::AppHandle) -> Result<bool, String> {
-        Ok(super::spawn_daemon(&app))
-    }
-
-    /// Returns true if the menulet spawned the running daemon.
-    #[tauri::command]
-    pub fn daemon_is_ours(app: tauri::AppHandle) -> bool {
-        app.try_state::<std::sync::Mutex<crate::DaemonState>>()
-            .map(|s| s.lock().unwrap().ours)
-            .unwrap_or(false)
+    pub async fn spawn_sidecar(app: tauri::AppHandle) -> Result<(), String> {
+        // spawn_daemon blocks up to 10s polling for the socket. Run it on the
+        // blocking pool so it doesn't park an async worker and freeze other IPC
+        // (the 3s status poll, copy) while the daemon comes up.
+        tauri::async_runtime::spawn_blocking(move || super::spawn_daemon(&app))
+            .await
+            .map_err(|e| e.to_string())?
     }
 
     /// Signal that a native dialog is about to open (prevents auto-hide on focus loss).
@@ -168,6 +158,28 @@ pub mod commands {
         if let Some(state) = app.try_state::<std::sync::Mutex<crate::DaemonState>>() {
             state.lock().unwrap().dialog_open = open;
         }
+    }
+
+    /// Run `indiana templates refresh <path>` via the bundled sidecar.
+    /// Creates missing `.indiana/<command>/prompt.md` files without overwriting existing ones.
+    #[tauri::command]
+    pub async fn refresh_templates(app: tauri::AppHandle, path: String) -> Result<bool, String> {
+        use tauri_plugin_shell::process::CommandEvent;
+
+        let (mut rx, _child) = app
+            .shell()
+            .sidecar("indiana")
+            .map_err(|e| e.to_string())?
+            .args(["templates", "refresh", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+
+        while let Some(event) = rx.recv().await {
+            if let CommandEvent::Terminated(status) = event {
+                return Ok(status.code == Some(0));
+            }
+        }
+        Ok(false)
     }
 
     #[tauri::command]
