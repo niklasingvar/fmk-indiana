@@ -16,6 +16,7 @@ pub enum Kind {
     Action,
     Todo,
     Delete,
+    Prompt,
 }
 
 /// Whether a kind carries a message (IN_COMMANDS.md: pure reactions take none).
@@ -125,6 +126,14 @@ pub const TABLE: &[MarkerSpec] = &[
         tracked: false,
         command_type: "agent_gated_directive",
     },
+    MarkerSpec {
+        shorts: &["p"],
+        long: "prompt",
+        kind: Kind::Prompt,
+        msg: Msg::Optional,
+        tracked: false,
+        command_type: "agent_run_directly",
+    },
 ];
 
 /// Action and Todo are aliases: one tracked, actionable kind under two tokens
@@ -169,8 +178,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_table_has_ten_kinds() {
-        assert_eq!(TABLE.len(), 10);
+    fn test_table_has_eleven_kinds() {
+        assert_eq!(TABLE.len(), 11);
     }
 
     // IN_TEST.md E1: short and long forms are equivalent.

@@ -225,6 +225,18 @@ mod tests {
     }
 
     #[test]
+    fn test_compile_prompt() {
+        let (d, idx) = index("refactor this ::prompt extract the helper\n");
+        let payload = compile_with_options(&idx, &CompileOptions::default());
+        assert_eq!(payload.markers[0].kind, Kind::Prompt);
+        assert_eq!(
+            payload.markers[0].compiled_prompt,
+            "Run the code agent directly on this. extract the helper"
+        );
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
     fn test_compile_question() {
         let (d, idx) = index("hard ::question why?\n");
         let payload = compile_with_options(&idx, &CompileOptions::default());

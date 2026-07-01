@@ -246,6 +246,7 @@ fn scan(path: Option<PathBuf>, json: bool, read_only: bool) -> ExitCode {
         ("action", c.action),
         ("todo", c.todo),
         ("delete", c.delete),
+        ("prompt", c.prompt),
     ] {
         if n > 0 {
             parts.push(format!("{label}:{n}"));

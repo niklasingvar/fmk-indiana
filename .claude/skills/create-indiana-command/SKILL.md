@@ -31,6 +31,7 @@ Ask the user (one focused question) for anything not given:
 - `agent_directive` — agent acts directly (`::fix`, `::elaborate`)
 - `agent_explains` — agent explains to the user (`::question`)
 - `agent_gated_directive` — agent prepares the change, then checks in with the user before acting (`::delete`)
+- `agent_run_directly` — auto-calls a code agent to act on the prompt (`::prompt`)
 - `reaction` — user reaction, no message (`::hate`, `::love`, `::keep`)
 - `user_context` — user-authored context, passthrough (`::note`)
 - `user_task` — user task, passthrough, tracked (`::action`, `::todo`)

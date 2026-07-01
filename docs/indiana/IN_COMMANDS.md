@@ -24,6 +24,7 @@ approval: pending
 - Agent directive: `::fix`, `::elaborate`.
 - Agent explains: `::question`.
 - Agent gated directive: `::delete`.
+- Agent runs directly: `::prompt`.
 - Reaction: `::hate`, `::love`, `::keep`.
 - User context: `::note`.
 - User task: `::action`, `::todo`.
@@ -41,6 +42,7 @@ approval: pending
 | `::a` | `::action` | message | user task | Task for the user to log. |
 | `::td` | `::todo` | message | user task | Alias for action. |
 | `::d` | `::delete` | optional message | agent gated directive | Agent deletes targeted content; checks in with the user before acting. |
+| `::p` | `::prompt` | optional message | agent runs directly | Auto-calls the code agent to act on this prompt (behavior ships later). |
 
 ## Compiled prompts on copy
 - Prompt wording can come from repo-local templates ([IN_FOLDER.md](IN_FOLDER.md)). Defaults:
@@ -52,6 +54,7 @@ approval: pending
 - `::question [msg]` → "The user asks: <msg>. Answer it." If no message: "The user does not understand this. Explain it."
 - `::note <msg>` / `::action <msg>` / `::todo <msg>` → passed through as user context / user task.
 - `::delete [msg]` → "Take action on this and delete the targeted content. Confirm with the user before deleting." + msg.
+- `::prompt [msg]` → "Run the code agent directly on this." + msg. (Auto-calling the code agent ships later.)
 
 ## Decided
 - Pure reactions (`::hate`, `::love`, `::keep`) take no message — keeps tagging fast (PURPOSE: no essays).

@@ -228,6 +228,7 @@ fn heading(command: &str) -> &'static str {
         "action" => "# ::action — user task (passthrough): the message is the prompt.",
         "todo" => "# ::todo — user task (passthrough): the message is the prompt.",
         "delete" => "# ::delete — agent gated directive: delete targeted content, then check in with the user before acting.",
+        "prompt" => "# ::prompt — agent runs directly: auto-call the code agent to act on this prompt.",
         _ => "# (unknown command)",
     }
 }

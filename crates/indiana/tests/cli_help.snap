@@ -34,3 +34,4 @@ Kinds (for --kind):
   action       a
   todo         td
   delete       d
+  prompt       p

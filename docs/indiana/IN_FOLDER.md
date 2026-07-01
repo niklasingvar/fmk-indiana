@@ -54,6 +54,7 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
     action/prompt.md
     todo/prompt.md
     delete/prompt.md
+    prompt/prompt.md
   context-model/
     .gitkeep
   montmartre/
@@ -67,7 +68,7 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
   - `.indiana/indianas/fix/prompt.md`
   - `.indiana/indianas/question/prompt.md`
   - `.indiana/indianas/hate/prompt.md`
-  - same for `love`, `keep`, `elaborate`, `note`, `action`, `todo`, `delete`
+  - same for `love`, `keep`, `elaborate`, `note`, `action`, `todo`, `delete`, `prompt`
 - `.indiana/context-model/` — current state, direction, rules. Scaffolded empty
   (a `.gitkeep` only); the user fills it in per repo.
 - `.indiana/montmartre/` — project management: `README.md`, `actions.md`,
