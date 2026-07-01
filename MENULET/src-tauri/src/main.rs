@@ -159,6 +159,7 @@ fn main() {
             socket::commands::shutdown,
             socket::commands::spawn_sidecar,
             socket::commands::refresh_templates,
+            socket::commands::replace_templates,
             socket::commands::read_focus,
             socket::commands::save_focus,
             socket::commands::home_dir,

@@ -17,7 +17,7 @@ approval: pending
 │  + add folder              ⚙    │  ← toolbar: add left, theme cog right
 ├─────────────────────────────────┤
 │  ~/projects/indiana  3⨯  run ⋯ │  ← folder row: path, count, run, three-dot menu
-│  ~/projects/site     7⨯  run ⋯ │  │  ⋯ → update indiana commands
+│  ~/projects/site     7⨯  run ⋯ │  │  ⋯ → update / replace indiana commands
 │  ~/work/notes        0⨯  run ⋯ │  │  ⋯ → copy actions / remove folder
 ├─────────────────────────────────┤
 │  ● server running     v0.1.0    │  ← footer: status left, version right
@@ -36,7 +36,8 @@ approval: pending
 - Add folder: done via the toolbar `[+ add folder]` button.
 - Click a folder row: copies its compiled bundle to clipboard. Visual feedback: "copied" flash.
 - Three-dot menu `[⋯]` per row:
-  - `update indiana commands`: delegates to `indiana templates refresh <path>` via the sidecar. Creates missing `.indiana/<command>/prompt.md` files; existing files are left untouched.
+  - `update indiana commands`: delegates to `indiana templates refresh <path>` via the sidecar. Creates missing `.indiana/indianas/<command>/prompt.md` files; existing files are left untouched.
+  - `replace indiana commands`: delegates to `indiana templates replace <path>` via the sidecar. Rewrites every `.indiana/indianas/<command>/prompt.md` with the embedded default — destructive, discards user edits to command templates. `context-model/` and `montmartre/` are not touched.
   - `remove folder`: sends remove command to daemon; daemon drops it from config.
 - Empty state: when no folders are monitored, show a centered "monitor a folder…" prompt that triggers the add picker.
 
@@ -91,5 +92,6 @@ Focus is a separate file to keep the config clean — it's user scratch, not Ind
 - Removed: "monitoring" header label.
 - Added: three-dot menu per folder row with `update indiana commands` and `remove folder` actions (was right-click remove).
 - Added: `refresh_templates` Tauri command that delegates to `indiana templates refresh <path>` sidecar.
+- Added: `replace_templates` Tauri command + "replace indiana commands" menu item, delegating to `indiana templates replace <path>` (destructive reset of command templates).
 - Added: app version display in footer (`v0.1.0`) sourced from Tauri metadata.
 - Moved: server status to bottom-left footer position (was top of panel).

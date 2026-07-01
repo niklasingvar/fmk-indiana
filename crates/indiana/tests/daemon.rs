@@ -255,7 +255,7 @@ fn test_live_add_autoscan() {
     let repo = repo_with("::h\n::fix yo\n");
     assert!(add_folder(&home, &repo).status.success());
     assert!(
-        repo.join(".indiana/fix/prompt.md").exists(),
+        repo.join(".indiana/indianas/fix/prompt.md").exists(),
         "live add should scaffold folder-local templates"
     );
     assert!(

@@ -130,6 +130,20 @@ Harness invariants (uphold for any new daemon test):
 | [IN_SCAN.md](IN_SCAN.md) | Deleted file → markers removed from index | `test_watch_delete` — delete a file with markers → markers gone from counts |
 | [IN_SCAN.md](IN_SCAN.md) | Burst of writes debounced to single rescan | `test_watch_debounce` — write 10 files in rapid succession → one rescan, not ten |
 
+## E12 — Montmartre todo CLI
+| Ref | Requirement | Test |
+|-----|-------------|------|
+| [IN_FOLDER.md](IN_FOLDER.md) | `indiana todo add` stores a row; `list`/`delete` round-trip | `test_todo_add_list_delete` |
+| [IN_FOLDER.md](IN_FOLDER.md) | `list --json` emits a stable flat array for agents | `test_todo_list_json` |
+| [IN_FOLDER.md](IN_FOLDER.md) | `add --json` returns the full row including dependencies | `test_todo_add_json` |
+| [IN_FOLDER.md](IN_FOLDER.md) | A todo is at most 29 whitespace-delimited words | `test_todo_max_29_words` |
+| [IN_FOLDER.md](IN_FOLDER.md) | Empty todo and empty domain are rejected | `test_todo_empty_todo_and_domain` |
+| [IN_FOLDER.md](IN_FOLDER.md) | A dependency must reference an existing todo | `test_todo_unknown_dependency` |
+| [IN_PRINCIPLES.md](IN_PRINCIPLES.md) | Deleting a todo cascades dependency edges to and from it | `test_todo_dependency_cascade` |
+| [IN_FOLDER.md](IN_FOLDER.md) | Deleting a missing id is a clean failure | `test_todo_delete_not_found` |
+| [IN_FOLDER.md](IN_FOLDER.md) | `--domain` filters the list | `test_todo_list_domain_filter` |
+| [IN_FOLDER.md](IN_FOLDER.md) | The db lives at `.indiana/montmartre/todos.db` | `test_todo_db_path` |
+
 ## What not to test
 - OS behavior: FSEvents delivery, `rename` atomicity, `fsync` durability — these are OS contracts, not Indiana's.
 - Tauri/NSPanel rendering: visual tests go in the menulet, not in Indiana core.

@@ -1,10 +1,12 @@
 ---
 status: draft
-purpose: Folder-local prompt template and behavior for ::fix.
+purpose: Command to fix something
 approval: pending
 command: fix
 command_type: agent_directive
 message: optional
 ---
 
-Fix this.
+# ::fix — agent directive: fix this. Message refines how.
+
+Fix this. {message}

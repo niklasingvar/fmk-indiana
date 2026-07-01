@@ -1,10 +1,12 @@
 ---
 status: draft
-purpose: Folder-local prompt template and behavior for ::note.
+purpose: Command to capture a user note
 approval: pending
 command: note
 command_type: user_context
 message: required
 ---
+
+# ::note — user context (passthrough): the message is the prompt.
 
 {message}

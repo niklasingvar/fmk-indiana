@@ -30,3 +30,7 @@ approval: pending
 - Scan engine: [IN_SCAN.md](IN_SCAN.md).
 - On-disk line format: [IN_LINE.md](IN_LINE.md).
 - Invariants: [IN_PRINCIPLES.md](IN_PRINCIPLES.md).
+
+## Montmartre todos (separate)
+- A repo-local SQLite list at `.indiana/montmartre/todos.db` ([IN_FOLDER.md](IN_FOLDER.md)), written and read by the `indiana todo` CLI for agents and humans.
+- Not part of the marker index and not derived from source — a separate state store ([IN_PRINCIPLES.md](IN_PRINCIPLES.md) carve-out). It does not flow through the markdown write chokepoint.

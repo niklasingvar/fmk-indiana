@@ -71,7 +71,7 @@ fn test_cli_copy() {
 #[test]
 fn test_cli_copy_uses_folder_template() {
     let dir = fixture("Fix this ::fix tighten\n");
-    let prompt = dir.join(".indiana/fix/prompt.md");
+    let prompt = dir.join(".indiana/indianas/fix/prompt.md");
     fs::create_dir_all(prompt.parent().unwrap()).unwrap();
     fs::write(
         prompt,
@@ -96,7 +96,7 @@ fn test_cli_add_scaffolds_folder_templates_idempotently() {
         .output()
         .unwrap();
     assert!(out.status.success());
-    let prompt = dir.join(".indiana/fix/prompt.md");
+    let prompt = dir.join(".indiana/indianas/fix/prompt.md");
     assert!(prompt.exists());
 
     fs::write(&prompt, "custom").unwrap();
@@ -125,7 +125,7 @@ fn test_cli_add_then_user_template_edit_affects_copy() {
     assert!(out.status.success());
 
     fs::write(
-        dir.join(".indiana/fix/prompt.md"),
+        dir.join(".indiana/indianas/fix/prompt.md"),
         "---\nstatus: draft\npurpose: test\napproval: pending\ncommand: fix\ncommand_type: test\n---\n\nRepair this. {message}\n",
     )
     .unwrap();
@@ -141,8 +141,8 @@ fn test_cli_add_then_user_template_edit_affects_copy() {
 fn test_cli_templates_refresh_restores_missing_without_overwrite() {
     let dir = fixture("Fix this ::fix tighten\n");
     indiana_core::templates::init_folder_indiana(&dir).unwrap();
-    let fix = dir.join(".indiana/fix/prompt.md");
-    let note = dir.join(".indiana/note/prompt.md");
+    let fix = dir.join(".indiana/indianas/fix/prompt.md");
+    let note = dir.join(".indiana/indianas/note/prompt.md");
     fs::write(&fix, "custom").unwrap();
     fs::remove_file(&note).unwrap();
 
@@ -155,6 +155,30 @@ fn test_cli_templates_refresh_restores_missing_without_overwrite() {
     assert!(out.status.success());
     assert_eq!(fs::read_to_string(&fix).unwrap(), "custom");
     assert!(note.exists());
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn test_cli_templates_replace_overwrites_without_touching_meta() {
+    let dir = fixture("Fix this ::fix tighten\n");
+    indiana_core::templates::init_folder_indiana(&dir).unwrap();
+    let fix = dir.join(".indiana/indianas/fix/prompt.md");
+    let focus = dir.join(".indiana/montmartre/focus.md");
+    fs::write(&fix, "custom").unwrap();
+    fs::write(&focus, "# my focus\n").unwrap();
+
+    let out = Command::new(BIN)
+        .arg("templates")
+        .arg("replace")
+        .arg(&dir)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let body = fs::read_to_string(&fix).unwrap();
+    assert!(body.contains("Fix this."));
+    assert!(!body.contains("custom"));
+    // Meta files are not part of "replace" — must survive.
+    assert_eq!(fs::read_to_string(&focus).unwrap(), "# my focus\n");
     fs::remove_dir_all(&dir).ok();
 }
 

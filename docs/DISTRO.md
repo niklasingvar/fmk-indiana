@@ -9,9 +9,10 @@ approval: pending
 > How [Indiana](INDIANA/IN_PRD.md) (CLI + server) and the [Menulet](MENULET_PRD.md) reach users. Steps mirror [PHASES.md](PHASES.md).
 
 ## Now (dogfood)
-- One binary, multi-mode: `indiana serve` (daemon), `indiana scan`, `indiana copy`, `indiana service install`.
+- One binary, multi-mode: `indiana serve` (daemon), `indiana scan`, `indiana copy`, `indiana service install`, `indiana todo`.
 - Single static `aarch64-apple-darwin` artifact, no runtime deps.
   - Install by copy to `~/.local/bin/indiana`; `cargo build --release` from source.
+  - SQLite is compiled in via `rusqlite`'s `bundled` feature (build-time `cc` step, no system SQLite, still no runtime dep). It backs the repo-local Montmartre todo list only.
   - Daemonize via `launchd` (`indiana service install`); CLI and menulet both talk to the daemon over a Unix domain socket at `~/.indiana/indiana.sock`.
 - Menulet: `cargo tauri build` → unsigned `.app`; drag to `/Applications`.
   - Bundles the `indiana` server binary as a Tauri sidecar inside the `.app` bundle. On launch, spawns it as a child if no daemon is already running.

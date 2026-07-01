@@ -3,16 +3,18 @@ Scan markdown for :: markers
 Usage: indiana <COMMAND>
 
 Commands:
-  serve      Run the daemon: bind the socket and hold the index in memory
-  scan       Walk markdown and list every marker. With no path, asks a running daemon
-  add        Add a folder to the monitored-folders config
-  remove     Remove a folder from the monitored-folders config
-  status     Show the daemon's monitored folders and marker counts
-  copy       Compile markers and copy the bundle to the clipboard
-  mcp        Run the MCP stdio server
-  templates  Manage repo-local `.indiana` command templates
-  service    Manage the launchd service
-  help       Print this message or the help of the given subcommand(s)
+  serve        Run the daemon: bind the socket and hold the index in memory
+  scan         Walk markdown and list every marker. With no path, asks a running daemon
+  add          Add a folder to the monitored-folders config
+  remove       Remove a folder from the monitored-folders config
+  status       Show the daemon's monitored folders and marker counts
+  copy         Compile markers and copy the bundle to the clipboard
+  mcp          Run the MCP stdio server
+  templates    Manage repo-local `.indiana` command templates
+  service      Manage the launchd service
+  todo         Manage the Montmartre todo list (SQLite, repo-local `.indiana/montmartre/todos.db`)
+  frontmatter  Add default frontmatter to markdown files missing it
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help
@@ -31,3 +33,4 @@ Kinds (for --kind):
   note         n
   action       a
   todo         td
+  delete       d

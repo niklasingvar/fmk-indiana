@@ -167,7 +167,7 @@ fn line_ranges(bytes: &[u8]) -> Vec<(usize, usize)> {
     ranges
 }
 
-fn atomic_write(path: &Path, content: &[u8]) -> io::Result<()> {
+pub fn atomic_write(path: &Path, content: &[u8]) -> io::Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let mut tmp = tempfile::NamedTempFile::new_in(parent)?;
     tmp.write_all(content)?;

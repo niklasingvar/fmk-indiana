@@ -213,6 +213,18 @@ mod tests {
     }
 
     #[test]
+    fn test_compile_delete() {
+        let (d, idx) = index("junk ::d the dead section\n");
+        let payload = compile_with_options(&idx, &CompileOptions::default());
+        assert_eq!(payload.markers[0].kind, Kind::Delete);
+        assert_eq!(
+            payload.markers[0].compiled_prompt,
+            "Take action on this and delete the targeted content. Confirm with the user before deleting: the dead section"
+        );
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
     fn test_compile_question() {
         let (d, idx) = index("hard ::question why?\n");
         let payload = compile_with_options(&idx, &CompileOptions::default());
@@ -373,7 +385,7 @@ mod tests {
     fn test_compile_with_roots_uses_owning_root_template() {
         let (a, idx_a) = index("buggy ::fix tighten\n");
         let (b, idx_b) = index("buggy ::fix tighten\n");
-        let prompt = a.join(".indiana/fix/prompt.md");
+        let prompt = a.join(".indiana/indianas/fix/prompt.md");
         fs::create_dir_all(prompt.parent().unwrap()).unwrap();
         fs::write(
             prompt,
@@ -398,7 +410,7 @@ mod tests {
     #[test]
     fn test_compile_with_roots_bad_template_warns_and_falls_back() {
         let (d, idx) = index("buggy ::fix tighten\n");
-        let prompt = d.join(".indiana/fix/prompt.md");
+        let prompt = d.join(".indiana/indianas/fix/prompt.md");
         fs::create_dir_all(prompt.parent().unwrap()).unwrap();
         fs::write(
             prompt,

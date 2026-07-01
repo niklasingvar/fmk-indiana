@@ -16,6 +16,7 @@ approval: pending
 - Carve-out: user config (the monitored-folders list, [IN_DAEMON.md](IN_DAEMON.md)) is input, not a cache. It legitimately persists; it is not derived state and is not what this rule governs.
 - Carve-out: the copy cursor (`~/.indiana/copied.json`) is interaction history — a record of "which markers were already copied." It is optional convenience state, not a cache of source. Deleting it degrades safely: `--latest` falls back to copy-all. Source truth is untouched. Append-only by design: a copy may scan one subfolder, so garbage-collecting the cursor against a single scan would silently drop identities for every file outside it. Growth is bounded by distinct markers ever copied; delete the file to reset.
 - Carve-out: repo-local `.indiana/` command templates ([IN_FOLDER.md](IN_FOLDER.md)) are user-authored input. Deleting them changes prompt wording, not marker state.
+- Carve-out: repo-local `.indiana/montmartre/todos.db` ([IN_FOLDER.md](IN_FOLDER.md)) is authoritative Montmartre todo state — agent and human todos in SQLite, not derived from markdown. It is separate from `::todo` markers, which stay in source with injected ids. Deleting it loses the todo list; it is not rebuildable from a rescan. The `indiana todo` CLI is the single read/write face for it.
 
 ## One marker table drives everything
 - The grammar — short/long form, kind, arg, compiled prompt, identity, default scope — is declared once.
@@ -41,6 +42,11 @@ approval: pending
 - Compiled-prompt wording is product content, tuned often. It lives as templates/data, not in engine code.
 - Changing how `::hate` reads must not mean recompiling the scanner.
 - Marker grammar is global; folder-local templates tune prompt wording per monitored root.
+
+## This repo authors the defaults
+- In the Indiana repository itself, `.indiana/indianas/<command>/prompt.md` is the authoring source for default command templates; `crates/core/prompts.toml` and scaffold generation mirror it.
+- A unit test (`test_repo_indianas_match_embedded_defaults`) fails if a repo template drifts from the embedded default or marker metadata. Edit the repo template first, then sync `prompts.toml` and the marker row.
+- In every other monitored repo, `.indiana/` stays user input that tunes wording for existing kinds ([IN_FOLDER.md](IN_FOLDER.md)).
 
 ## Love becomes direction
 - A `::love` marker means more than preserve this instance.

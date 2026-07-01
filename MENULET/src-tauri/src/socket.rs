@@ -164,22 +164,60 @@ pub mod commands {
     /// Creates missing `.indiana/<command>/prompt.md` files without overwriting existing ones.
     #[tauri::command]
     pub async fn refresh_templates(app: tauri::AppHandle, path: String) -> Result<bool, String> {
+        run_templates_sidecar(&app, "refresh", &path).await
+    }
+
+    /// Run `indiana templates replace <path>` via the bundled sidecar.
+    /// Overwrites every `.indiana/indianas/<command>/prompt.md` with the
+    /// embedded default — discards user edits to command templates.
+    #[tauri::command]
+    pub async fn replace_templates(app: tauri::AppHandle, path: String) -> Result<bool, String> {
+        run_templates_sidecar(&app, "replace", &path).await
+    }
+
+    /// Spawn `indiana templates <subcmd> <path>` and surface a real reason on
+    /// failure. The sidecar's stderr is captured so a non-zero exit (e.g. an
+    /// unknown subcommand in a stale sidecar, or a unwritable folder) reaches
+    /// the UI instead of a silent `false`.
+    async fn run_templates_sidecar(
+        app: &tauri::AppHandle,
+        subcmd: &str,
+        path: &str,
+    ) -> Result<bool, String> {
         use tauri_plugin_shell::process::CommandEvent;
 
         let (mut rx, _child) = app
             .shell()
             .sidecar("indiana")
-            .map_err(|e| e.to_string())?
-            .args(["templates", "refresh", &path])
+            .map_err(|e| format!("locate sidecar: {e}"))?
+            .args(["templates", subcmd, path])
             .spawn()
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("spawn sidecar: {e}"))?;
 
+        let mut stderr = String::new();
+        let mut exit_code: Option<i32> = None;
         while let Some(event) = rx.recv().await {
-            if let CommandEvent::Terminated(status) = event {
-                return Ok(status.code == Some(0));
+            match event {
+                CommandEvent::Stderr(bytes) => stderr.push_str(&String::from_utf8_lossy(&bytes)),
+                CommandEvent::Error(e) => return Err(format!("sidecar error: {e}")),
+                CommandEvent::Terminated(status) => {
+                    exit_code = status.code;
+                    break;
+                }
+                _ => {}
             }
         }
-        Ok(false)
+        match exit_code {
+            Some(0) => Ok(true),
+            Some(code) => Err(format!(
+                "indiana templates {subcmd} exited {code}: {}",
+                stderr.trim()
+            )),
+            None => Err(format!(
+                "indiana templates {subcmd} produced no exit event: {}",
+                stderr.trim()
+            )),
+        }
     }
 
     #[tauri::command]

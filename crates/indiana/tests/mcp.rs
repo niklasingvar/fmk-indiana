@@ -94,7 +94,7 @@ fn test_mcp_tools_list() {
 fn test_mcp_read_payload() {
     let home = fixture("");
     let dir = fixture("Fix this ::fix tighten\n");
-    let prompt = dir.join(".indiana/fix/prompt.md");
+    let prompt = dir.join(".indiana/indianas/fix/prompt.md");
     std::fs::create_dir_all(prompt.parent().unwrap()).unwrap();
     std::fs::write(
         prompt,

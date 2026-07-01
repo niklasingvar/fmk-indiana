@@ -42,10 +42,14 @@ function closeFolderMenu() {
   }
 }
 
-function flashText(msg) {
+function flashText(msg, ms = 1200) {
   copiedFlash.textContent = msg;
   copiedFlash.classList.add("show");
-  setTimeout(() => copiedFlash.classList.remove("show"), 1200);
+  setTimeout(() => copiedFlash.classList.remove("show"), ms);
+}
+
+function firstLine(err) {
+  return String(err).split("\n")[0].slice(0, 48);
 }
 function renderFolders(folders) {
   foldersList.innerHTML = "";
@@ -90,10 +94,22 @@ function renderFolders(folders) {
         closeFolderMenu();
         try {
           const ok = await invoke("refresh_templates", { path: f.path });
-          if (ok) flashText("updated");
-        } catch (err) { console.error("refresh failed:", err); }
+          flashText(ok ? "updated" : "failed");
+        } catch (err) { console.error("refresh failed:", err); flashText("failed: " + firstLine(err), 3500); }
       });
       menu.appendChild(refreshItem);
+
+      const replaceItem = document.createElement("button");
+      replaceItem.textContent = "replace indiana commands";
+      replaceItem.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        closeFolderMenu();
+        try {
+          const ok = await invoke("replace_templates", { path: f.path });
+          flashText(ok ? "replaced" : "failed", ok ? 1200 : 3500);
+        } catch (err) { console.error("replace failed:", err); flashText("failed: " + firstLine(err), 3500); }
+      });
+      menu.appendChild(replaceItem);
 
       const copyActionsItem = document.createElement("button");
       copyActionsItem.textContent = "copy actions";

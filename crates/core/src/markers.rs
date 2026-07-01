@@ -15,6 +15,7 @@ pub enum Kind {
     Note,
     Action,
     Todo,
+    Delete,
 }
 
 /// Whether a kind carries a message (IN_COMMANDS.md: pure reactions take none).
@@ -35,6 +36,11 @@ pub struct MarkerSpec {
     pub msg: Msg,
     /// Tracked kinds get an injected id (IN_IDENTITY.md: action / todo only).
     pub tracked: bool,
+    /// Command-type contract for faces and humans (e.g. `agent_directive`,
+    /// `agent_gated_directive`). Metadata, not a runtime branch — the compiler
+    /// uses only the prompt body. Surfaced in scaffold frontmatter and MCP
+    /// grammar output.
+    pub command_type: &'static str,
 }
 
 /// The table. Source of truth for the grammar.
@@ -45,6 +51,7 @@ pub const TABLE: &[MarkerSpec] = &[
         kind: Kind::Question,
         msg: Msg::Optional,
         tracked: false,
+        command_type: "agent_explains",
     },
     MarkerSpec {
         shorts: &["h"],
@@ -52,6 +59,7 @@ pub const TABLE: &[MarkerSpec] = &[
         kind: Kind::Hate,
         msg: Msg::None,
         tracked: false,
+        command_type: "reaction",
     },
     MarkerSpec {
         shorts: &["l"],
@@ -59,6 +67,7 @@ pub const TABLE: &[MarkerSpec] = &[
         kind: Kind::Love,
         msg: Msg::None,
         tracked: false,
+        command_type: "reaction",
     },
     MarkerSpec {
         shorts: &["k"],
@@ -66,6 +75,7 @@ pub const TABLE: &[MarkerSpec] = &[
         kind: Kind::Keep,
         msg: Msg::None,
         tracked: false,
+        command_type: "reaction",
     },
     MarkerSpec {
         shorts: &["f"],
@@ -73,6 +83,7 @@ pub const TABLE: &[MarkerSpec] = &[
         kind: Kind::Fix,
         msg: Msg::Optional,
         tracked: false,
+        command_type: "agent_directive",
     },
     MarkerSpec {
         shorts: &["e"],
@@ -80,6 +91,7 @@ pub const TABLE: &[MarkerSpec] = &[
         kind: Kind::Elaborate,
         msg: Msg::Optional,
         tracked: false,
+        command_type: "agent_directive",
     },
     MarkerSpec {
         shorts: &["n"],
@@ -87,6 +99,7 @@ pub const TABLE: &[MarkerSpec] = &[
         kind: Kind::Note,
         msg: Msg::Required,
         tracked: false,
+        command_type: "user_context",
     },
     MarkerSpec {
         shorts: &["a"],
@@ -94,6 +107,7 @@ pub const TABLE: &[MarkerSpec] = &[
         kind: Kind::Action,
         msg: Msg::Required,
         tracked: true,
+        command_type: "user_task",
     },
     MarkerSpec {
         shorts: &["td"],
@@ -101,6 +115,15 @@ pub const TABLE: &[MarkerSpec] = &[
         kind: Kind::Todo,
         msg: Msg::Required,
         tracked: true,
+        command_type: "user_task",
+    },
+    MarkerSpec {
+        shorts: &["d"],
+        long: "delete",
+        kind: Kind::Delete,
+        msg: Msg::Optional,
+        tracked: false,
+        command_type: "agent_gated_directive",
     },
 ];
 
@@ -146,8 +169,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_table_has_nine_kinds() {
-        assert_eq!(TABLE.len(), 9);
+    fn test_table_has_ten_kinds() {
+        assert_eq!(TABLE.len(), 10);
     }
 
     // IN_TEST.md E1: short and long forms are equivalent.

@@ -1,7 +1,13 @@
 //! Folder-local command templates. Embedded prompts are the default; a
-//! monitored root may override them with `.indiana/<command>/prompt.md`.
+//! monitored root may override them with `.indiana/indianas/<command>/prompt.md`.
+//!
+//! `init_folder_indiana` also scaffolds the sibling meta folders every
+//! monitored root carries: `.indiana/context-model/` (state, direction, rules)
+//! and `.indiana/montmartre/` (project management: actions, notes, focus).
+//! Their seeded content lives in `crates/core/scaffold/` and is the source of
+//! truth — edit those files to change what new monitored roots start with.
 
-use crate::markers::{Kind, Msg, TABLE};
+use crate::markers::{Msg, TABLE};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::io;
@@ -62,18 +68,69 @@ pub fn init_folder_indiana(root: &Path) -> io::Result<()> {
             format!("{} is not a directory", root.display()),
         ));
     }
+    write_command_templates(root, false)?;
+    scaffold_meta(root)?;
+    Ok(())
+}
+
+/// Overwrite every `.indiana/indianas/<command>/prompt.md` with the embedded
+/// default. Existing user edits to command templates are discarded. Meta
+/// folders (`context-model/`, `montmartre/`) are not touched — replace is
+/// scoped to command templates only. Backed by `indiana templates replace`.
+pub fn replace_folder_indiana(root: &Path) -> io::Result<()> {
+    if !root.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("{} is not a directory", root.display()),
+        ));
+    }
+    write_command_templates(root, true)?;
+    Ok(())
+}
+
+/// Write the 9 `indianas/<command>/prompt.md` files from embedded defaults.
+/// `overwrite` false skips existing files (refresh/init); true rewrites them
+/// (replace).
+fn write_command_templates(root: &Path, overwrite: bool) -> io::Result<()> {
     let prompts = embedded_prompts();
     for spec in TABLE {
-        let dir = root.join(".indiana").join(spec.long);
+        let dir = root.join(".indiana").join("indianas").join(spec.long);
         std::fs::create_dir_all(&dir)?;
         let path = dir.join("prompt.md");
-        if path.exists() {
+        if !overwrite && path.exists() {
             continue;
         }
         let body = prompts
             .get(spec.long)
             .unwrap_or_else(|| panic!("missing prompt template: {}", spec.long));
-        std::fs::write(path, scaffold(spec.long, spec.kind, spec.msg, body))?;
+        std::fs::write(path, scaffold(spec.long, spec.command_type, spec.msg, body))?;
+    }
+    Ok(())
+}
+
+/// Scaffold the sibling meta folders: `context-model/` and `montmartre/`.
+/// Content is `include_str!`-ed from `crates/core/scaffold/`, which is the
+/// source of truth. Existing files are left byte-identical.
+fn scaffold_meta(root: &Path) -> io::Result<()> {
+    let context_model = root.join(".indiana").join("context-model");
+    std::fs::create_dir_all(&context_model)?;
+    let gitkeep = context_model.join(".gitkeep");
+    if !gitkeep.exists() {
+        std::fs::write(gitkeep, include_str!("../scaffold/context-model/.gitkeep"))?;
+    }
+
+    let montmartre = root.join(".indiana").join("montmartre");
+    std::fs::create_dir_all(&montmartre)?;
+    for (name, body) in [
+        ("README.md", include_str!("../scaffold/montmartre/README.md")),
+        ("actions.md", include_str!("../scaffold/montmartre/actions.md")),
+        ("notes.md", include_str!("../scaffold/montmartre/notes.md")),
+        ("focus.md", include_str!("../scaffold/montmartre/focus.md")),
+    ] {
+        let path = montmartre.join(name);
+        if !path.exists() {
+            std::fs::write(path, body)?;
+        }
     }
     Ok(())
 }
@@ -85,7 +142,10 @@ fn embedded_prompts() -> HashMap<String, String> {
 }
 
 fn template_path(root: &Path, command: &str) -> PathBuf {
-    root.join(".indiana").join(command).join("prompt.md")
+    root.join(".indiana")
+        .join("indianas")
+        .join(command)
+        .join("prompt.md")
 }
 
 fn read_template(path: &Path, command: &str) -> Result<String, String> {
@@ -145,21 +205,30 @@ fn first_paragraph(body: &str) -> Option<String> {
     (!paragraph.is_empty()).then_some(paragraph)
 }
 
-fn scaffold(command: &str, kind: Kind, msg: Msg, body: &str) -> String {
+fn scaffold(command: &str, command_type: &str, msg: Msg, body: &str) -> String {
     format!(
-        "---\nstatus: draft\npurpose: Folder-local prompt template and behavior for ::{command}.\napproval: pending\ncommand: {command}\ncommand_type: {}\nmessage: {}\n---\n\n{body}\n",
-        command_type(kind),
+        "---\nstatus: draft\npurpose: Folder-local prompt template and behavior for ::{command}.\napproval: pending\ncommand: {command}\ncommand_type: {command_type}\nmessage: {}\n---\n\n{}\n\n{body}\n",
         message_contract(msg),
+        heading(command),
     )
 }
 
-fn command_type(kind: Kind) -> &'static str {
-    match kind {
-        Kind::Fix | Kind::Elaborate => "agent_directive",
-        Kind::Question => "agent_explains",
-        Kind::Hate | Kind::Love | Kind::Keep => "reaction",
-        Kind::Note => "user_context",
-        Kind::Action | Kind::Todo => "user_task",
+/// One-line `#` heading prepended to each scaffolded `prompt.md` for human
+/// readability. `first_paragraph` skips `#` lines, so this never reaches the
+/// compiled prompt — it only documents the file for the person editing it.
+fn heading(command: &str) -> &'static str {
+    match command {
+        "fix" => "# ::fix — agent directive: fix this. Message refines how.",
+        "elaborate" => "# ::elaborate — agent directive: act on this and elaborate the change.",
+        "question" => "# ::question — agent explains: answer the user's question.",
+        "hate" => "# ::hate — reaction: user dislikes this (no message).",
+        "love" => "# ::love — reaction: user likes this; preserve the pattern.",
+        "keep" => "# ::keep — reaction: freeze; do not change this.",
+        "note" => "# ::note — user context (passthrough): the message is the prompt.",
+        "action" => "# ::action — user task (passthrough): the message is the prompt.",
+        "todo" => "# ::todo — user task (passthrough): the message is the prompt.",
+        "delete" => "# ::delete — agent gated directive: delete targeted content, then check in with the user before acting.",
+        _ => "# (unknown command)",
     }
 }
 
@@ -207,19 +276,83 @@ mod tests {
     fn test_init_folder_indiana_scaffolds_commands() {
         let d = tmp();
         init_folder_indiana(&d).unwrap();
-        assert!(d.join(".indiana/fix/prompt.md").exists());
-        assert!(d.join(".indiana/question/prompt.md").exists());
+        assert!(d.join(".indiana/indianas/fix/prompt.md").exists());
+        assert!(d.join(".indiana/indianas/question/prompt.md").exists());
+        assert!(d.join(".indiana/indianas/delete/prompt.md").exists());
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_init_folder_indiana_scaffolds_meta_folders() {
+        let d = tmp();
+        init_folder_indiana(&d).unwrap();
+        assert!(d.join(".indiana/context-model/.gitkeep").exists());
+        assert!(d.join(".indiana/montmartre/README.md").exists());
+        assert!(d.join(".indiana/montmartre/actions.md").exists());
+        assert!(d.join(".indiana/montmartre/notes.md").exists());
+        assert!(d.join(".indiana/montmartre/focus.md").exists());
+        assert_eq!(
+            fs::read_to_string(d.join(".indiana/montmartre/focus.md")).unwrap(),
+            "# Focus\n"
+        );
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_scaffold_heading_is_skipped_by_compiler() {
+        let d = tmp();
+        init_folder_indiana(&d).unwrap();
+        // The scaffolded action file opens with a `#` heading, then `{message}`.
+        let file = fs::read_to_string(d.join(".indiana/indianas/action/prompt.md")).unwrap();
+        assert!(file.starts_with("---\n"), "frontmatter first");
+        assert!(file.contains("# ::action —"), "heading present");
+        assert!(file.contains("\n{message}\n"), "body still {{message}}");
+        // The compiler reads only the first non-heading paragraph, so the
+        // heading never reaches the compiled prompt.
+        let catalog = TemplateCatalog::for_root(&d);
+        assert_eq!(catalog.prompts["action"], "{message}");
+        assert!(catalog.warnings.is_empty());
         fs::remove_dir_all(d).ok();
     }
 
     #[test]
     fn test_init_folder_indiana_does_not_overwrite() {
         let d = tmp();
-        let path = d.join(".indiana/fix/prompt.md");
+        let path = d.join(".indiana/indianas/fix/prompt.md");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, "custom").unwrap();
         init_folder_indiana(&d).unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), "custom");
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_init_folder_indiana_does_not_overwrite_meta() {
+        let d = tmp();
+        let focus = d.join(".indiana/montmartre/focus.md");
+        fs::create_dir_all(focus.parent().unwrap()).unwrap();
+        fs::write(&focus, "# my focus\n").unwrap();
+        init_folder_indiana(&d).unwrap();
+        assert_eq!(fs::read_to_string(&focus).unwrap(), "# my focus\n");
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_replace_folder_indiana_overwrites_commands() {
+        let d = tmp();
+        init_folder_indiana(&d).unwrap();
+        let fix = d.join(".indiana/indianas/fix/prompt.md");
+        fs::write(&fix, "my custom fix wording").unwrap();
+        replace_folder_indiana(&d).unwrap();
+        let body = fs::read_to_string(&fix).unwrap();
+        assert!(body.contains("Fix this."));
+        assert!(!body.contains("my custom fix wording"));
+        // Meta folders are left untouched by replace.
+        let focus = d.join(".indiana/montmartre/focus.md");
+        fs::create_dir_all(focus.parent().unwrap()).unwrap();
+        fs::write(&focus, "# my focus\n").unwrap();
+        replace_folder_indiana(&d).unwrap();
+        assert_eq!(fs::read_to_string(&focus).unwrap(), "# my focus\n");
         fs::remove_dir_all(d).ok();
     }
 
@@ -241,5 +374,49 @@ mod tests {
         assert_eq!(catalog.prompts["fix"], "Fix this. {message}");
         assert_eq!(catalog.warnings.len(), 1);
         fs::remove_dir_all(d).ok();
+    }
+
+    // IN_PRINCIPLES.md: this repo authors the defaults. Every TABLE row has a
+    // `.indiana/indianas/<long>/prompt.md` in this repository whose
+    // frontmatter and body match the marker metadata and `prompts.toml`.
+    // Skipped downstream where the repo `.indiana` is absent (a packaged crate
+    // build carries only the crate dir, not the workspace `.indiana`).
+    #[test]
+    fn test_repo_indianas_match_embedded_defaults() {
+        let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let indianas = ws.join(".indiana").join("indianas");
+        if !indianas.is_dir() {
+            return;
+        }
+        let prompts = embedded_prompts();
+        for spec in TABLE {
+            let path = template_path(&ws, spec.long);
+            let text = fs::read_to_string(&path)
+                .unwrap_or_else(|_| panic!("missing repo template: {}", path.display()));
+            let (frontmatter, body) = split_frontmatter(&text)
+                .unwrap_or_else(|_| panic!("bad frontmatter in {}", path.display()));
+            let parsed: Frontmatter = serde_yml::from_str(frontmatter)
+                .unwrap_or_else(|_| panic!("bad yaml in {}", path.display()));
+            assert_eq!(parsed.command, spec.long, "command mismatch in {}", path.display());
+            assert_eq!(
+                parsed.command_type, spec.command_type,
+                "command_type mismatch in {}",
+                path.display()
+            );
+            assert_eq!(
+                parsed.message.as_deref(),
+                Some(message_contract(spec.msg)),
+                "message mismatch in {}",
+                path.display()
+            );
+            let para = first_paragraph(body)
+                .unwrap_or_else(|| panic!("missing body in {}", path.display()));
+            assert_eq!(
+                para.as_str(),
+                prompts[spec.long].as_str(),
+                "body drift between {} and prompts.toml",
+                path.display()
+            );
+        }
     }
 }

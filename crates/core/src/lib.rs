@@ -5,6 +5,7 @@
 
 pub mod compile;
 pub mod cursor;
+pub mod frontmatter;
 pub mod id;
 pub mod index;
 pub mod markers;

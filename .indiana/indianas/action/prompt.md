@@ -1,10 +1,12 @@
 ---
 status: draft
-purpose: Folder-local prompt template and behavior for ::action.
+purpose: Command to run a user-given task
 approval: pending
 command: action
 command_type: user_task
 message: required
 ---
+
+# ::action — user task (passthrough): the message is the prompt.
 
 {message}
