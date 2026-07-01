@@ -1,5 +1,10 @@
 # Rust build output
 /target
+**/target/
+
+# Node / frontend build output
+**/node_modules/
+**/dist/
 
 # Local scratch fixtures
 /tmp
@@ -9,12 +14,19 @@ tmp_*
 .DS_Store
 .cursor/
 indiana-aarch64-apple-darwin.tar.gz
-MENULET/src-tauri/target/
-MENULET/src-tauri/binaries/indiana-*
+
+# Menulet Tauri sidecar (copied from target/release by make sidecar-copy)
+crates/menulet/src-tauri/binaries/indiana-*
 
 # Tauri-generated schemas (regenerated each build)
-MENULET/src-tauri/gen/
+crates/menulet/src-tauri/gen/
 
-# Menulet frontend deps + Vite build output
+# Legacy paths (pre-crates/ layout)
+MENULET/src-tauri/target/
+MENULET/src-tauri/binaries/indiana-*
+MENULET/src-tauri/gen/
 MENULET/node_modules/
 MENULET/dist/
+
+# Local Nimbalyst reference checkout (Casablanca UI inspiration)
+crates/casablanca/nimbalyst/

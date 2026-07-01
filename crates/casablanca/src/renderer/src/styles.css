@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --pane: 30 30 33;
+  --pane-border: 48 48 52;
+  --pane-hover: 42 42 46;
+  --text-muted: 140 140 150;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  @apply bg-pane text-gray-100 antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+/* Lexical editor surface */
+.casablanca-editor {
+  @apply outline-none;
+}
+.casablanca-editor h1 { @apply text-2xl font-semibold mt-6 mb-3; }
+.casablanca-editor h2 { @apply text-xl font-semibold mt-5 mb-2; }
+.casablanca-editor h3 { @apply text-lg font-semibold mt-4 mb-2; }
+.casablanca-editor p { @apply my-2 leading-relaxed; }
+.casablanca-editor ul { @apply list-disc pl-6 my-2; }
+.casablanca-editor ol { @apply list-decimal pl-6 my-2; }
+.casablanca-editor code {
+  @apply rounded bg-black/30 px-1 py-0.5 text-[0.9em] font-mono;
+}
+.casablanca-editor pre code { @apply bg-transparent p-0; }
+.casablanca-editor a { @apply text-blue-400 underline; }
+.casablanca-editor blockquote {
+  @apply border-l-2 border-pane-border pl-4 text-text-muted italic my-3;
+}
+.casablanca-editor hr { @apply border-pane-border my-6; }
