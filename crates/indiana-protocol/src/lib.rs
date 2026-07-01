@@ -20,7 +20,8 @@ pub enum Request {
     /// Stop monitoring a folder: remove from config, unwatch, rebuild index.
     Remove { path: PathBuf },
     /// Return the compiled bundle for one folder as ready-to-paste text.
-    Copy { path: PathBuf },
+    /// `kind` limits to one marker kind (e.g. "action"); `None` → all kinds.
+    Copy { path: PathBuf, #[serde(default)] kind: Option<String> },
     /// Graceful shutdown: ack, unlink the socket, exit.
     Shutdown,
 }
@@ -53,6 +54,12 @@ pub struct FolderInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub folders: Vec<FolderInfo>,
+    /// Whether a face can cleanly stop this daemon. False when the daemon is
+    /// supervised (launchd `KeepAlive`), since a `Shutdown` would be restarted.
+    /// Computed by the daemon so faces never reason about lifecycle themselves.
+    /// `default` keeps older daemons (no field) deserializing as not-stoppable.
+    #[serde(default)]
+    pub stoppable: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

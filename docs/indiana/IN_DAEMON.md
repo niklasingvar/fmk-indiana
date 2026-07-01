@@ -21,8 +21,10 @@ approval: pending
 - Empty config monitors nothing — a folder must be selected before the daemon scans anything.
 
 ## Folder selection
-- `indiana add <path>` selects a folder. Against a running daemon it is a live command: the daemon persists `config.json`, starts watching the folder, and rebuilds the index immediately (no restart).
-- With no daemon running, `add` only writes `config.json`; the next `serve` picks it up.
+- `indiana add <path>` selects a folder and initializes repo-local command templates ([IN_FOLDER.md](IN_FOLDER.md)).
+- Against a running daemon it is a live command: the daemon persists `config.json`, starts watching the folder, and rebuilds the index immediately (no restart).
+- With no daemon running, `add` writes `config.json` and initializes `.indiana/`; the next `serve` picks it up.
+- `indiana serve <path>` initializes `.indiana/` for an explicit monitored root.
 
 ## Socket binding
 - One process binds the socket. A second `indiana serve` must fail to bind with a clean error, not clobber.

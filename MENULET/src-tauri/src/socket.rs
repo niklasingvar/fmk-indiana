@@ -71,9 +71,10 @@ pub fn remove_folder(path: &Path) -> Option<bool> {
         .ok()
 }
 
-pub fn copy_folder(path: &Path) -> Option<String> {
+pub fn copy_folder(path: &Path, kind: Option<&str>) -> Option<String> {
     let raw = send_recv(&Request::Copy {
         path: path.to_path_buf(),
+        kind: kind.map(|k| k.to_string()),
     })?;
     serde_json::from_str::<CopyResponse>(&raw)
         .map(|r| r.text)
@@ -83,37 +84,32 @@ pub fn copy_folder(path: &Path) -> Option<String> {
 pub fn shutdown() -> bool {
     send_recv(&Request::Shutdown).is_some()
 }
-/// Spawn the daemon sidecar if not already running. Returns true if the daemon
-/// is reachable after spawning (or was already running). Sets `DaemonState::ours`
-/// when we spawned it.
-pub fn spawn_daemon(app: &tauri::AppHandle) -> bool {
-    // Already alive — nothing to do, not ours.
+/// Spawn the bundled daemon sidecar if not already running, and wait for it to
+/// answer `Status`. The single source of truth for "did it come up" — the caller
+/// (and UI) just awaits this. On failure it returns the real reason, not a bare
+/// `false`, so the panel can show why instead of a generic "failed to start".
+pub fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
+    // Already alive — nothing to do.
     if status().is_some() {
-        return true;
+        return Ok(());
     }
 
-    let shell = match app.shell().sidecar("indiana") {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
-    let (_rx, _child) = match shell.args(["serve"]).spawn() {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
+    let (_rx, _child) = app
+        .shell()
+        .sidecar("indiana")
+        .map_err(|e| format!("locate sidecar: {e}"))?
+        .args(["serve"])
+        .spawn()
+        .map_err(|e| format!("spawn sidecar: {e}"))?;
 
-    // Mark daemon as ours.
-    if let Some(state) = app.try_state::<std::sync::Mutex<crate::DaemonState>>() {
-        state.lock().unwrap().ours = true;
-    }
-
-    // Poll for daemon to come up.
+    // Poll for the daemon to bind its socket and answer Status.
     for _ in 0..20 {
         std::thread::sleep(std::time::Duration::from_millis(500));
         if status().is_some() {
-            return true;
+            return Ok(());
         }
     }
-    false
+    Err("daemon did not respond within 10s".into())
 }
 
 
@@ -136,30 +132,24 @@ pub mod commands {
     }
 
     #[tauri::command]
-    pub fn copy_folder(path: String) -> Result<String, String> {
-        super::copy_folder(Path::new(&path))
+    pub fn copy_folder(path: String, kind: Option<String>) -> Result<String, String> {
+        super::copy_folder(Path::new(&path), kind.as_deref())
             .ok_or_else(|| "daemon not running".into())
     }
 
     #[tauri::command]
-    pub fn shutdown(app: tauri::AppHandle) -> Result<bool, String> {
-        if let Some(state) = app.try_state::<std::sync::Mutex<crate::DaemonState>>() {
-            state.lock().unwrap().ours = false;
-        }
+    pub fn shutdown() -> Result<bool, String> {
         Ok(super::shutdown())
     }
 
     #[tauri::command]
-    pub async fn spawn_sidecar(app: tauri::AppHandle) -> Result<bool, String> {
-        Ok(super::spawn_daemon(&app))
-    }
-
-    /// Returns true if the menulet spawned the running daemon.
-    #[tauri::command]
-    pub fn daemon_is_ours(app: tauri::AppHandle) -> bool {
-        app.try_state::<std::sync::Mutex<crate::DaemonState>>()
-            .map(|s| s.lock().unwrap().ours)
-            .unwrap_or(false)
+    pub async fn spawn_sidecar(app: tauri::AppHandle) -> Result<(), String> {
+        // spawn_daemon blocks up to 10s polling for the socket. Run it on the
+        // blocking pool so it doesn't park an async worker and freeze other IPC
+        // (the 3s status poll, copy) while the daemon comes up.
+        tauri::async_runtime::spawn_blocking(move || super::spawn_daemon(&app))
+            .await
+            .map_err(|e| e.to_string())?
     }
 
     /// Signal that a native dialog is about to open (prevents auto-hide on focus loss).
@@ -167,6 +157,66 @@ pub mod commands {
     pub fn set_dialog_open(open: bool, app: tauri::AppHandle) {
         if let Some(state) = app.try_state::<std::sync::Mutex<crate::DaemonState>>() {
             state.lock().unwrap().dialog_open = open;
+        }
+    }
+
+    /// Run `indiana templates refresh <path>` via the bundled sidecar.
+    /// Creates missing `.indiana/<command>/prompt.md` files without overwriting existing ones.
+    #[tauri::command]
+    pub async fn refresh_templates(app: tauri::AppHandle, path: String) -> Result<bool, String> {
+        run_templates_sidecar(&app, "refresh", &path).await
+    }
+
+    /// Run `indiana templates replace <path>` via the bundled sidecar.
+    /// Overwrites every `.indiana/indianas/<command>/prompt.md` with the
+    /// embedded default — discards user edits to command templates.
+    #[tauri::command]
+    pub async fn replace_templates(app: tauri::AppHandle, path: String) -> Result<bool, String> {
+        run_templates_sidecar(&app, "replace", &path).await
+    }
+
+    /// Spawn `indiana templates <subcmd> <path>` and surface a real reason on
+    /// failure. The sidecar's stderr is captured so a non-zero exit (e.g. an
+    /// unknown subcommand in a stale sidecar, or a unwritable folder) reaches
+    /// the UI instead of a silent `false`.
+    async fn run_templates_sidecar(
+        app: &tauri::AppHandle,
+        subcmd: &str,
+        path: &str,
+    ) -> Result<bool, String> {
+        use tauri_plugin_shell::process::CommandEvent;
+
+        let (mut rx, _child) = app
+            .shell()
+            .sidecar("indiana")
+            .map_err(|e| format!("locate sidecar: {e}"))?
+            .args(["templates", subcmd, path])
+            .spawn()
+            .map_err(|e| format!("spawn sidecar: {e}"))?;
+
+        let mut stderr = String::new();
+        let mut exit_code: Option<i32> = None;
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stderr(bytes) => stderr.push_str(&String::from_utf8_lossy(&bytes)),
+                CommandEvent::Error(e) => return Err(format!("sidecar error: {e}")),
+                CommandEvent::Terminated(status) => {
+                    exit_code = status.code;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        match exit_code {
+            Some(0) => Ok(true),
+            Some(code) => Err(format!(
+                "indiana templates {subcmd} exited {code}: {}",
+                stderr.trim()
+            )),
+            None => Err(format!(
+                "indiana templates {subcmd} produced no exit event: {}",
+                stderr.trim()
+            )),
         }
     }
 

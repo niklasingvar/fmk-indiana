@@ -6,13 +6,27 @@ use std::path::{Path, PathBuf};
 
 const LABEL: &str = "com.niklas.indiana";
 
+/// Path to our launchd agent plist (`~/Library/LaunchAgents/<label>.plist`).
+/// `None` only when `HOME` is unset.
+pub fn plist_path() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|home| {
+        PathBuf::from(home)
+            .join("Library/LaunchAgents")
+            .join(format!("{LABEL}.plist"))
+    })
+}
+
+/// Whether the launchd service is installed. When true, the daemon is
+/// supervised with `KeepAlive=true`, so a `Shutdown` would be restarted — faces
+/// use this (via `StatusResponse::stoppable`) to decide whether to offer stop.
+pub fn is_installed() -> bool {
+    plist_path().is_some_and(|p| p.exists())
+}
+
 pub fn install() -> io::Result<PathBuf> {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME not set"))?;
-    let dir = home.join("Library/LaunchAgents");
-    fs::create_dir_all(&dir)?;
-    let plist = dir.join(format!("{LABEL}.plist"));
+    let plist =
+        plist_path().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME not set"))?;
+    fs::create_dir_all(plist.parent().expect("plist path has a parent"))?;
     let exe = std::env::current_exe()?;
     fs::write(&plist, plist_body(&exe))?;
     Ok(plist)
@@ -51,6 +65,14 @@ fn escape_xml(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plist_path_uses_label_under_launchagents() {
+        // Independent of whether the service is actually installed.
+        if let Some(p) = plist_path() {
+            assert!(p.ends_with("Library/LaunchAgents/com.niklas.indiana.plist"));
+        }
+    }
 
     #[test]
     fn test_plist_body() {

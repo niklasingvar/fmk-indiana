@@ -21,6 +21,8 @@ approval: pending
 ## Which get IDs
 - Tracked: `::action` / `::todo` only — the user tasks that carry `done` / `failed` and get checked off in the menulet.
 - Ephemeral: everything else — reactions, `::fix`, `::elaborate`, `::question`, `::note`. Compiled and forgotten.
+- Ephemeral fingerprint: for the copy cursor (`--latest`), ephemeral markers get a computed content fingerprint (path + kind + raw_token + message + scope_content). This is computed in memory only, never written to source. It survives line moves but reacts to content edits. [IN_PRINCIPLES.md](IN_PRINCIPLES.md) covers the cursor carve-out.
+- Caveat — scope coupling: because the fingerprint includes the captured scope, changing content near a marker (e.g. appending under a block/next-row scope) re-fingerprints it, so `--latest` re-surfaces it. Accepted trade-off: scope_content disambiguates messageless markers repeated in one file, and excluding the line number is what gives move-stability — dropping scope would reintroduce collisions, using line would lose move-stability.
 - No manual promotion. The grammar decides; one rule, nothing to configure per line.
 
 ## Identity lives in the source

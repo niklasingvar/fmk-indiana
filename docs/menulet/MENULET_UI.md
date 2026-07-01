@@ -14,53 +14,48 @@ approval: pending
 
 ```
 ┌─────────────────────────────────┐
-│  FOCUS ON                       │  ← text input, always visible
-│  [________________________]     │
+│  + add folder              ⚙    │  ← toolbar: add left, theme cog right
 ├─────────────────────────────────┤
-│  MONITORED FOLDERS        [+]   │  ← add button
-│  ~/projects/indiana       3⨯    │  ← folder path, marker count
-│  ~/projects/site          7⨯    │  │  click → copy bundle
-│  ~/work/notes             0⨯    │  │  right-click → remove
+│  ~/projects/indiana  3⨯  run ⋯ │  ← folder row: path, count, run, three-dot menu
+│  ~/projects/site     7⨯  run ⋯ │  │  ⋯ → update / replace indiana commands
+│  ~/work/notes        0⨯  run ⋯ │  │  ⋯ → copy actions / remove folder
 ├─────────────────────────────────┤
-│  ● Server running          ⏹    │  ← status dot + stop button
-│            or                    │
-│  ○ Server stopped          ▶    │  ← status dot + start button
+│  ● server running     v0.1.0    │  ← footer: status left, version right
+│    stop                         │
 └─────────────────────────────────┘
 ```
 
-### 1. FOCUS ON
+### 1. Toolbar
 
-A single-line text field at the top. The user types what they're working on right now — a reminder, a task name, a branch. It's not shared with the agent; it's a human scratchpad.
-
-- Placeholder: `"What are you working on?"`
-- Persisted to `~/.indiana/focus.txt` (plain text, one line).
-- Saved on blur / Enter. Loaded on panel open.
-- Empty by default; no placeholder for the user who leaves it blank.
+- Add folder `[+ add folder]`: opens a native folder picker. Sends path to daemon over the socket.
+- Theme cog `[⚙]`: opens a light/dark/system dropdown on the right.
 
 ### 2. Monitored folders
 
-Same as the existing PRD, but with a tighter spec:
-
 - List: each folder shows its basename (or tilde-path) and the live marker count Indiana reports.
-- Add `[+]`: opens a native `NSOpenPanel` picking a directory. Sends the path to Indiana over the socket; Indiana adds it to `config.json` and rescans.
-- Remove: right-click → "Stop monitoring". Sends to Indiana; Indiana removes from `config.json`.
-- Click a folder: copies its compiled bundle to clipboard. Visual feedback: brief checkmark or "Copied" flash.
-- Empty state: when no folders are monitored, show a centered "Monitor a folder →" prompt that triggers the add picker.
+- Add folder: done via the toolbar `[+ add folder]` button.
+- Click a folder row: copies its compiled bundle to clipboard. Visual feedback: "copied" flash.
+- Three-dot menu `[⋯]` per row:
+  - `update indiana commands`: delegates to `indiana templates refresh <path>` via the sidecar. Creates missing `.indiana/indianas/<command>/prompt.md` files; existing files are left untouched.
+  - `replace indiana commands`: delegates to `indiana templates replace <path>` via the sidecar. Rewrites every `.indiana/indianas/<command>/prompt.md` with the embedded default — destructive, discards user edits to command templates. `context-model/` and `montmartre/` are not touched.
+  - `remove folder`: sends remove command to daemon; daemon drops it from config.
+- Empty state: when no folders are monitored, show a centered "monitor a folder…" prompt that triggers the add picker.
 
 Count per folder is tallied by Indiana (actions, fixes, questions, etc.) — the menulet just displays the number. Full kind breakdown deferred; a single total is enough for v1.
 
-### 3. Server control
+### 3. Footer
 
-At the bottom, a status line with an explicit start/stop button.
+Status and version at the bottom of the panel.
 
-- Running: green dot ● + "Server running" + stop button ⏹.
-- Stopped: grey dot ○ + "Server stopped" + start button ▶.
-- Starting: spinner + "Starting…" (transient state while sidecar spawns).
-- Stop: sends shutdown command over the socket, then waits for socket close. Graceful — finishes in-flight compile, doesn't kill abusively.
-- Start: spawns the bundled `indiana serve` sidecar. Same logic as launch-time auto-spawn (check socket first; if a launchd daemon is already alive, just connect).
+- Left: server status with dot, label, and start/stop button.
+  - Running: green dot ● + "server running" + stop button.
+  - Stopped: grey dot ○ + "server stopped" + start button.
+  - Starting: spinner + "starting…" (transient while sidecar spawns).
+- Right: app version (e.g. `v0.1.0`), sourced from Tauri app metadata (`getVersion()`).
+- Stop: sends shutdown command over the socket. Graceful — finishes in-flight compile, doesn't kill abusively.
+- Start: spawns the bundled `indiana serve` sidecar. Checks socket first; if a launchd daemon is already alive, just connects.
 
 The server status reflects the socket connection — not a separate health check. If the socket is alive and responding, it's running.
-
 ---
 
 ## Persistence
@@ -84,16 +79,19 @@ Focus is a separate file to keep the config clean — it's user scratch, not Ind
 
 | State | What the panel shows |
 |-------|---------------------|
-| Server running, 1+ folders | Full layout: focus, folder list with counts, green dot |
-| Server running, no folders | Focus field + empty state ("Monitor a folder →") + green dot |
-| Server stopped | Focus field, folder list greyed out (counts hidden), grey dot + start button |
-| Launch (first ever) | Everything empty. Focus blank, no folders, server stopped. |
+| Server running, 1+ folders | Full layout: toolbar, folder list with counts, footer with green dot + version |
+| Server running, no folders | Toolbar + empty state ("monitor a folder…") + footer with green dot + version |
+| Server stopped | Toolbar, folder list hidden, footer with grey dot + start button |
+| Launch (first ever) | Toolbar, no folders, server stopped. |
 
 ---
 
-## What changed from v1 PRD
+## What changed from v2
 
-- Added: FOCUS ON text field with persistence.
-- Added: explicit start/stop server control (was implicit launch-time auto-spawn only).
-- Tightened: folder list spec — basename display, click-to-copy, right-click-to-remove, single-count display.
-- Decided: focus lives in its own file (`focus.txt`), not in config.
+- Moved: theme cog to top toolbar, add folder to top toolbar (was monitoring header).
+- Removed: "monitoring" header label.
+- Added: three-dot menu per folder row with `update indiana commands` and `remove folder` actions (was right-click remove).
+- Added: `refresh_templates` Tauri command that delegates to `indiana templates refresh <path>` sidecar.
+- Added: `replace_templates` Tauri command + "replace indiana commands" menu item, delegating to `indiana templates replace <path>` (destructive reset of command templates).
+- Added: app version display in footer (`v0.1.0`) sourced from Tauri metadata.
+- Moved: server status to bottom-left footer position (was top of panel).

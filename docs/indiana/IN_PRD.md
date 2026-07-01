@@ -15,6 +15,8 @@ approval: pending
 - Aggregates them, generates an agent-ready payload, and exposes it through MCP.
 - `indiana copy` renders the same payload for human clipboard fallback.
 - One static binary, multi-mode: `indiana serve` (daemon), `indiana scan`, `indiana copy`, `indiana service install`.
+- Initializes `.indiana/indianas/<command>/prompt.md` templates in each monitored root
+  so users can tune compiled-prompt wording per repo ([IN_FOLDER.md](IN_FOLDER.md)).
 - Faces: MCP, CLI, [Menulet](../MENULET_PRD.md) UI. All are clients; one core daemon serves all.
 - Clients talk to the daemon over a Unix domain socket at `~/.indiana/indiana.sock`. Protocol: minimal JSON or bincode. No HTTP, local-only.
 

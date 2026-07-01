@@ -47,6 +47,8 @@ pub struct Counts {
     pub note: usize,
     pub action: usize,
     pub todo: usize,
+    pub delete: usize,
+    pub prompt: usize,
 }
 
 impl Counts {
@@ -60,6 +62,8 @@ impl Counts {
             + self.note
             + self.action
             + self.todo
+            + self.delete
+            + self.prompt
     }
 }
 
@@ -155,6 +159,8 @@ impl Index {
                 Kind::Note => c.note += 1,
                 Kind::Action => c.action += 1,
                 Kind::Todo => c.todo += 1,
+                Kind::Delete => c.delete += 1,
+                Kind::Prompt => c.prompt += 1,
             }
         }
         c

@@ -1,9 +1,9 @@
 //! IN_TEST.md E8 — daemon lifecycle. Black-box: drives the built binary with
 //! INDIANA_HOME set to a temp dir, so tests never touch the real daemon.
 
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 const BIN: &str = env!("CARGO_BIN_EXE_indiana");
@@ -18,11 +18,15 @@ impl Drop for Daemon {
 }
 
 fn unique(tag: &str) -> PathBuf {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let d = std::env::temp_dir().join(format!("indiana-{tag}-{n}"));
+    let d = std::env::temp_dir().join(format!(
+        "indiana-{tag}-{n}-{}",
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
     std::fs::create_dir_all(&d).unwrap();
     d
 }
@@ -43,11 +47,22 @@ fn spawn_serve(home: &Path, root: Option<&Path>) -> Daemon {
     Daemon(c.spawn().unwrap())
 }
 
-fn wait_socket(home: &Path) -> bool {
-    let sock = home.join("indiana.sock");
-    let deadline = Instant::now() + Duration::from_secs(5);
+/// Block until the daemon answers a real request — not merely until the socket
+/// file is connectable. `indiana status` talks only to the daemon (it has no
+/// cwd-scan fallback, unlike `scan`), so a success exit proves the daemon is
+/// accepting and responding. Bare socket-connectivity is insufficient under
+/// parallel load: the listener backlog accepts a connection before the daemon
+/// can serve it, which let `scan` race into its cwd fallback (flaky tests).
+fn wait_ready(home: &Path) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(10);
     while Instant::now() < deadline {
-        if UnixStream::connect(&sock).is_ok() {
+        let ok = Command::new(BIN)
+            .env("INDIANA_HOME", home)
+            .arg("status")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if ok {
             return true;
         }
         std::thread::sleep(Duration::from_millis(50));
@@ -58,6 +73,10 @@ fn wait_socket(home: &Path) -> bool {
 fn scan_json(home: &Path) -> String {
     let out = Command::new(BIN)
         .env("INDIANA_HOME", home)
+        // Run from `home` (no `.md` files) so that if `scan` ever falls back to a
+        // standalone cwd scan, it yields an empty index instead of silently
+        // scanning the test runner's working dir and contaminating assertions.
+        .current_dir(home)
         .arg("scan")
         .arg("--json")
         .output()
@@ -81,7 +100,7 @@ fn test_socket_single_bind() {
     let home = unique("home");
     let repo = repo_with("::h\n");
     let _a = spawn_serve(&home, Some(&repo));
-    assert!(wait_socket(&home), "daemon A never bound the socket");
+    assert!(wait_ready(&home), "daemon A never bound the socket");
 
     let b = Command::new(BIN)
         .env("INDIANA_HOME", &home)
@@ -102,10 +121,13 @@ fn test_stale_socket() {
     let repo = repo_with("::l\n");
     let _a = spawn_serve(&home, Some(&repo));
     assert!(
-        wait_socket(&home),
+        wait_ready(&home),
         "daemon did not recover the stale socket"
     );
-    assert!(scan_json(&home).contains("\"love\""));
+    assert!(
+        wait_until(&home, |j| j.contains("\"love\"")),
+        "recovered daemon never served the repo"
+    );
 }
 
 // E8: config persists across daemon restarts (add via CLI, serve picks it up).
@@ -127,8 +149,11 @@ fn test_config_persists() {
 
     // Fresh daemon with no root arg → must read folders from config.
     let _a = spawn_serve(&home, None);
-    assert!(wait_socket(&home));
-    assert!(scan_json(&home).contains("\"keep\""));
+    assert!(wait_ready(&home));
+    assert!(
+        wait_until(&home, |j| j.contains("\"keep\"")),
+        "restarted daemon did not load folders from config"
+    );
 }
 
 fn wait_until<F: Fn(&str) -> bool>(home: &Path, pred: F) -> bool {
@@ -152,7 +177,7 @@ fn test_watch_new_file() {
     let home = unique("home");
     let repo = repo_with(""); // doc.md with no markers
     let _a = spawn_serve(&home, Some(&repo));
-    assert!(wait_socket(&home));
+    assert!(wait_ready(&home));
     std::fs::write(repo.join("new.md"), "::h\n").unwrap();
     assert!(
         wait_until(&home, |j| j.contains("\"hate\"")),
@@ -166,7 +191,7 @@ fn test_watch_modify() {
     let home = unique("home");
     let repo = repo_with("::h\n");
     let _a = spawn_serve(&home, Some(&repo));
-    assert!(wait_socket(&home));
+    assert!(wait_ready(&home));
     assert!(wait_until(&home, |j| j.contains("\"hate\"")));
     std::fs::write(repo.join("doc.md"), "::h\n::l\n").unwrap();
     assert!(
@@ -181,7 +206,7 @@ fn test_watch_delete() {
     let home = unique("home");
     let repo = repo_with("::h\n");
     let _a = spawn_serve(&home, Some(&repo));
-    assert!(wait_socket(&home));
+    assert!(wait_ready(&home));
     assert!(wait_until(&home, |j| j.contains("\"hate\"")));
     std::fs::remove_file(repo.join("doc.md")).unwrap();
     assert!(
@@ -196,7 +221,7 @@ fn test_watch_debounce() {
     let home = unique("home");
     let repo = repo_with("");
     let _a = spawn_serve(&home, Some(&repo));
-    assert!(wait_socket(&home));
+    assert!(wait_ready(&home));
     for i in 0..10 {
         std::fs::write(repo.join(format!("f{i}.md")), "::h\n").unwrap();
     }
@@ -211,7 +236,7 @@ fn test_watch_debounce() {
 fn test_serve_empty_no_folders() {
     let home = unique("home");
     let _a = spawn_serve(&home, None);
-    assert!(wait_socket(&home), "daemon never bound the socket");
+    assert!(wait_ready(&home), "daemon never bound the socket");
     assert_eq!(
         count_markers(&scan_json(&home)),
         0,
@@ -224,11 +249,15 @@ fn test_serve_empty_no_folders() {
 fn test_live_add_autoscan() {
     let home = unique("home");
     let _a = spawn_serve(&home, None);
-    assert!(wait_socket(&home));
+    assert!(wait_ready(&home));
     assert_eq!(count_markers(&scan_json(&home)), 0);
 
     let repo = repo_with("::h\n::fix yo\n");
     assert!(add_folder(&home, &repo).status.success());
+    assert!(
+        repo.join(".indiana/indianas/fix/prompt.md").exists(),
+        "live add should scaffold folder-local templates"
+    );
     assert!(
         wait_until(&home, |j| j.contains("\"hate\"") && j.contains("\"fix\"")),
         "live add did not auto-scan the folder"
@@ -240,7 +269,7 @@ fn test_live_add_autoscan() {
 fn test_live_add_idempotent() {
     let home = unique("home");
     let _a = spawn_serve(&home, None);
-    assert!(wait_socket(&home));
+    assert!(wait_ready(&home));
 
     let repo = repo_with("::l\n");
     assert!(add_folder(&home, &repo).status.success());
@@ -259,7 +288,13 @@ fn test_client_reconnect() {
     let home = unique("home");
     let repo = repo_with("::h\n::fix yo\n");
     let _a = spawn_serve(&home, Some(&repo));
-    assert!(wait_socket(&home));
+    assert!(wait_ready(&home));
+    // Confirm the daemon is serving the repo before comparing reconnects, so a
+    // slow initial scan under load can't make the two reads disagree.
+    assert!(
+        wait_until(&home, |j| j.contains("\"hate\"") && j.contains("\"fix\"")),
+        "daemon never served the repo"
+    );
 
     let one = scan_json(&home);
     let two = scan_json(&home);

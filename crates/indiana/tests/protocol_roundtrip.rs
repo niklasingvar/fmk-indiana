@@ -47,23 +47,26 @@ fn protocol_roundtrip() {
         .spawn()
         .expect("spawn daemon");
 
-    assert!(
-        wait_for_socket(&home_path),
-        "daemon socket never appeared"
-    );
+    assert!(wait_for_socket(&home_path), "daemon socket never appeared");
 
     // Point the client functions at the same INDIANA_HOME.
     std::env::set_var("INDIANA_HOME", &home_path);
 
     // ----- add folder -----
-    let add_resp =
-        indiana::daemon::client_add(&repo_path).expect("client_add should succeed");
+    let add_resp = indiana::daemon::client_add(&repo_path).expect("client_add should succeed");
     assert!(add_resp.added, "folder should be newly added");
-    assert!(!add_resp.index.markers.is_empty(), "index should have markers");
+    assert!(
+        !add_resp.index.markers.is_empty(),
+        "index should have markers"
+    );
 
     // ----- status -----
     let status_resp = indiana::daemon::client_status().expect("client_status should succeed");
-    assert_eq!(status_resp.folders.len(), 1, "should have 1 monitored folder");
+    assert_eq!(
+        status_resp.folders.len(),
+        1,
+        "should have 1 monitored folder"
+    );
     assert_eq!(
         status_resp.folders[0].path,
         repo_path.to_string_lossy(),
@@ -72,8 +75,7 @@ fn protocol_roundtrip() {
     assert!(status_resp.folders[0].count > 0, "should have markers");
 
     // ----- copy -----
-    let copy_resp = indiana::daemon::client_copy(&repo_path)
-        .expect("client_copy should succeed");
+    let copy_resp = indiana::daemon::client_copy(&repo_path).expect("client_copy should succeed");
     assert!(!copy_resp.text.is_empty(), "copy text should not be empty");
     assert!(
         copy_resp.text.contains("fix the thing"),
