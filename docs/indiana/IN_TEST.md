@@ -70,9 +70,9 @@ approval: pending
 | [IN_SCAN.md](IN_SCAN.md) | Atomic write: temp → fsync → rename | `test_write_atomic` — verify temp file exists briefly, then renamed; original never corrupted |
 | [IN_SCAN.md](IN_SCAN.md) | mtime guard: file changed under us → abort | `test_mtime_guard` — modify file between scan and injection → injection aborted, file re-queued |
 | [IN_SCAN.md](IN_SCAN.md) | Own-write suppressed for ~500ms | `test_suppress_own_write` — after injection, the FSEvent on that path does not trigger a rescan within 500ms |
-| [plan-to-plan-i-cozy-lecun.md](../plan-to-plan-i-cozy-lecun.md) | Malformed id repaired with fresh one | `test_bracket_repair_bad_id` — `::action[not-valid] do it` → written with valid id |
-| [plan-to-plan-i-cozy-lecun.md](../plan-to-plan-i-cozy-lecun.md) | Unknown status dropped to open | `test_bracket_repair_bad_status` — `::action[valid-id:unknown] do it` → written as `::action[valid-id] do it` |
-| [plan-to-plan-i-cozy-lecun.md](../plan-to-plan-i-cozy-lecun.md) | --read-only suppresses writes | `test_scan_read_only_no_write` — `::action do thing` with --read-only → no file modified |
+| [IN_IDENTITY.md](IN_IDENTITY.md) | Malformed id repaired with fresh one | `test_bracket_repair_bad_id` — `::action[not-valid] do it` → written with valid id |
+| [IN_IDENTITY.md](IN_IDENTITY.md) | Unknown status dropped to open | `test_bracket_repair_bad_status` — `::action[valid-id:unknown] do it` → written as `::action[valid-id] do it` |
+| [IN_IDENTITY.md](IN_IDENTITY.md) | --read-only suppresses writes | `test_scan_read_only_no_write` — `::action do thing` with --read-only → no file modified |
 
 ## E7 — Compiler: copy bundle
 | Ref | Requirement | Test |

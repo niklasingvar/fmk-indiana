@@ -1,3 +1,9 @@
+---
+status: draft
+purpose: Casablanca task list — feature tracks feeding ACTION_PLAN Phase 1.
+approval: pending
+---
+
 # Casablanca — Task List
 
 Three feature tracks, each grounded in the domain model. The guiding principle:
@@ -92,9 +98,30 @@ presentation components.**
 - [ ] Drag-and-drop move between folders (drop-target highlight; vault domain exposes a
       `move(fromRel, toRel)` operation that validates paths stay inside the root)
 
+## 4. Indiana integration — the Copy all loop (ACTION_PLAN Phase 1)
+
+### Marker safety (prerequisite — the editor must not eat markers)
+- [ ] Fixture round-trip tests: a doc containing every marker kind (`::fix msg`, `::q`,
+      `::hate`, `::note msg`, …) survives markdown → Lexical → markdown byte-stable,
+      including markers mid-paragraph, at line end, and inside list items
+- [ ] If any transformer mangles `::` tokens, add a dedicated text-match transformer that
+      treats them as plain text (never a node type — Indiana owns marker semantics)
+- [ ] Same suite proves frontmatter opacity once Track 0 lands (shared fixtures)
+
+### Copy all button
+- [ ] `indiana.copyAll` IPC handler in main: spawn `indiana copy` with cwd = vault root;
+      resolve the binary via standard locations (`~/.local/bin`, `/usr/local/bin`,
+      Homebrew prefix) — GUI PATH is launchd's, not the shell's (same lesson as the
+      menulet, docs/DISTRO.md)
+- [ ] Button in the shell header; success/failure toast surfacing stdout/stderr
+- [ ] Missing-binary state: friendly hint with the brew install command
+- [ ] Later: pending-marker count badge (via `indiana` CLI `--json` or the daemon socket);
+      not MVP
+
 ## Suggested order
 
 1. Track 0 (domain foundation) — small, unblocks frontmatter and keeps the editor honest
-2. Track 1 (frontmatter panel) — quick win once the domain split exists
-3. Track 2 (tables + links) — self-contained in the editor context
-4. Track 3 (file tree) — largest track; visual polish first, then operations
+2. Track 4 (Indiana integration) — marker safety + Copy all is the product's reason to exist
+3. Track 1 (frontmatter panel) — quick win once the domain split exists
+4. Track 2 (tables + links) — self-contained in the editor context
+5. Track 3 (file tree) — largest track; visual polish first, then operations

@@ -15,7 +15,7 @@ approved_file_length: 50 rows
 ## Core idea
 - The review loop:
   1. Agent emits code, markdown, slides etc.
-  2. Human tags lines with `::` markers ([COMMANDS.md](INDIANA/IN_COMMANDS.md)) — fast reactions, no essays.
+  2. Human tags lines with `::` markers ([COMMANDS.md](indiana/IN_COMMANDS.md)) — fast reactions, no essays.
   3. Indiana monitors the repo, compiles every marker
   4. Agent reads the compiled payload through Indiana's MCP surface, or user copies it as fallback.
 
@@ -29,10 +29,11 @@ approved_file_length: 50 rows
 
 
 ## The products
-- [Indiana](INDIANA/IN_PRD.md) — the server. Monitors repos, compiles `::` markers, exposes the payload through MCP, copies the bundle as fallback. Owns the markers end to end. CLI + menulet.
-- [Menulet](MENULET/MENULET_PRD.md) — a UI view onto Indiana: monitored folders, one-click copy. Shows, never computes.
-- [Casablanca](CASABLANCA/CASABLANCA_PRD.md) — a separate sub-product: visualizes what the coding agent outputs. Nothing to do with the markers.
+- [Indiana](indiana/IN_PRD.md) — the server. Monitors repos, compiles `::` markers, exposes the payload through MCP, copies the bundle as fallback. Owns the markers end to end. CLI + menulet.
+- [Menulet](menulet/MENULET_PRD.md) — a UI view onto Indiana: monitored folders, one-click copy. Shows, never computes.
+- [Casablanca](casablanca/CASABLANCA_PRD.md) — the editor: rich inline markdown editing, visual/presentation support as features. Emits `::` markers from rendered views; Indiana still owns them.
 
 ## Direction
-- Built in steps — see [PHASES.md](PHASES.md). Rome isn't built in a day.
+- This file is the wedge; the destination is [VISION.md](../VISION.md). Concern map: [MENTAL_MODEL.md](../MENTAL_MODEL.md).
+- Built in steps — see [ACTION_PLAN.md](../ACTION_PLAN.md). Rome isn't built in a day.
 - See [GOAL.md](GOAL.md) for what success looks like.

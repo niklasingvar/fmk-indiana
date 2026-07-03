@@ -10,9 +10,9 @@ approval: pending
 
 
 For a user; check target audinece
-- [Indiana](INDIANA/IN_PRD.md) scans the folder and exposes an agent-readable payload: generated prompts + tagged context.
-- Human tags lines with `::` markers ([COMMANDS.md](INDIANA/IN_COMMANDS.md)) while reviewing.
-- Agent reads the payload through [Indiana MCP](INDIANA/IN_MCP.md); human copy remains fallback.
+- [Indiana](indiana/IN_PRD.md) scans the folder and exposes an agent-readable payload: generated prompts + tagged context.
+- Human tags lines with `::` markers ([COMMANDS.md](indiana/IN_COMMANDS.md)) while reviewing.
+- Agent reads the payload through [Indiana MCP](indiana/IN_MCP.md); human copy remains fallback.
 - The folder tree alone explains the system (folder as architecture).
 
 ## Measured by

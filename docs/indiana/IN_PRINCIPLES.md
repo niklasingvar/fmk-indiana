@@ -43,10 +43,10 @@ approval: pending
 - Changing how `::hate` reads must not mean recompiling the scanner.
 - Marker grammar is global; folder-local templates tune prompt wording per monitored root.
 
-## This repo authors the defaults
-- In the Indiana repository itself, `.indiana/indianas/<command>/prompt.md` is the authoring source for default command templates; `crates/core/prompts.toml` and scaffold generation mirror it.
-- A unit test (`test_repo_indianas_match_embedded_defaults`) fails if a repo template drifts from the embedded default or marker metadata. Edit the repo template first, then sync `prompts.toml` and the marker row.
-- In every other monitored repo, `.indiana/` stays user input that tunes wording for existing kinds ([IN_FOLDER.md](IN_FOLDER.md)).
+## Templates have one home
+- `crates/core/templates/` is the single authoring source for everything a monitored root starts with: full `indianas/<command>/prompt.md` files and meta folder seeds. Embedded at compile time, written verbatim.
+- A unit test (`test_embedded_templates_match_marker_table`) fails if a template's frontmatter drifts from its marker TABLE row. Edit the template and the marker row together.
+- This repository's own `.indiana/` is a dogfood instance, not a source. It may diverge from the templates freely — like every other monitored repo, it is user input that tunes wording for existing kinds ([IN_FOLDER.md](IN_FOLDER.md)). To change what users receive, edit `crates/core/templates/`.
 
 ## Love becomes direction
 - A `::love` marker means more than preserve this instance.

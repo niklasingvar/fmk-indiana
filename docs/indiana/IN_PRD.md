@@ -17,11 +17,11 @@ approval: pending
 - One static binary, multi-mode: `indiana serve` (daemon), `indiana scan`, `indiana copy`, `indiana service install`.
 - Initializes `.indiana/indianas/<command>/prompt.md` templates in each monitored root
   so users can tune compiled-prompt wording per repo ([IN_FOLDER.md](IN_FOLDER.md)).
-- Faces: MCP, CLI, [Menulet](../MENULET_PRD.md) UI. All are clients; one core daemon serves all.
+- Faces: MCP, CLI, [Menulet](../menulet/MENULET_PRD.md) UI. All are clients; one core daemon serves all.
 - Clients talk to the daemon over a Unix domain socket at `~/.indiana/indiana.sock`. Protocol: minimal JSON or bincode. No HTTP, local-only.
 
 ## The loop
-1. Coding agent writes terse markdown ([Casablanca](../CASABLANCA_PRD.md)).
+1. Coding agent writes terse markdown ([Casablanca](../casablanca/CASABLANCA_PRD.md)).
 2. User reviews and tags lines: `::h ::l ::k ::f ::e ::q ::n ::a ::td`.
 3. Indiana scans the repo, collects every marker + its context.
 4. Indiana exposes the compiled payload through [IN_MCP.md](IN_MCP.md).
@@ -45,7 +45,7 @@ approval: pending
 - Resolved scope ([IN_SCOPE.md](IN_SCOPE.md)) travels into the payload so the agent sees exactly what was tagged.
 
 ## Out of scope
-- Producing markers — humans tag; agents emit [Casablanca](../CASABLANCA_PRD.md) output.
+- Producing markers — humans tag; agents emit [Casablanca](../casablanca/CASABLANCA_PRD.md) output.
 
 ## Decided
 - Each indiana in the payload carries file path, line number, and ID so the agent can locate the target.

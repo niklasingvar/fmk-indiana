@@ -6,7 +6,7 @@ approval: pending
 
 # Menulet — UI Plan (v2)
 
-> Iteration on [MENULET_PRD.md](MENULET/MENULET_PRD.md). Same constraints: NSPanel, hide-on-blur, Tauri 2, never computes.
+> Iteration on [MENULET_PRD.md](MENULET_PRD.md). Same constraints: NSPanel, hide-on-blur, Tauri 2, never computes.
 
 ---
 

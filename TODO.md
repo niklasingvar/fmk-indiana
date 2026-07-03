@@ -30,7 +30,7 @@ A new contributor locates any feature from the `crates/` tree and `core/src/` li
 ## MCP server and instructions
 A coding agent configured per setup doc calls `read_payload` and gets a valid JSON payload of all markers in a fixture repo.
 1. [ ] Verify `indiana mcp` stdio JSON-RPC server works end to end.
-2. [ ] Write `INDIANA/IN_MCP_SETUP.md` — configure Claude Desktop, Cody, Continue to connect to `indiana mcp`.
+2. [ ] Write `docs/indiana/IN_MCP_SETUP.md` — configure Claude Desktop, Cody, Continue to connect to `indiana mcp`.
 3. [ ] Document tools exposed: `list_pending_indianas`, `read_indiana { id }`, `read_payload`, `marker_grammar`.
 4. [ ] Document daemon-backed fallback: `mcp` does a local scan when no daemon is running.
 

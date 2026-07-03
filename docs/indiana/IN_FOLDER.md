@@ -84,19 +84,18 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
 
 `init_folder_indiana` scaffolds every monitored root from embedded defaults so
 the on-disk `.indiana/` is real, editable content — not derived cache:
-- Command prompt bodies: `crates/core/prompts.toml`. Edit a word there to change
-  what a fresh `prompt.md` starts with. A root's existing `prompt.md` wins over
-  this; delete the file and `indiana templates refresh` to re-seed.
-- Meta folder seeds (`context-model/`, `montmartre/`): `crates/core/scaffold/`.
-  Edit those files to change what new monitored roots start with. Existing files
-  on disk are left byte-identical; delete one and re-`add`/`refresh` to re-seed.
+- Everything comes from `crates/core/templates/`, the single authoring source:
+  command templates (`indianas/<command>/prompt.md`, full files written
+  verbatim) and meta folder seeds (`context-model/`, `montmartre/`). Edit a
+  file there to change what new monitored roots start with.
+- A root's existing file always wins; delete it and `indiana templates refresh`
+  to re-seed. Existing files on disk are left byte-identical.
+- The `test_embedded_templates_match_marker_table` test fails if a template's
+  frontmatter drifts from its marker row.
 
-In the Indiana repository itself, `.indiana/indianas/<command>/prompt.md` is the
-authoring source for the embedded defaults: edit the repo template first, then
-mirror the wording into `crates/core/prompts.toml` and the marker row. The
-`test_repo_indianas_match_embedded_defaults` test fails if they drift. In every
-other monitored repo, `.indiana/` remains user input that tunes wording for
-existing marker kinds.
+In the Indiana repository itself, `.indiana/` is a dogfood instance like any
+other monitored repo — user input that tunes wording for existing marker
+kinds, free to diverge from the embedded defaults.
 
 ## Frontmatter contract
 - Each `prompt.md` starts with YAML frontmatter:
@@ -125,7 +124,7 @@ message: optional
 
 ## Precedence
 - Folder template wins for markers under that monitored root.
-- Embedded `crates/core/prompts.toml` wins when no valid folder template exists.
+- Embedded `crates/core/templates/` wins when no valid folder template exists.
 - Multiple monitored roots use longest path ownership.
 
 ## Scan exclusion
@@ -142,7 +141,7 @@ message: optional
   `node_modules/`, and `skills/` (third-party skill content keeps its own
   frontmatter convention). Files that already open with a `---` fence are left
   alone; the linter never rewrites existing frontmatter.
-- In the Indiana repository, `.indiana/FRONTMATTER.md` is the authoring source
-  for the embedded default; edit the block there and mirror it into
-  `DEFAULT_FRONTMATTER`. It is not scaffolded into other monitored roots —
-  those use the embedded default unless a user adds the file.
+- The embedded default is authored in `crates/core/src/frontmatter.rs`
+  (`DEFAULT_FRONTMATTER`). This repo's `.indiana/FRONTMATTER.md` is dogfood
+  instance config like any other root's. The file is not scaffolded into
+  monitored roots — those use the embedded default unless a user adds it.

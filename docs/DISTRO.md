@@ -6,7 +6,7 @@ approval: pending
 
 # DISTRO — distribution
 
-> How [Indiana](INDIANA/IN_PRD.md) (CLI + server) and the [Menulet](MENULET_PRD.md) reach users. Steps mirror [PHASES.md](PHASES.md).
+> How [Indiana](indiana/IN_PRD.md) (CLI + server) and the [Menulet](menulet/MENULET_PRD.md) reach users. Steps mirror [PHASES.md](PHASES.md).
 
 ## Now (dogfood)
 - One binary, multi-mode: `indiana serve` (daemon), `indiana scan`, `indiana copy`, `indiana service install`, `indiana todo`.
@@ -49,7 +49,7 @@ brew install niklasingvar/fmk-indiana/indiana          # optional standalone CLI
 - Signing: the sidecar is signed as part of the app bundle with hardened runtime. Unsigned sidecar → notarization fails, so the `indiana` build must be hardened-runtime compatible.
 - Process management: the menulet kills only the child it spawned. If a launchd-installed daemon is already running, the menulet connects to it and never kills it.
 - PATH detection: a GUI app's PATH is the launchd default (`/usr/bin:/bin:/usr/sbin:/sbin`), not the user's shell PATH. Resolve by checking standard locations — `~/.local/bin`, `/usr/local/bin`, the Homebrew prefix — rather than parsing `.zshrc` / `.zprofile`.
-- Lifecycle and socket details: [INDIANA/IN_DAEMON.md](INDIANA/IN_DAEMON.md).
+- Lifecycle and socket details: [indiana/IN_DAEMON.md](indiana/IN_DAEMON.md).
 
 ## IPC
 - Server binds a Unix domain socket at `~/.indiana/indiana.sock`.

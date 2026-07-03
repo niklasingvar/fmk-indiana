@@ -7,7 +7,7 @@ approval: pending
 
 # COMMANDS — marker grammar
 
-> Single source of truth for the `::` markers. One indiana is one `::` command in the source. They belong to [Indiana](IN_PRD.md): it monitors repos, parses these markers, and compiles them on `indiana copy`. Agents read them over [IN_MCP.md](IN_MCP.md); the [Menulet](../MENULET_PRD.md) only displays Indiana's output; [Casablanca](../CASABLANCA_PRD.md) is unrelated to markers.
+> Single source of truth for the `::` markers. One indiana is one `::` command in the source. They belong to [Indiana](IN_PRD.md): it monitors repos, parses these markers, and compiles them on `indiana copy`. Agents read them over [IN_MCP.md](IN_MCP.md); the [Menulet](../menulet/MENULET_PRD.md) only displays Indiana's output; [Casablanca](../casablanca/CASABLANCA_PRD.md) is unrelated to markers.
 
 ## Syntax
 - `::<cmd>` at column 0, or inline at end of a content line.

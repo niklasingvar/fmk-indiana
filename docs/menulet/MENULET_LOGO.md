@@ -8,7 +8,7 @@ approval: pending
 
 > The tray icon loaded from `menulet/src-tauri/icons/tray.png` (line 42 of
 > `main.rs`) is a placeholder per M12.1.1. Replace with `::` — the project's
-> core symbol (see [COMMANDS.md](../INDIANA/IN_COMMANDS.md)).
+> core symbol (see [COMMANDS.md](../indiana/IN_COMMANDS.md)).
 
 ## Current state
 

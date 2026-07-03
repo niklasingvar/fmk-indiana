@@ -7,12 +7,14 @@ approval: approved
 # CLAUDE.md - floor plan
 
 ## Start here
+- [MENTAL_MODEL.md](MENTAL_MODEL.md) - the four concerns and naming convention
 - [docs/PURPOSE.md](docs/PURPOSE.md) - why this exists
 - [docs/GOAL.md](docs/GOAL.md) - what success looks like
-- [docs/PHASES.md](docs/PHASES.md) - sequencing and roadmap
+- [ACTION_PLAN.md](ACTION_PLAN.md) - sequencing and roadmap (supersedes docs/PHASES.md)
 
 ## Product maps
-- [docs/indiana/IN_ARCHITECTURE.md](docs/indiana/IN_ARCHITECTURE.md) - system shape and ownership boundaries
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - system-level components, loops, state stores
+- [docs/indiana/IN_ARCHITECTURE.md](docs/indiana/IN_ARCHITECTURE.md) - engine shape and ownership boundaries
 - [docs/indiana/IN_PRINCIPLES.md](docs/indiana/IN_PRINCIPLES.md) - Indiana invariants
 - [docs/indiana/IN_TEST.md](docs/indiana/IN_TEST.md) - requirement-to-test map
 - [docs/menulet/MENULET_PRD.md](docs/menulet/MENULET_PRD.md) - menulet product contract

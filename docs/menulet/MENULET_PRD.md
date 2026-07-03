@@ -6,7 +6,7 @@ approval: pending
 
 # MENULET — PRD
 
-> A UI representation of [Indiana](../INDIANA/IN_PRD.md). It shows; it does not compute. Markers: [COMMANDS.md](../INDIANA/IN_COMMANDS.md).
+> A UI representation of [Indiana](../indiana/IN_PRD.md). It shows; it does not compute. Markers: [COMMANDS.md](../indiana/IN_COMMANDS.md).
 
 ## What it is
 - A macOS menulet (menu-bar item, no Dock icon).
