@@ -1700,19 +1700,18 @@ dependencies = [
 
 [[package]]
 name = "indiana-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fastrand",
  "ignore",
  "serde",
  "serde_yml",
  "tempfile",
- "toml 1.1.2+spec-1.1.0",
 ]
 
 [[package]]
 name = "indiana-menulet"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "indiana-protocol",
  "serde",
@@ -1727,7 +1726,7 @@ dependencies = [
 
 [[package]]
 name = "indiana-protocol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "indiana-core",
  "serde",
