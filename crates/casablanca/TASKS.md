@@ -13,16 +13,16 @@ presentation components.**
 
 ## 0. Domain foundation (do first — the other tracks depend on it)
 
-- [ ] Introduce a `NoteDocument` value object in `src/shared/domain.ts` that splits a raw
+- [x] Introduce a `NoteDocument` value object in `src/shared/domain.ts` that splits a raw
       markdown file into `{ frontmatter: string | null, body: string }`
-  - [ ] Add a pure `note-serialization` module in `src/shared/` with `parseNoteDocument(raw)`
+  - [x] Add a pure `note-serialization` module in `src/shared/` with `parseNoteDocument(raw)`
         and `serializeNoteDocument(doc)` — frontmatter is treated as an opaque YAML text block
         (delimited by `---` fences at the top of the file); round-trip must be byte-stable
-  - [ ] Unit-test the round-trip: no frontmatter, empty frontmatter, frontmatter with `---`
+  - [x] Unit-test the round-trip: no frontmatter, empty frontmatter, frontmatter with `---`
         inside strings, body starting with a thematic break
-- [ ] Refactor `useVault` so the draft state is a `NoteDocument`, not a raw string
-  - [ ] Parse once when a note is opened; serialize once on autosave — the Lexical editor
-        only ever sees the `body`
+- [x] Refactor `useVault` so the draft state is a `NoteDocument`, not a raw string
+  - [x] Parse once when a note is opened; serialize once on autosave — the Lexical editor
+        only ever sees the `body` (write path is `setDraftBody`; frontmatter rides verbatim)
 - [ ] Decide and document the module layout in `app/README.md` (bounded contexts:
       **vault** = filesystem projection in main, **note authoring** = editor in renderer,
       **shell** = layout/orchestration)
@@ -101,20 +101,24 @@ presentation components.**
 ## 4. Indiana integration — the Copy all loop (ACTION_PLAN Phase 1)
 
 ### Marker safety (prerequisite — the editor must not eat markers)
-- [ ] Fixture round-trip tests: a doc containing every marker kind (`::fix msg`, `::q`,
+- [x] Fixture round-trip tests: a doc containing every marker kind (`::fix msg`, `::q`,
       `::hate`, `::note msg`, …) survives markdown → Lexical → markdown byte-stable,
-      including markers mid-paragraph, at line end, and inside list items
-- [ ] If any transformer mangles `::` tokens, add a dedicated text-match transformer that
-      treats them as plain text (never a node type — Indiana owns marker semantics)
-- [ ] Same suite proves frontmatter opacity once Track 0 lands (shared fixtures)
+      including markers in headings, list items, quotes, and code fences
+      (`src/renderer/src/editor/markdown-roundtrip.test.ts`, headless Lexical; `npm test`)
+- [x] No transformer fix needed: stock `TRANSFORMERS` pass `::` tokens through as plain
+      text — verified, not assumed. Revisit if the transformer set grows
+- [x] Same suite proves frontmatter opacity (note-serialization tests share the concern)
+- Known accepted normalizations: no trailing newline, blank-line runs collapse; markers
+  and content survive. Byte-exactness holds for canonical-form documents
 
 ### Copy all button
-- [ ] `indiana.copyAll` IPC handler in main: spawn `indiana copy` with cwd = vault root;
-      resolve the binary via standard locations (`~/.local/bin`, `/usr/local/bin`,
-      Homebrew prefix) — GUI PATH is launchd's, not the shell's (same lesson as the
-      menulet, docs/DISTRO.md)
-- [ ] Button in the shell header; success/failure toast surfacing stdout/stderr
-- [ ] Missing-binary state: friendly hint with the brew install command
+- [x] `indiana.copyAll` IPC handler in main: `execFile` of `indiana copy <vault root>`;
+      binary resolved via standard locations (`~/.local/bin`, `/opt/homebrew/bin`,
+      `/usr/local/bin`) — GUI PATH is launchd's, not the shell's (same lesson as the
+      menulet, docs/DISTRO.md). Lives in `src/main/lib/indiana.ts`
+- [x] Button in the editor-pane header (always visible, note open or not); inline
+      success/failure status surfacing stdout/stderr
+- [x] Missing-binary state: friendly hint with the brew install command
 - [ ] Later: pending-marker count badge (via `indiana` CLI `--json` or the daemon socket);
       not MVP
 
