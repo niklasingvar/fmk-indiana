@@ -1,11 +1,11 @@
 TEST_DIR ?= tmp/indiana-test
 HOST := $(shell rustc -vV | sed -n 's/^host: //p')
-SIDECAR := MENULET/src-tauri/binaries/indiana-$(HOST)
+SIDECAR := crates/menulet/src-tauri/binaries/indiana-$(HOST)
 BIN := target/release/indiana
 
 .PHONY: build scratch serve add scan copy install help menulet sidecar-copy release dist
-VERSION := $(shell sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' MENULET/src-tauri/tauri.conf.json | head -1)
-DMG := MENULET/src-tauri/target/release/bundle/dmg/Indiana_$(VERSION)_aarch64.dmg
+VERSION := $(shell sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' crates/menulet/src-tauri/tauri.conf.json | head -1)
+DMG := crates/menulet/src-tauri/target/release/bundle/dmg/Indiana_$(VERSION)_aarch64.dmg
 
 help:
 	@echo "make scratch  Create a test markdown folder"
@@ -50,7 +50,7 @@ sidecar-copy: build
 
 # Build the daemon, refresh the bundled sidecar, launch the menulet (foreground).
 menulet: sidecar-copy
-	cd MENULET && npm install && npm run dev
+	cd crates/menulet && npm install && npm run dev
 .PHONY: release
 release: build
 	tar -czf indiana-aarch64-apple-darwin.tar.gz -C target/release indiana
@@ -61,7 +61,7 @@ release: build
 # SHA256s the Homebrew tap needs. Mirrors .github/workflows/release.yml so you can
 # validate a build before pushing a tag.
 dist: sidecar-copy
-	cd MENULET && npm ci && npm run build
+	cd crates/menulet && npm ci && npm run build
 	tar -czf indiana-aarch64-apple-darwin.tar.gz -C target/release indiana
 	@echo ""
 	@echo "== Release artifacts (v$(VERSION)) =="

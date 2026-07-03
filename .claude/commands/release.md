@@ -16,7 +16,7 @@ confirm gate in step 5.
 ## 0. Preconditions
 - Branch is `main` and the working tree is clean (`git status`). If not, stop.
 - `gh auth status` is logged in.
-- Read the current version from `MENULET/src-tauri/tauri.conf.json`. The target `$1` must
+- Read the current version from `crates/menulet/src-tauri/tauri.conf.json`. The target `$1` must
   be greater (semver). If not, stop.
 - Relies on one-time setup: the tap repo `niklasingvar/homebrew-fmk-indiana`, the
   `HOMEBREW_TAP_TOKEN` secret (a PAT with **Contents: write** on the tap), and
@@ -31,13 +31,13 @@ Set the version to `$1` in all six manifests (replace the existing `version` val
 - `crates/core/Cargo.toml`
 - `crates/indiana/Cargo.toml`
 - `crates/indiana-protocol/Cargo.toml`
-- `MENULET/src-tauri/Cargo.toml`
-- `MENULET/src-tauri/tauri.conf.json`
-- `MENULET/package.json`
+- `crates/menulet/src-tauri/Cargo.toml`
+- `crates/menulet/src-tauri/tauri.conf.json`
+- `crates/menulet/package.json`
 
 Refresh the lockfiles so they match:
 - `cargo build --release` (updates `Cargo.lock`)
-- `npm install --prefix MENULET` (updates `MENULET/package-lock.json`)
+- `npm install --prefix crates/menulet` (updates `crates/menulet/package-lock.json`)
 
 ## 3. Optional pre-flight (offer to skip — it's slow)
 - `make dist` builds the full bundle (CLI tarball + menulet `.dmg`) and prints both
