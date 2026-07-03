@@ -1,14 +1,56 @@
 ---
 status: draft
-purpose: Quick local testing steps for Indiana.
+purpose: Entry point for anyone landing on the repo — what Indiana is and how to get it running.
+goal: A newcomer reads only this file to install or try Indiana, then follows links into docs/ for depth.
 approval: pending
 ---
 
 # Indiana
 
+> Tag lines with `::` markers while reviewing agent output; Indiana monitors the repo, compiles each marker into a prompt, and exposes the bundle to agents via MCP or to humans via copy. Why and where this goes: [docs/PURPOSE.md](docs/PURPOSE.md).
+
+## Install
+
+### Homebrew (recommended)
+
+```sh
+brew tap niklasingvar/fmk-indiana
+brew trust niklasingvar/fmk-indiana          # Homebrew 6.x: once per tap
+```
+
+Menubar app (bundles the daemon — nothing else to install):
+```sh
+brew install --cask indiana-menulet
+xattr -dr com.apple.quarantine /Applications/Indiana.app
+```
+
+Editor (depends on the `indiana` CLI for Copy-all; talks to whichever daemon is running):
+```sh
+brew install --cask indiana-casablanca
+xattr -dr com.apple.quarantine /Applications/Casablanca.app
+```
+
+CLI / daemon only, for terminal users:
+```sh
+brew install niklasingvar/fmk-indiana/indiana
+```
+
+> The apps are unsigned, so macOS quarantines them on download. Strip the quarantine
+> flag with the `xattr` line after each cask install, or right-click the `.app` → Open
+> on first launch. `brew install --cask --no-quarantine` no longer works on Homebrew
+> 6.x — see [docs/DISTRO.md](docs/DISTRO.md). Signing is the planned fix.
+
+### From source
+```sh
+cargo build --release
+mkdir -p ~/.local/bin
+cp target/release/indiana ~/.local/bin/indiana
+```
+Add `~/.local/bin` to your `PATH` if it isn't already.
+
 ## Test locally
 
-## Quick dev test
+### Quick dev test (no install)
 
 Use this when you just want to see Indiana run without installing anything.
 
@@ -32,6 +74,33 @@ Why this path:
 - Uses the release profile, so behavior is close to production.
 - Does not copy anything into `~/.local/bin`.
 - Uses ignored `tmp/indiana-test` inside this repo, so ID injection cannot touch real notes.
+
+### After install
+
+Verify:
+```sh
+indiana --version
+indiana --help
+```
+
+Terminal 1 — start the server:
+```sh
+indiana serve
+```
+
+Terminal 2:
+```sh
+mkdir -p tmp/indiana-test
+printf '%s\n\n%s\n%s\n' \
+  'This line needs work ::fix tighten wording' \
+  '::action follow up on this' \
+  'Next block of context for the action.' \
+  > tmp/indiana-test/review.md
+indiana add tmp/indiana-test
+# This creates tmp/indiana-test/.indiana/ with per-command prompt templates.
+indiana scan
+indiana copy
+```
 
 ## Run the menulet
 
@@ -57,64 +126,3 @@ The terminal stays attached — Ctrl-C quits the session.
 - Click the tray icon → panel → "Add folder" to select a directory to monitor
   (run `make scratch` first for a known `tmp/indiana-test` fixture).
 - Click a folder to copy its compiled bundle; right-click to remove it.
-
-## Install
-
-### Homebrew (recommended)
-
-```sh
-brew tap niklasingvar/fmk-indiana
-```
-
-Menubar app (bundles the daemon — nothing else to install):
-```sh
-brew install --cask --no-quarantine indiana-menulet
-```
-
-CLI / daemon only, for terminal users:
-```sh
-brew install niklasingvar/fmk-indiana/indiana
-```
-
-> The app is **unsigned**, so `--no-quarantine` is required — it tells macOS
-> Gatekeeper to trust the download. If you ever install without it and macOS
-> blocks the app, either right-click `Indiana.app` → **Open**, or run:
-> ```sh
-> xattr -dr com.apple.quarantine /Applications/Indiana.app
-> ```
-
-### From source
-```sh
-cargo build --release
-mkdir -p ~/.local/bin
-cp target/release/indiana ~/.local/bin/indiana
-```
-Add `~/.local/bin` to your `PATH` if it isn't already.
-
-## Test locally
-
-After installing, verify:
-```sh
-indiana --version
-indiana --help
-```
-
-### Scratch test
-Terminal 1 — start the server:
-```sh
-indiana serve
-```
-
-Terminal 2:
-```sh
-mkdir -p tmp/indiana-test
-printf '%s\n\n%s\n%s\n' \
-  'This line needs work ::fix tighten wording' \
-  '::action follow up on this' \
-  'Next block of context for the action.' \
-  > tmp/indiana-test/review.md
-indiana add tmp/indiana-test
-# This creates tmp/indiana-test/.indiana/ with per-command prompt templates.
-indiana scan
-indiana copy
-```

@@ -1,12 +1,12 @@
 ---
-description: Cut a new Indiana release (CLI + menulet) to the Homebrew tap
+description: Cut a new Indiana release (CLI + menulet + Casablanca) to the Homebrew tap
 argument-hint: <version, e.g. 0.1.1>
-allowed-tools: Bash(git:*), Bash(gh:*), Bash(cargo:*), Bash(make:*), Bash(npm:*), Read, Edit
+allowed-tools: Bash(git:*), Bash(gh:*), Bash(cargo:*), Bash(make:*), Bash(npm:*), Bash(sed:*), Bash(grep:*), Read, Edit
 ---
 
 # Release Indiana
 
-Cut a new release of Indiana (CLI + menulet) so testers can `brew upgrade`.
+Cut a new release of Indiana (CLI + menulet + Casablanca) so testers can `brew upgrade`.
 Target version: **$1** (e.g. `0.1.1`). If no version was given, ask for one.
 
 Drive these steps in order. **Stop and report if any step fails — never continue past a
@@ -27,21 +27,45 @@ confirm gate in step 5.
   gate. Abort on any failure.
 
 ## 2. Bump the version
-Set the version to `$1` in all six manifests (replace the existing `version` value):
-- `crates/core/Cargo.toml`
-- `crates/indiana/Cargo.toml`
-- `crates/indiana-protocol/Cargo.toml`
-- `crates/menulet/src-tauri/Cargo.toml`
-- `crates/menulet/src-tauri/tauri.conf.json`
-- `crates/menulet/package.json`
+Set the version to `$1` in all seven manifests. The workspace root `Cargo.toml` has no
+version — it is not bumped. Run the bump, then verify every manifest shows `$1`.
+
+Cargo.toml — the package version is the only `^version = ` line in each:
+```sh
+sed -i '' 's/^version = "[^"]*"/version = "$1"/' \
+  crates/core/Cargo.toml \
+  crates/indiana/Cargo.toml \
+  crates/indiana-protocol/Cargo.toml \
+  crates/menulet/src-tauri/Cargo.toml
+```
+
+JSON — single `"version"` field in each:
+```sh
+sed -i '' 's/"version": *"[^"]*"/"version": "$1"/' \
+  crates/menulet/src-tauri/tauri.conf.json \
+  crates/menulet/package.json \
+  crates/casablanca/package.json
+```
+
+Verify all seven now say `$1` — abort if any still shows the old version:
+```sh
+grep -H '^version = "' crates/core/Cargo.toml crates/indiana/Cargo.toml crates/indiana-protocol/Cargo.toml crates/menulet/src-tauri/Cargo.toml
+grep -H '"version":' crates/menulet/src-tauri/tauri.conf.json crates/menulet/package.json crates/casablanca/package.json
+```
 
 Refresh the lockfiles so they match:
-- `cargo build --release` (updates `Cargo.lock`)
+- `cargo build --release` (updates root `Cargo.lock`)
 - `npm install --prefix crates/menulet` (updates `crates/menulet/package-lock.json`)
+- `npm install --prefix crates/casablanca` (updates `crates/casablanca/package-lock.json`)
+
+`crates/menulet/src-tauri/Cargo.lock` is a separate lock (the menulet tauri crate is
+excluded from the root workspace, so it has its own). It is refreshed as a side effect
+of the menulet build in step 3 / CI — don't use `cargo generate-lockfile` on it, that
+re-resolves every dependency.
 
 ## 3. Optional pre-flight (offer to skip — it's slow)
-- `make dist` builds the full bundle (CLI tarball + menulet `.dmg`) and prints both
-  SHA256s. CI rebuilds these regardless, so this is only a local sanity check.
+- `make dist` builds the full bundle (CLI tarball + menulet `.dmg` + Casablanca `.dmg`)
+  and prints all SHA256s. CI rebuilds these regardless, so this is only a local sanity check.
 
 ## 4. Commit
 - Commit the manifest + lockfile changes with message `chore(release): v$1` and the
@@ -70,19 +94,21 @@ The pushed tag triggers `.github/workflows/release.yml`.
 ## 8. Verify the outcome (a green run is not enough)
 - Release assets exist:
   `gh release view v$1 --repo niklasingvar/fmk-indiana --json assets -q '.assets[].name'`
-  → expect `indiana-aarch64-apple-darwin.tar.gz` and `Indiana_$1_aarch64.dmg`.
+  → expect `indiana-aarch64-apple-darwin.tar.gz`, `Indiana_$1_aarch64.dmg`, and
+  `Casablanca_$1_aarch64.dmg`.
 - The tap was bumped to **real** checksums (not zeros):
   `gh api repos/niklasingvar/homebrew-fmk-indiana/contents/Formula/indiana.rb -q '.content' | base64 -d | grep -E 'version|sha256'`
-  and the same for `Casks/indiana-menulet.rb`.
+  and the same for `Casks/indiana-menulet.rb` and `Casks/indiana-casablanca.rb`.
 - If the tap still shows `0000…` or the old version, the bump step failed (commonly the
   `HOMEBREW_TAP_TOKEN` lacks Contents: write). Report it, then fix by re-running the failed
-  job (`gh run rerun --failed <id>`) after correcting the token, or update the two tap
-  files' shas by hand from the run's SHA256 summary.
+  job (`gh run rerun --failed <id>`) after correcting the token, or update the tap files'
+  shas by hand from the run's SHA256 summary.
 
 ## 9. Done
 Tell the user it's live and how to get it:
 ```sh
 brew update
-brew upgrade --cask indiana-menulet   # or: brew install --cask --no-quarantine indiana-menulet
+brew upgrade --cask indiana-menulet    # fresh install: brew install --cask indiana-menulet, then xattr -dr com.apple.quarantine /Applications/Indiana.app
+brew upgrade --cask indiana-casablanca # fresh install: brew install --cask indiana-casablanca, then xattr -dr com.apple.quarantine /Applications/Casablanca.app
 brew upgrade indiana                   # CLI
 ```
