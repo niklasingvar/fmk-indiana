@@ -1,3 +1,9 @@
+---
+status: superseded
+purpose: Archived plan — .indiana meta-model restructure (executed).
+approval: pending
+---
+
 # Plan: Restructure `.indiana/` into a meta-model layout
 
 ## Context

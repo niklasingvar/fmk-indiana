@@ -1,3 +1,9 @@
+---
+status: superseded
+purpose: Archived plan — /release slash command (executed).
+approval: pending
+---
+
 # Add a `/release` slash command (Claude Code + Cursor)
 
 ## Context

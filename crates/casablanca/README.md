@@ -1,3 +1,9 @@
+---
+status: draft
+purpose: Casablanca dev README — stack, layout, run instructions, build phases.
+approval: pending
+---
+
 # Casablanca
 
 A minimal Electron note editor: a folder pane on the left, a WYSIWYG rich
