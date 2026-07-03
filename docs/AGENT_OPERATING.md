@@ -22,6 +22,7 @@ approval: approved
 - Push back when direction is heavier than the goal needs.
 
 ## End with
+- Commit the work — see [AGENT_COMMIT.md](AGENT_COMMIT.md). Do not wait to be asked; do not push unless asked.
 - Document learnings, caveats, or new principles in the relevant markdown file.
 - Point out consistency issues, violations, caveats, or simpler paths.
 - Verify the narrowest useful thing before calling work done.
