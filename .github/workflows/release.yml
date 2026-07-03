@@ -1,11 +1,16 @@
 name: release
 
-# Tag-triggered release: builds the CLI tarball and the (unsigned) menulet .dmg
-# for Apple Silicon, publishes a GitHub release, and — if a tap token is set —
-# bumps the Homebrew tap so `brew upgrade` picks up the new version.
+# Tag-triggered release: builds the CLI tarball, the (unsigned) menulet .dmg, and
+# the (unsigned) Casablanca .dmg for Apple Silicon, publishes a GitHub release,
+# and — if a tap token is set — bumps the Homebrew tap so `brew upgrade` picks up
+# the new version.
 #
 # Cut a release with:
 #   git tag v0.1.0 && git push origin v0.1.0
+#
+# Version sync: the menulet DMG is named from crates/menulet/src-tauri/tauri.conf.json
+# and the Casablanca DMG from crates/casablanca/package.json. Bump BOTH to the tag
+# version before tagging, or the artifact-name check below fails loudly.
 
 on:
   push:
@@ -61,6 +66,12 @@ jobs:
           npm ci
           npm run build
 
+      - name: Build Casablanca (.app + .dmg)
+        working-directory: crates/casablanca
+        run: |
+          npm ci
+          npm run dist
+
       - name: Package CLI tarball
         run: tar -czf indiana-aarch64-apple-darwin.tar.gz -C target/release indiana
 
@@ -75,19 +86,29 @@ jobs:
             ls -la crates/menulet/src-tauri/target/release/bundle/dmg || true
             exit 1
           fi
+          CBL_DMG="crates/casablanca/dist/Casablanca_${VERSION}_aarch64.dmg"
+          if [ ! -f "$CBL_DMG" ]; then
+            echo "Expected Casablanca dmg not found at $CBL_DMG; contents of casablanca/dist:" >&2
+            ls -la crates/casablanca/dist || true
+            exit 1
+          fi
           CLI_TGZ="indiana-aarch64-apple-darwin.tar.gz"
           CLI_SHA=$(shasum -a 256 "$CLI_TGZ" | awk '{print $1}')
           DMG_SHA=$(shasum -a 256 "$DMG" | awk '{print $1}')
+          CBL_SHA=$(shasum -a 256 "$CBL_DMG" | awk '{print $1}')
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+          echo "cbl_dmg=$CBL_DMG" >> "$GITHUB_OUTPUT"
           echo "cli_tgz=$CLI_TGZ" >> "$GITHUB_OUTPUT"
           echo "cli_sha=$CLI_SHA" >> "$GITHUB_OUTPUT"
           echo "dmg_sha=$DMG_SHA" >> "$GITHUB_OUTPUT"
+          echo "cbl_sha=$CBL_SHA" >> "$GITHUB_OUTPUT"
           {
             echo "## Release artifacts ($VERSION)"
             echo "| artifact | sha256 |"
             echo "|----------|--------|"
             echo "| $CLI_TGZ | \`$CLI_SHA\` |"
             echo "| $(basename "$DMG") | \`$DMG_SHA\` |"
+            echo "| $(basename "$CBL_DMG") | \`$CBL_SHA\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish GitHub release
@@ -98,7 +119,8 @@ jobs:
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
             "${{ steps.art.outputs.cli_tgz }}" \
-            "${{ steps.art.outputs.dmg }}"
+            "${{ steps.art.outputs.dmg }}" \
+            "${{ steps.art.outputs.cbl_dmg }}"
 
       - name: Bump Homebrew tap
         if: env.TAP_TOKEN != ''
@@ -107,11 +129,13 @@ jobs:
           VERSION="${{ steps.ver.outputs.version }}"
           CLI_SHA="${{ steps.art.outputs.cli_sha }}"
           DMG_SHA="${{ steps.art.outputs.dmg_sha }}"
+          CBL_SHA="${{ steps.art.outputs.cbl_sha }}"
 
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/niklasingvar/homebrew-fmk-indiana.git" tap
           mkdir -p tap/Formula tap/Casks
           cp dist/homebrew/Formula/indiana.rb tap/Formula/indiana.rb
           cp dist/homebrew/Casks/indiana-menulet.rb tap/Casks/indiana-menulet.rb
+          cp dist/homebrew/Casks/indiana-casablanca.rb tap/Casks/indiana-casablanca.rb
 
           # Fill in the per-release fields.
           sed -i '' \
@@ -123,11 +147,15 @@ jobs:
             -e "s|version \"[^\"]*\"|version \"$VERSION\"|" \
             -e "s|sha256 \"[^\"]*\"|sha256 \"$DMG_SHA\"|" \
             tap/Casks/indiana-menulet.rb
+          sed -i '' \
+            -e "s|version \"[^\"]*\"|version \"$VERSION\"|" \
+            -e "s|sha256 \"[^\"]*\"|sha256 \"$CBL_SHA\"|" \
+            tap/Casks/indiana-casablanca.rb
 
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/indiana.rb Casks/indiana-menulet.rb
+          git add Formula/indiana.rb Casks/indiana-menulet.rb Casks/indiana-casablanca.rb
           if git diff --cached --quiet; then
             echo "Tap already up to date."
           else

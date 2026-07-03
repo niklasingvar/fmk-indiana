@@ -3,8 +3,10 @@
 # The .app bundles the `indiana` daemon as a Tauri sidecar, so installing this
 # cask alone gives a fully working menubar app — no separate CLI install needed.
 #
-# The build is UNSIGNED, so install with --no-quarantine to satisfy Gatekeeper:
-#   brew install --cask --no-quarantine indiana-menulet
+# The build is UNSIGNED, so strip quarantine after install (Homebrew 6.x dropped
+# `--no-quarantine` as a working CLI flag — see docs/DISTRO.md):
+#   brew install --cask indiana-menulet
+#   xattr -dr com.apple.quarantine /Applications/Indiana.app
 cask "indiana-menulet" do
   version "0.1.0"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
