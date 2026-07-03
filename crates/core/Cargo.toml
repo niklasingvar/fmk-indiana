@@ -14,5 +14,4 @@ ignore = "0.4"
 serde = { version = "1", features = ["derive"] }
 fastrand = "2"
 tempfile = "3"
-toml = "1.1.2"
 serde_yml = "0.0.13"

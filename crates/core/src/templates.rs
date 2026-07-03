@@ -4,24 +4,46 @@
 //! `init_folder_indiana` also scaffolds the sibling meta folders every
 //! monitored root carries: `.indiana/context-model/` (state, direction, rules)
 //! and `.indiana/montmartre/` (project management: actions, notes, focus).
-//! Their seeded content lives in `crates/core/scaffold/` and is the source of
-//! truth — edit those files to change what new monitored roots start with.
+//!
+//! `crates/core/templates/` is the single authoring source for everything a
+//! monitored root starts with: full `prompt.md` files under `indianas/` and
+//! meta folder seeds. Files are embedded at compile time and written verbatim
+//! — edit them to change what users receive. This repository's own `.indiana/`
+//! is a dogfood instance, not a source; it may diverge freely.
 
-use crate::markers::{Msg, TABLE};
+use crate::markers::TABLE;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
+/// One embedded `prompt.md` per marker command, written verbatim into
+/// `.indiana/indianas/<command>/prompt.md`. A unit test pins each file's
+/// frontmatter to its marker TABLE row.
+const EMBEDDED_TEMPLATES: &[(&str, &str)] = &[
+    ("question", include_str!("../templates/indianas/question/prompt.md")),
+    ("hate", include_str!("../templates/indianas/hate/prompt.md")),
+    ("love", include_str!("../templates/indianas/love/prompt.md")),
+    ("keep", include_str!("../templates/indianas/keep/prompt.md")),
+    ("fix", include_str!("../templates/indianas/fix/prompt.md")),
+    ("elaborate", include_str!("../templates/indianas/elaborate/prompt.md")),
+    ("note", include_str!("../templates/indianas/note/prompt.md")),
+    ("action", include_str!("../templates/indianas/action/prompt.md")),
+    ("todo", include_str!("../templates/indianas/todo/prompt.md")),
+    ("delete", include_str!("../templates/indianas/delete/prompt.md")),
+    ("prompt", include_str!("../templates/indianas/prompt/prompt.md")),
+];
+
+/// Variant prompt compiled when a `::question` marker carries no message.
+/// Embedded only — not written into instances and not overridable per root
+/// (`for_root` reads only `prompt.md` files).
+const QUESTION_EMPTY_TEMPLATE: &str =
+    include_str!("../templates/indianas/question/prompt_empty.md");
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TemplateCatalog {
     pub prompts: HashMap<String, String>,
     pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PromptFile {
-    prompts: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -88,11 +110,10 @@ pub fn replace_folder_indiana(root: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// Write the 9 `indianas/<command>/prompt.md` files from embedded defaults.
-/// `overwrite` false skips existing files (refresh/init); true rewrites them
-/// (replace).
+/// Write every `indianas/<command>/prompt.md` verbatim from the embedded
+/// template files. `overwrite` false skips existing files (refresh/init);
+/// true rewrites them (replace).
 fn write_command_templates(root: &Path, overwrite: bool) -> io::Result<()> {
-    let prompts = embedded_prompts();
     for spec in TABLE {
         let dir = root.join(".indiana").join("indianas").join(spec.long);
         std::fs::create_dir_all(&dir)?;
@@ -100,32 +121,29 @@ fn write_command_templates(root: &Path, overwrite: bool) -> io::Result<()> {
         if !overwrite && path.exists() {
             continue;
         }
-        let body = prompts
-            .get(spec.long)
-            .unwrap_or_else(|| panic!("missing prompt template: {}", spec.long));
-        std::fs::write(path, scaffold(spec.long, spec.command_type, spec.msg, body))?;
+        std::fs::write(path, embedded_template(spec.long))?;
     }
     Ok(())
 }
 
 /// Scaffold the sibling meta folders: `context-model/` and `montmartre/`.
-/// Content is `include_str!`-ed from `crates/core/scaffold/`, which is the
+/// Content is `include_str!`-ed from `crates/core/templates/`, which is the
 /// source of truth. Existing files are left byte-identical.
 fn scaffold_meta(root: &Path) -> io::Result<()> {
     let context_model = root.join(".indiana").join("context-model");
     std::fs::create_dir_all(&context_model)?;
     let gitkeep = context_model.join(".gitkeep");
     if !gitkeep.exists() {
-        std::fs::write(gitkeep, include_str!("../scaffold/context-model/.gitkeep"))?;
+        std::fs::write(gitkeep, include_str!("../templates/context-model/.gitkeep"))?;
     }
 
     let montmartre = root.join(".indiana").join("montmartre");
     std::fs::create_dir_all(&montmartre)?;
     for (name, body) in [
-        ("README.md", include_str!("../scaffold/montmartre/README.md")),
-        ("actions.md", include_str!("../scaffold/montmartre/actions.md")),
-        ("notes.md", include_str!("../scaffold/montmartre/notes.md")),
-        ("focus.md", include_str!("../scaffold/montmartre/focus.md")),
+        ("README.md", include_str!("../templates/montmartre/README.md")),
+        ("actions.md", include_str!("../templates/montmartre/actions.md")),
+        ("notes.md", include_str!("../templates/montmartre/notes.md")),
+        ("focus.md", include_str!("../templates/montmartre/focus.md")),
     ] {
         let path = montmartre.join(name);
         if !path.exists() {
@@ -135,10 +153,27 @@ fn scaffold_meta(root: &Path) -> io::Result<()> {
     Ok(())
 }
 
+fn embedded_template(command: &str) -> &'static str {
+    EMBEDDED_TEMPLATES
+        .iter()
+        .find(|(name, _)| *name == command)
+        .map(|(_, text)| *text)
+        .unwrap_or_else(|| panic!("missing embedded template: {command}"))
+}
+
 fn embedded_prompts() -> HashMap<String, String> {
-    toml::from_str::<PromptFile>(include_str!("../prompts.toml"))
-        .expect("embedded prompts.toml must parse")
-        .prompts
+    EMBEDDED_TEMPLATES
+        .iter()
+        .map(|(name, text)| (*name, *text))
+        .chain([("question_empty", QUESTION_EMPTY_TEMPLATE)])
+        .map(|(name, text)| {
+            let (_, body) = split_frontmatter(text)
+                .unwrap_or_else(|e| panic!("embedded template {name}: {e}"));
+            let para = first_paragraph(body)
+                .unwrap_or_else(|| panic!("embedded template {name}: missing prompt body"));
+            (name.to_string(), para)
+        })
+        .collect()
 }
 
 fn template_path(root: &Path, command: &str) -> PathBuf {
@@ -205,47 +240,20 @@ fn first_paragraph(body: &str) -> Option<String> {
     (!paragraph.is_empty()).then_some(paragraph)
 }
 
-fn scaffold(command: &str, command_type: &str, msg: Msg, body: &str) -> String {
-    format!(
-        "---\nstatus: draft\npurpose: Folder-local prompt template and behavior for ::{command}.\napproval: pending\ncommand: {command}\ncommand_type: {command_type}\nmessage: {}\n---\n\n{}\n\n{body}\n",
-        message_contract(msg),
-        heading(command),
-    )
-}
-
-/// One-line `#` heading prepended to each scaffolded `prompt.md` for human
-/// readability. `first_paragraph` skips `#` lines, so this never reaches the
-/// compiled prompt — it only documents the file for the person editing it.
-fn heading(command: &str) -> &'static str {
-    match command {
-        "fix" => "# ::fix — agent directive: fix this. Message refines how.",
-        "elaborate" => "# ::elaborate — agent directive: act on this and elaborate the change.",
-        "question" => "# ::question — agent explains: answer the user's question.",
-        "hate" => "# ::hate — reaction: user dislikes this (no message).",
-        "love" => "# ::love — reaction: user likes this; preserve the pattern.",
-        "keep" => "# ::keep — reaction: freeze; do not change this.",
-        "note" => "# ::note — user context (passthrough): the message is the prompt.",
-        "action" => "# ::action — user task (passthrough): the message is the prompt.",
-        "todo" => "# ::todo — user task (passthrough): the message is the prompt.",
-        "delete" => "# ::delete — agent gated directive: delete targeted content, then check in with the user before acting.",
-        "prompt" => "# ::prompt — agent runs directly: auto-call the code agent to act on this prompt.",
-        _ => "# (unknown command)",
-    }
-}
-
-fn message_contract(msg: Msg) -> &'static str {
-    match msg {
-        Msg::None => "none",
-        Msg::Optional => "optional",
-        Msg::Required => "required",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::markers::Msg;
     use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    fn message_contract(msg: Msg) -> &'static str {
+        match msg {
+            Msg::None => "none",
+            Msg::Optional => "optional",
+            Msg::Required => "required",
+        }
+    }
 
     fn tmp() -> PathBuf {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -377,47 +385,38 @@ mod tests {
         fs::remove_dir_all(d).ok();
     }
 
-    // IN_PRINCIPLES.md: this repo authors the defaults. Every TABLE row has a
-    // `.indiana/indianas/<long>/prompt.md` in this repository whose
-    // frontmatter and body match the marker metadata and `prompts.toml`.
-    // Skipped downstream where the repo `.indiana` is absent (a packaged crate
-    // build carries only the crate dir, not the workspace `.indiana`).
+    // IN_PRINCIPLES.md: `crates/core/templates/indianas/` authors the
+    // defaults. Every TABLE row has exactly one embedded template whose
+    // frontmatter matches the marker metadata and whose body compiles to a
+    // prompt. The repo's own `.indiana/` is a dogfood instance and is
+    // deliberately not checked — it may diverge.
     #[test]
-    fn test_repo_indianas_match_embedded_defaults() {
-        let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let indianas = ws.join(".indiana").join("indianas");
-        if !indianas.is_dir() {
-            return;
-        }
-        let prompts = embedded_prompts();
+    fn test_embedded_templates_match_marker_table() {
+        assert_eq!(
+            EMBEDDED_TEMPLATES.len(),
+            TABLE.len(),
+            "one embedded template per marker TABLE row"
+        );
         for spec in TABLE {
-            let path = template_path(&ws, spec.long);
-            let text = fs::read_to_string(&path)
-                .unwrap_or_else(|_| panic!("missing repo template: {}", path.display()));
-            let (frontmatter, body) = split_frontmatter(&text)
-                .unwrap_or_else(|_| panic!("bad frontmatter in {}", path.display()));
+            let text = embedded_template(spec.long);
+            let (frontmatter, body) = split_frontmatter(text)
+                .unwrap_or_else(|e| panic!("bad frontmatter in template {}: {e}", spec.long));
             let parsed: Frontmatter = serde_yml::from_str(frontmatter)
-                .unwrap_or_else(|_| panic!("bad yaml in {}", path.display()));
-            assert_eq!(parsed.command, spec.long, "command mismatch in {}", path.display());
+                .unwrap_or_else(|e| panic!("bad yaml in template {}: {e}", spec.long));
+            assert_eq!(parsed.command, spec.long, "command mismatch in template {}", spec.long);
             assert_eq!(
                 parsed.command_type, spec.command_type,
-                "command_type mismatch in {}",
-                path.display()
+                "command_type mismatch in template {}",
+                spec.long
             );
             assert_eq!(
                 parsed.message.as_deref(),
                 Some(message_contract(spec.msg)),
-                "message mismatch in {}",
-                path.display()
+                "message mismatch in template {}",
+                spec.long
             );
-            let para = first_paragraph(body)
-                .unwrap_or_else(|| panic!("missing body in {}", path.display()));
-            assert_eq!(
-                para.as_str(),
-                prompts[spec.long].as_str(),
-                "body drift between {} and prompts.toml",
-                path.display()
-            );
+            first_paragraph(body)
+                .unwrap_or_else(|| panic!("missing body in template {}", spec.long));
         }
     }
 }
