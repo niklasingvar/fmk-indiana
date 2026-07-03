@@ -1,30 +1,80 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { useVault } from '../storage/useVault'
 import { LexicalEditor } from './Editor'
 
 type Vault = ReturnType<typeof useVault>
 
-export function EditorPane({ vault }: { vault: Vault }) {
-  const { activeNote, draft, setDraft, saving } = vault
+type CopyStatus = { kind: 'idle' } | { kind: 'busy' } | { kind: 'done'; ok: boolean; message: string }
 
-  if (!activeNote) {
-    return (
-      <div className="flex h-full items-center justify-center text-text-muted">
-        Select a note from the left, or create a new one.
-      </div>
-    )
-  }
+const COPY_STATUS_MS = 4000
+
+/**
+ * Vault-wide `Copy all`: asks main to run `indiana copy` for the vault root
+ * and surfaces the result inline. The editor never compiles anything itself.
+ */
+function CopyAllButton() {
+  const [status, setStatus] = useState<CopyStatus>({ kind: 'idle' })
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current)
+  }, [])
+
+  const copyAll = useCallback(async () => {
+    if (timer.current) clearTimeout(timer.current)
+    setStatus({ kind: 'busy' })
+    const res = await window.api.indiana.copyAll().catch((err: unknown) => ({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err)
+    }))
+    setStatus({ kind: 'done', ...res })
+    timer.current = setTimeout(() => setStatus({ kind: 'idle' }), COPY_STATUS_MS)
+  }, [])
+
+  return (
+    <span className="flex items-center gap-2">
+      {status.kind === 'done' && (
+        <span
+          className={`max-w-md truncate ${status.ok ? 'text-text-muted' : 'text-red-400'}`}
+          title={status.message}
+        >
+          {status.message}
+        </span>
+      )}
+      <button
+        onClick={copyAll}
+        disabled={status.kind === 'busy'}
+        className="rounded border border-pane-border px-2 py-0.5 text-xs hover:bg-black/20 disabled:opacity-50"
+      >
+        {status.kind === 'busy' ? 'Copying…' : 'Copy all'}
+      </button>
+    </span>
+  )
+}
+
+export function EditorPane({ vault }: { vault: Vault }) {
+  const { activeNote, draft, setDraftBody, saving } = vault
 
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-pane-border px-6 py-2 text-xs text-text-muted">
-        <span className="truncate font-mono">{activeNote.path}</span>
-        <span>{saving ? 'Saving…' : 'Saved'}</span>
+        <span className="truncate font-mono">{activeNote ? activeNote.path : 'No note open'}</span>
+        <span className="flex items-center gap-3">
+          {activeNote && <span>{saving ? 'Saving…' : 'Saved'}</span>}
+          <CopyAllButton />
+        </span>
       </header>
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-3xl px-8 py-8">
-          <LexicalEditor key={activeNote.path} markdown={draft} onChange={setDraft} />
+      {activeNote && draft ? (
+        <div className="flex-1 overflow-auto">
+          <div className="mx-auto max-w-3xl px-8 py-8">
+            <LexicalEditor key={activeNote.path} markdown={draft.body} onChange={setDraftBody} />
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-1 items-center justify-center text-text-muted">
+          Select a note from the left, or create a new one.
+        </div>
+      )}
     </div>
   )
 }

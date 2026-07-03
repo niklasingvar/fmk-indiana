@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '@shared/ipc'
-import type { Note, TreeNode, VaultState } from '@shared/domain'
+import type { CopyAllResult, Note, TreeNode, VaultState } from '@shared/domain'
 
 /**
  * The renderer's only gateway to the system. Every capability the UI has is
@@ -29,6 +29,9 @@ const api = {
     create: (dirRel: string, name: string): Promise<Note> =>
       ipcRenderer.invoke(IPC.NOTE_CREATE, dirRel, name),
     remove: (rel: string): Promise<void> => ipcRenderer.invoke(IPC.NOTE_DELETE, rel)
+  },
+  indiana: {
+    copyAll: (): Promise<CopyAllResult> => ipcRenderer.invoke(IPC.INDIANA_COPY_ALL)
   }
 }
 

@@ -1,17 +1,23 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Note, TreeNode, VaultState } from '@shared/domain'
+import type { Note, NoteDocument, TreeNode, VaultState } from '@shared/domain'
+import { parseNoteDocument, serializeNoteDocument } from '@shared/note-serialization'
 
 const AUTOSAVE_MS = 500
 
 /**
  * Orchestrates vault + tree + the currently open note. All filesystem access
  * goes through `window.api`; the renderer never touches disk directly.
+ *
+ * The draft is a NoteDocument, not a raw string: the file is parsed once when
+ * a note opens and serialized once on autosave. The Lexical editor only ever
+ * sees `draft.body` — frontmatter rides along verbatim and cannot be
+ * corrupted by the markdown round-trip.
  */
 export function useVault() {
   const [vaultState, setVaultState] = useState<VaultState>({ status: 'unset' })
   const [tree, setTree] = useState<TreeNode | null>(null)
   const [activeNote, setActiveNote] = useState<Note | null>(null)
-  const [draft, setDraft] = useState<string>('')
+  const [draft, setDraft] = useState<NoteDocument | null>(null)
   const [saving, setSaving] = useState(false)
 
   // Load persisted vault on mount.
@@ -27,12 +33,15 @@ export function useVault() {
     return off
   }, [vaultState])
 
-  // Debounced autosave: when `draft` diverges from the saved note, persist.
+  // Debounced autosave: when the serialized draft diverges from the saved
+  // note, persist.
   useEffect(() => {
-    if (!activeNote || draft === activeNote.content) return
+    if (!activeNote || !draft) return
+    const serialized = serializeNoteDocument(draft)
+    if (serialized === activeNote.content) return
     setSaving(true)
     const id = setTimeout(async () => {
-      const saved = await window.api.notes.write(activeNote.path, draft)
+      const saved = await window.api.notes.write(activeNote.path, serialized)
       // Preserve the user's cursor by keeping draft authoritative unless the
       // external content changed something we don't have locally.
       setActiveNote((prev) => (prev ? { ...prev, content: saved.content, updatedAt: saved.updatedAt } : prev))
@@ -49,19 +58,24 @@ export function useVault() {
   const openNote = useCallback(async (rel: string) => {
     const note = await window.api.notes.read(rel)
     setActiveNote(note)
-    setDraft(note.content)
+    setDraft(parseNoteDocument(note.content))
   }, [])
 
   const createNote = useCallback(async (dirRel: string, name: string) => {
     const note = await window.api.notes.create(dirRel, name)
     setActiveNote(note)
-    setDraft(note.content)
+    setDraft(parseNoteDocument(note.content))
     return note
   }, [])
 
   const closeNote = useCallback(() => {
     setActiveNote(null)
-    setDraft('')
+    setDraft(null)
+  }, [])
+
+  // The editor's only write path: replace the body, keep frontmatter verbatim.
+  const setDraftBody = useCallback((body: string) => {
+    setDraft((prev) => (prev ? { ...prev, body } : prev))
   }, [])
 
   return {
@@ -70,7 +84,7 @@ export function useVault() {
     activeNote,
     draft,
     saving,
-    setDraft,
+    setDraftBody,
     chooseVault,
     openNote,
     createNote,

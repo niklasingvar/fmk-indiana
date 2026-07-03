@@ -16,7 +16,9 @@ export const IPC = {
   NOTE_CREATE: 'note:create',
   NOTE_DELETE: 'note:delete',
 
-  TREE_CHANGED: 'tree:changed'
+  TREE_CHANGED: 'tree:changed',
+
+  INDIANA_COPY_ALL: 'indiana:copy-all'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs'
 import { IPC } from '@shared/ipc'
 import type { VaultConfig } from '@shared/domain'
 import { getVaultConfig, setVaultConfig } from './lib/config'
+import { copyAllMarkers } from './lib/indiana'
 import { readTree, readNote, writeNote, createNote, deleteNote, toRelative } from './lib/vault'
 
 type Sender = Pick<BrowserWindow, 'webContents'>
@@ -86,6 +87,10 @@ export async function registerIpc(sender: Sender): Promise<VaultConfig | null> {
     await deleteNote(requireVault(), String(rel))
     await refresh()
   })
+
+  // --- indiana ------------------------------------------------------------
+
+  handle(IPC.INDIANA_COPY_ALL, async () => copyAllMarkers(requireVault()))
 
   // Utility: convert an absolute path to a vault-relative one.
   handle('vault:rel', async (abs: unknown) => toRelative(requireVault(), String(abs)))
