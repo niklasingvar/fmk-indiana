@@ -4,9 +4,11 @@ SIDECAR := crates/menulet/src-tauri/binaries/indiana-$(HOST)
 BIN := target/release/indiana
 
 .PHONY: build scratch serve add scan copy install help menulet casablanca sidecar-copy release dist
-VERSION := $(shell sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' crates/menulet/src-tauri/tauri.conf.json | head -1)
+# Extract the first "version": "x.y.z" from a JSON manifest.
+json_version = $(shell sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' $(1) | head -1)
+VERSION := $(call json_version,crates/menulet/src-tauri/tauri.conf.json)
 DMG := crates/menulet/src-tauri/target/release/bundle/dmg/Indiana_$(VERSION)_aarch64.dmg
-CBL_VERSION := $(shell sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' crates/casablanca/package.json | head -1)
+CBL_VERSION := $(call json_version,crates/casablanca/package.json)
 CBL_DMG := crates/casablanca/dist/Casablanca_$(CBL_VERSION)_aarch64.dmg
 
 help:

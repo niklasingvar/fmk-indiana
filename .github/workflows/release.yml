@@ -35,6 +35,29 @@ jobs:
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      # Fail fast: the DMG artifacts are named from the manifest versions, so a
+      # manifest that lags the tag would otherwise only surface ~10 min later when
+      # "Collect artifacts" can't find the version-named dmg. Catch it before building.
+      - name: Check manifest versions match tag
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          MENULET_VERSION=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' crates/menulet/src-tauri/tauri.conf.json | head -1)
+          CBL_VERSION=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' crates/casablanca/package.json | head -1)
+          fail=0
+          if [ "$MENULET_VERSION" != "$VERSION" ]; then
+            echo "menulet tauri.conf.json version ($MENULET_VERSION) != tag ($VERSION)" >&2
+            fail=1
+          fi
+          if [ "$CBL_VERSION" != "$VERSION" ]; then
+            echo "casablanca package.json version ($CBL_VERSION) != tag ($VERSION)" >&2
+            fail=1
+          fi
+          if [ "$fail" -ne 0 ]; then
+            echo "Bump both manifests to $VERSION before tagging." >&2
+            exit 1
+          fi
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
