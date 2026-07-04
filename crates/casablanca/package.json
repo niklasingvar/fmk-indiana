@@ -1,6 +1,6 @@
 {
   "name": "casablanca",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Casablanca — a minimal Electron note editor with a WYSIWYG Lexical editor and inline Excalidraw diagrams.",
   "type": "module",
