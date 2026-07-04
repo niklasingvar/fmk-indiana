@@ -8,7 +8,6 @@
 # Homebrew cask/formula source-of-truth live under the gitignored dist/ root,
 # so re-include that one subtree. Build outputs (crates/*/dist/) stay ignored.
 !/dist/
-!/dist/homebrew/
 
 # Local scratch fixtures
 /tmp
