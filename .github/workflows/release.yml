@@ -64,7 +64,17 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: ".nvmrc"
+
+      # Fail fast on npm lockfile drift — the Casablanca lock/manifest mismatch that
+      # sank v0.3.0's first run (committed lock lacked esbuild@0.28.1). Validate both
+      # lockfiles with the same npm the builds use, before the ~10-min Rust/Tauri
+      # build, so a stale lock aborts in seconds. See docs/casablanca/RELEASE_FIX.md.
+      - name: Check npm lockfiles in sync
+        run: |
+          set -euo pipefail
+          (cd crates/menulet && npm ci --dry-run)
+          (cd crates/casablanca && npm ci --dry-run)
 
       - name: Cache cargo
         uses: actions/cache@v4

@@ -85,21 +85,40 @@ Then watch: `gh run watch <id> --exit-status` (no grep/tail — it hides the exi
 code). Expect it to pass "Build Casablanca", publish the release with all three
 assets, and bump the tap with real (non-zero) SHAs.
 
-## Prevention (do at least the first two)
+## Prevention
 
-1. **Pin Node so dev == CI.** Add `.nvmrc` (`20`) at repo root and, in each
-   `package.json`, an `"engines": { "node": ">=20 <21" }`. Regenerate both
-   lockfiles once under that version.
-2. **Fail fast on lock drift, like the version guard.** Add a step in
-   `.github/workflows/release.yml` right after "Check manifest versions match
-   tag" that runs `npm ci --dry-run` (or `npm ci`) for both `crates/menulet` and
-   `crates/casablanca` before the ~10-min Rust/Tauri build — so a stale lock
-   aborts in seconds, not minutes.
+**Implemented** (commit after the v0.3.0 fix):
+
+1. **Pin Node so dev == CI.** Added `.nvmrc` (`20`) at repo root; the workflow's
+   `setup-node` now reads `node-version-file: ".nvmrc"` instead of a hardcoded
+   `20`, so CI and `nvm use` share one source of truth. (Deliberately did **not**
+   add `"engines"` to the `package.json`s — that would change the manifests and
+   force another lockfile regen for no safety `.nvmrc` doesn't already give.)
+2. **Fail fast on lock drift, like the version guard.** Added a
+   "Check npm lockfiles in sync" step in `.github/workflows/release.yml` (right
+   after `setup-node`) that runs `npm ci --dry-run` for both `crates/menulet` and
+   `crates/casablanca` before the ~10-min Rust/Tauri build — a stale lock now
+   aborts in seconds.
+
+**Still worth doing:**
+
 3. **Note in the runbook** that `make dist` only validates the pipeline when the
    local Node/npm major matches CI; otherwise it can pass while CI fails.
 4. GitHub is deprecating Node 20 on runners (build annotation warned). When you
    move CI to Node 22/24, regenerate all lockfiles under that version in the same
-   commit and update `.nvmrc`/`engines` to match.
+   commit and bump `.nvmrc` to match.
+
+## The Homebrew tap step (separate failure, same release)
+
+v0.3.0's re-run built and **published the GitHub release**, then failed at
+"Bump Homebrew tap": `remote: Permission to niklasingvar/homebrew-fmk-indiana.git
+denied to niklasingvar … 403`. The `HOMEBREW_TAP_TOKEN` secret exists (updated
+2026-07-03) and is not expired, so the PAT lacks `Contents:write` on the tap repo
+(or, if fine-grained, the tap repo isn't in its selected repositories). Fix the
+secret so future releases bump the tap automatically. Until then, the tap can be
+bumped manually with local git creds (the repo owner has write access) by copying
+`dist/homebrew/*` into the tap and sed-filling version/url/sha from the published
+assets' SHA256s.
 
 ## Files involved
 - `crates/casablanca/package-lock.json` — the out-of-sync lock (fix target)
