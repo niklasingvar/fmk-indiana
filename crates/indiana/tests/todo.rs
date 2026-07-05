@@ -1,4 +1,4 @@
-//! IN_TEST.md E12 — the Montmartre todo CLI (SQLite, repo-local).
+//! IN_TEST.md E12 — the Chief of Staff todo CLI (SQLite, repo-local).
 
 use std::fs;
 use std::process::Command;
@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 const BIN: &str = env!("CARGO_BIN_EXE_indiana");
 
-/// A fresh temp repo root per test. The todo db lands at `<root>/.indiana/montmartre/todos.db`.
+/// A fresh temp repo root per test. The todo db lands at `<root>/.indiana/chief-of-staff/todos.db`.
 fn root() -> std::path::PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -47,7 +47,7 @@ fn add(root: &std::path::Path, domain: &str, todo: &str, deps: &[&str]) -> Strin
 #[test]
 fn test_todo_add_list_delete() {
     let root = root();
-    let id = add(&root, "core", "Keep Montmartre todos in SQLite", &[]);
+    let id = add(&root, "core", "Keep Chief of Staff todos in SQLite", &[]);
 
     let out = Command::new(BIN)
         .arg("todo")
@@ -60,7 +60,7 @@ fn test_todo_add_list_delete() {
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(stdout.contains("core"));
     assert!(stdout.contains(&id));
-    assert!(stdout.contains("Keep Montmartre todos in SQLite"));
+    assert!(stdout.contains("Keep Chief of Staff todos in SQLite"));
 
     let out = Command::new(BIN)
         .arg("todo")
@@ -346,12 +346,12 @@ fn test_todo_list_domain_filter() {
     fs::remove_dir_all(&root).ok();
 }
 
-// E12: the db lands at the documented Montmartre path.
+// E12: the db lands at the documented Chief of Staff path.
 #[test]
 fn test_todo_db_path() {
     let root = root();
     add(&root, "core", "place the db", &[]);
-    let db = root.join(".indiana").join("montmartre").join("todos.db");
+    let db = root.join(".indiana").join("chief-of-staff").join("todos.db");
     assert!(db.exists(), "todos.db should exist at {db:?}");
     fs::remove_dir_all(&root).ok();
 }

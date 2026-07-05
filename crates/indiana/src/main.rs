@@ -80,7 +80,7 @@ enum Cmd {
         #[command(subcommand)]
         cmd: ServiceCmd,
     },
-    /// Manage the Montmartre todo list (SQLite, repo-local `.indiana/montmartre/todos.db`).
+    /// Manage the Chief of Staff todo list (SQLite, repo-local `.indiana/chief-of-staff/todos.db`).
     Todo {
         #[command(subcommand)]
         cmd: TodoCmd,

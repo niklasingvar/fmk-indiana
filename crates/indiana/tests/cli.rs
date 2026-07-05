@@ -163,7 +163,7 @@ fn test_cli_templates_replace_overwrites_without_touching_meta() {
     let dir = fixture("Fix this ::fix tighten\n");
     indiana_core::templates::init_folder_indiana(&dir).unwrap();
     let fix = dir.join(".indiana/indianas/fix/prompt.md");
-    let focus = dir.join(".indiana/montmartre/focus.md");
+    let focus = dir.join(".indiana/chief-of-staff/focus.md");
     fs::write(&fix, "custom").unwrap();
     fs::write(&focus, "# my focus\n").unwrap();
 

@@ -1,8 +1,8 @@
-//! Montmartre todo store — a repo-local SQLite list of agent/human todos.
+//! Chief of Staff todo store — a repo-local SQLite list of agent/human todos.
 //!
-//! Lives at `<root>/.indiana/montmartre/todos.db`. Separate from markdown
+//! Lives at `<root>/.indiana/chief-of-staff/todos.db`. Separate from markdown
 //! `::todo` markers: this is authoritative state, not derived from source
-//! (IN_PRINCIPLES.md Montmartre carve-out). TODO is state; finished work is
+//! (IN_PRINCIPLES.md Chief of Staff carve-out). TODO is state; finished work is
 //! deleted (rules/template_todo.md).
 
 use indiana_core::id::IdGenerator;
@@ -63,7 +63,7 @@ impl From<std::io::Error> for TodoError {
 }
 
 fn db_path(root: &Path) -> PathBuf {
-    root.join(".indiana").join("montmartre").join("todos.db")
+    root.join(".indiana").join("chief-of-staff").join("todos.db")
 }
 
 /// Open (creating the dir + db if missing) and ensure the schema is present.

@@ -3,7 +3,7 @@
 //!
 //! `init_folder_indiana` also scaffolds the sibling meta folders every
 //! monitored root carries: `.indiana/context-model/` (state, direction, rules)
-//! and `.indiana/montmartre/` (project management: actions, notes, focus).
+//! and `.indiana/chief-of-staff/` (project management: actions, notes, focus).
 //!
 //! `crates/core/templates/` is the single authoring source for everything a
 //! monitored root starts with: full `prompt.md` files under `indianas/` and
@@ -97,7 +97,7 @@ pub fn init_folder_indiana(root: &Path) -> io::Result<()> {
 
 /// Overwrite every `.indiana/indianas/<command>/prompt.md` with the embedded
 /// default. Existing user edits to command templates are discarded. Meta
-/// folders (`context-model/`, `montmartre/`) are not touched — replace is
+/// folders (`context-model/`, `chief-of-staff/`) are not touched — replace is
 /// scoped to command templates only. Backed by `indiana templates replace`.
 pub fn replace_folder_indiana(root: &Path) -> io::Result<()> {
     if !root.is_dir() {
@@ -126,7 +126,7 @@ fn write_command_templates(root: &Path, overwrite: bool) -> io::Result<()> {
     Ok(())
 }
 
-/// Scaffold the sibling meta folders: `context-model/` and `montmartre/`.
+/// Scaffold the sibling meta folders: `context-model/` and `chief-of-staff/`.
 /// Content is `include_str!`-ed from `crates/core/templates/`, which is the
 /// source of truth. Existing files are left byte-identical.
 fn scaffold_meta(root: &Path) -> io::Result<()> {
@@ -154,15 +154,15 @@ fn scaffold_meta(root: &Path) -> io::Result<()> {
         }
     }
 
-    let montmartre = root.join(".indiana").join("montmartre");
-    std::fs::create_dir_all(&montmartre)?;
+    let chief_of_staff = root.join(".indiana").join("chief-of-staff");
+    std::fs::create_dir_all(&chief_of_staff)?;
     for (name, body) in [
-        ("README.md", include_str!("../templates/montmartre/README.md")),
-        ("actions.md", include_str!("../templates/montmartre/actions.md")),
-        ("notes.md", include_str!("../templates/montmartre/notes.md")),
-        ("focus.md", include_str!("../templates/montmartre/focus.md")),
+        ("README.md", include_str!("../templates/chief-of-staff/README.md")),
+        ("actions.md", include_str!("../templates/chief-of-staff/actions.md")),
+        ("notes.md", include_str!("../templates/chief-of-staff/notes.md")),
+        ("focus.md", include_str!("../templates/chief-of-staff/focus.md")),
     ] {
-        let path = montmartre.join(name);
+        let path = chief_of_staff.join(name);
         if !path.exists() {
             std::fs::write(path, body)?;
         }
@@ -317,12 +317,12 @@ mod tests {
         assert!(d.join(".indiana/context-model/log.md").exists());
         assert!(d.join(".indiana/context-model/purpose/PURPOSE.md").exists());
         assert!(d.join(".indiana/context-model/learnings/INBOX.md").exists());
-        assert!(d.join(".indiana/montmartre/README.md").exists());
-        assert!(d.join(".indiana/montmartre/actions.md").exists());
-        assert!(d.join(".indiana/montmartre/notes.md").exists());
-        assert!(d.join(".indiana/montmartre/focus.md").exists());
+        assert!(d.join(".indiana/chief-of-staff/README.md").exists());
+        assert!(d.join(".indiana/chief-of-staff/actions.md").exists());
+        assert!(d.join(".indiana/chief-of-staff/notes.md").exists());
+        assert!(d.join(".indiana/chief-of-staff/focus.md").exists());
         assert_eq!(
-            fs::read_to_string(d.join(".indiana/montmartre/focus.md")).unwrap(),
+            fs::read_to_string(d.join(".indiana/chief-of-staff/focus.md")).unwrap(),
             "# Focus\n"
         );
         fs::remove_dir_all(d).ok();
@@ -359,7 +359,7 @@ mod tests {
     #[test]
     fn test_init_folder_indiana_does_not_overwrite_meta() {
         let d = tmp();
-        let focus = d.join(".indiana/montmartre/focus.md");
+        let focus = d.join(".indiana/chief-of-staff/focus.md");
         fs::create_dir_all(focus.parent().unwrap()).unwrap();
         fs::write(&focus, "# my focus\n").unwrap();
         init_folder_indiana(&d).unwrap();
@@ -378,7 +378,7 @@ mod tests {
         assert!(body.contains("Fix this."));
         assert!(!body.contains("my custom fix wording"));
         // Meta folders are left untouched by replace.
-        let focus = d.join(".indiana/montmartre/focus.md");
+        let focus = d.join(".indiana/chief-of-staff/focus.md");
         fs::create_dir_all(focus.parent().unwrap()).unwrap();
         fs::write(&focus, "# my focus\n").unwrap();
         replace_folder_indiana(&d).unwrap();

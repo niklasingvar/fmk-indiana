@@ -89,7 +89,7 @@ pub fn compile_with_options(index: &Index, options: &CompileOptions) -> Compiled
 
 /// Loop preamble prepended to every non-empty rendered payload. Directs the
 /// agent into `.indiana/context-model/` (read protocol) and instructs the
-/// write-back (log entry + montmartre focus.md). Embedded only — not
+/// write-back (log entry + chief-of-staff focus.md). Embedded only — not
 /// overridable per root.
 const PAYLOAD_PREAMBLE: &str = include_str!("../templates/preamble.md");
 
@@ -271,7 +271,7 @@ mod tests {
         let rendered = render_text(&compile_with_options(&idx, &CompileOptions::default()));
         assert!(rendered.starts_with("INDIANA LOOP"));
         assert!(rendered.contains(".indiana/context-model/CONTEXT-MODEL.md"));
-        assert!(rendered.contains(".indiana/montmartre/focus.md"));
+        assert!(rendered.contains(".indiana/chief-of-staff/focus.md"));
         fs::remove_dir_all(d).ok();
     }
 
