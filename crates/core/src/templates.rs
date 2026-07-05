@@ -131,10 +131,27 @@ fn write_command_templates(root: &Path, overwrite: bool) -> io::Result<()> {
 /// source of truth. Existing files are left byte-identical.
 fn scaffold_meta(root: &Path) -> io::Result<()> {
     let context_model = root.join(".indiana").join("context-model");
-    std::fs::create_dir_all(&context_model)?;
-    let gitkeep = context_model.join(".gitkeep");
-    if !gitkeep.exists() {
-        std::fs::write(gitkeep, include_str!("../templates/context-model/.gitkeep"))?;
+    for (name, body) in [
+        (
+            "CONTEXT-MODEL.md",
+            include_str!("../templates/context-model/CONTEXT-MODEL.md"),
+        ),
+        ("index.md", include_str!("../templates/context-model/index.md")),
+        ("log.md", include_str!("../templates/context-model/log.md")),
+        (
+            "purpose/PURPOSE.md",
+            include_str!("../templates/context-model/purpose/PURPOSE.md"),
+        ),
+        (
+            "learnings/INBOX.md",
+            include_str!("../templates/context-model/learnings/INBOX.md"),
+        ),
+    ] {
+        let path = context_model.join(name);
+        std::fs::create_dir_all(path.parent().unwrap())?;
+        if !path.exists() {
+            std::fs::write(path, body)?;
+        }
     }
 
     let montmartre = root.join(".indiana").join("montmartre");
@@ -295,7 +312,11 @@ mod tests {
     fn test_init_folder_indiana_scaffolds_meta_folders() {
         let d = tmp();
         init_folder_indiana(&d).unwrap();
-        assert!(d.join(".indiana/context-model/.gitkeep").exists());
+        assert!(d.join(".indiana/context-model/CONTEXT-MODEL.md").exists());
+        assert!(d.join(".indiana/context-model/index.md").exists());
+        assert!(d.join(".indiana/context-model/log.md").exists());
+        assert!(d.join(".indiana/context-model/purpose/PURPOSE.md").exists());
+        assert!(d.join(".indiana/context-model/learnings/INBOX.md").exists());
         assert!(d.join(".indiana/montmartre/README.md").exists());
         assert!(d.join(".indiana/montmartre/actions.md").exists());
         assert!(d.join(".indiana/montmartre/notes.md").exists());
@@ -314,7 +335,7 @@ mod tests {
         // The scaffolded action file opens with a `#` heading, then `{message}`.
         let file = fs::read_to_string(d.join(".indiana/indianas/action/prompt.md")).unwrap();
         assert!(file.starts_with("---\n"), "frontmatter first");
-        assert!(file.contains("# ::action —"), "heading present");
+        assert!(file.contains("# ::action"), "heading present");
         assert!(file.contains("\n{message}\n"), "body still {{message}}");
         // The compiler reads only the first non-heading paragraph, so the
         // heading never reaches the compiled prompt.

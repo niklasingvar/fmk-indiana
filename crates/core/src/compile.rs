@@ -87,8 +87,14 @@ pub fn compile_with_options(index: &Index, options: &CompileOptions) -> Compiled
     CompiledPayload { markers, warnings }
 }
 
+/// Loop preamble prepended to every non-empty rendered payload. Directs the
+/// agent into `.indiana/context-model/` (read protocol) and instructs the
+/// write-back (log entry + montmartre focus.md). Embedded only — not
+/// overridable per root.
+const PAYLOAD_PREAMBLE: &str = include_str!("../templates/preamble.md");
+
 pub fn render_text(payload: &CompiledPayload) -> String {
-    payload
+    let markers = payload
         .markers
         .iter()
         .map(|marker| {
@@ -102,7 +108,11 @@ pub fn render_text(payload: &CompiledPayload) -> String {
             )
         })
         .collect::<Vec<_>>()
-        .join("\n---\n")
+        .join("\n---\n");
+    if markers.is_empty() {
+        return markers;
+    }
+    format!("{PAYLOAD_PREAMBLE}\n---\n{markers}")
 }
 
 fn compile_marker(marker: &Located, templates: &HashMap<String, String>) -> CompiledMarker {
@@ -253,6 +263,25 @@ mod tests {
         let payload = compile_with_options(&idx, &CompileOptions::default());
         assert_eq!(payload.markers[0].scope_content, "Fix this");
         fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_render_text_prepends_loop_preamble() {
+        let (d, idx) = index("buggy ::fix it\n");
+        let rendered = render_text(&compile_with_options(&idx, &CompileOptions::default()));
+        assert!(rendered.starts_with("INDIANA LOOP"));
+        assert!(rendered.contains(".indiana/context-model/CONTEXT-MODEL.md"));
+        assert!(rendered.contains(".indiana/montmartre/focus.md"));
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_render_text_empty_payload_has_no_preamble() {
+        let payload = CompiledPayload {
+            markers: Vec::new(),
+            warnings: Vec::new(),
+        };
+        assert_eq!(render_text(&payload), "");
     }
 
     #[test]
