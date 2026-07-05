@@ -10,4 +10,4 @@ message: required
 # ::todo[fo-lo] — user task (passthrough): the message is the prompt.
 
 {message}
-Add this as an unchecked item to the todo list in `.indiana/montmartre/focus.md`.
+Add this as an unchecked item to the todo list in `.indiana/chief-of-staff/focus.md`.

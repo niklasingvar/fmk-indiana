@@ -52,7 +52,7 @@ updated: 2026-07-05
 - New folders and files are created only when the first real content for them exists — never from anticipation.
 - Nothing else lives in this tree: no assets, no code, no artifacts, no prompt templates.
 - Prompt templates live in `.indiana/indianas/<command>/prompt.md`; they LINK to this schema, they never copy it.
-- Focus/task state lives in `.indiana/montmartre/`; the tree stores knowledge, never TODOs.
+- Focus/task state lives in `.indiana/chief-of-staff/`; the tree stores knowledge, never TODOs.
 
 ## 3. FRONTMATTER CONTRACT (mandatory for every file)
 
