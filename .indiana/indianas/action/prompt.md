@@ -7,6 +7,6 @@ command_type: user_task
 message: required
 ---
 
-# ::action — user task (passthrough): the message is the prompt.
+# ::action[mun-sa] — user task (passthrough): the message is the prompt.
 
 {message}

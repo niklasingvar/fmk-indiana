@@ -7,6 +7,7 @@ command_type: user_task
 message: required
 ---
 
-# ::todo — user task (passthrough): the message is the prompt.
+# ::todo[fo-lo] — user task (passthrough): the message is the prompt.
 
 {message}
+Add this as an unchecked item to the todo list in `.indiana/montmartre/focus.md`.
