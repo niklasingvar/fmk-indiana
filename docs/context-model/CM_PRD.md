@@ -22,7 +22,13 @@ approval: pending
 - The loop is an ADLC (https://www.voodootikigod.com/series/adlc) improved with one extra step: every cycle updates the context-model itself. The project gets smarter, not just bigger.
 
 ## Status
-- Scaffold ships an empty folder today; the read/write contract is not yet wired into the prompts. Making it real is [ACTION_PLAN.md](../../ACTION_PLAN.md) Phase 2.
+- MVP wired (2026-07). The schema is [files/CONTEXT-MODEL.md](../../files/CONTEXT-MODEL.md), compressed into the shipped seed
+  `crates/core/templates/context-model/CONTEXT-MODEL.md`; scaffold seeds the schema, `index.md`, `log.md`,
+  `purpose/PURPOSE.md`, and `learnings/INBOX.md`.
+- Read/write contract wired: every rendered copy payload opens with a loop preamble
+  (`crates/core/templates/preamble.md`, embedded in `render_text`) — read protocol in, log entry and
+  `.indiana/montmartre/focus.md` todo update out. `::hate`/`::love`/`::note` templates instruct the
+  `learnings/INBOX.md` write-back. Remaining Phase 5 work: [ACTION_PLAN.md](../../ACTION_PLAN.md).
 
 ## Rules
 - One row = one thing.

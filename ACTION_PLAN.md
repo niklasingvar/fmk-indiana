@@ -50,10 +50,10 @@ Glue so all faces coexist on one machine, every day.
 - Exit: `brew install --cask indiana-casablanca` on a friend's Mac; the diagram's "brew → three products" is literally true.
 
 ## Phase 5 — Context-model becomes real
-- Define the read/write contract in [CM_PRD.md](docs/context-model/CM_PRD.md): files, tree structure, what the agent reads before and writes after.
-- Ship seed files in `crates/core/templates/context-model/` (purpose, preferences, rules) instead of a bare `.gitkeep`.
-- Decide seed frontmatter: the montmartre seeds ship without it and the linter flags them; adding it changes shipped bytes (and the byte-exact scaffold test).
-- Wire the templates: every `prompt.md` directs the agent into the context-model; `::hate`/`::love` instruct the write-back.
+- [x] Define the read/write contract: schema authored in `files/CONTEXT-MODEL.md`, shipped as the seed `CONTEXT-MODEL.md`; [CM_PRD.md](docs/context-model/CM_PRD.md) points at it.
+- [x] Ship seed files in `crates/core/templates/context-model/` (schema, index, log, purpose, learnings INBOX) instead of a bare `.gitkeep`.
+- [ ] Decide seed frontmatter: the montmartre seeds ship without it and the linter flags them; adding it changes shipped bytes (and the byte-exact scaffold test). (Context-model seeds ship with schema frontmatter.)
+- [x] Wire the templates: `render_text` prepends a loop preamble (read protocol + log/focus.md write-back); `::hate`/`::love`/`::note` instruct the INBOX write-back; `::todo` lands in `.indiana/montmartre/focus.md`.
 - Exit: give feedback once in a fixture repo; the next compiled payload carries the learned rule.
 
 ## Phase 6 — Presentations as a feature

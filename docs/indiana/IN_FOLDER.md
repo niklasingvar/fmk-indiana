@@ -56,7 +56,11 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
     delete/prompt.md
     prompt/prompt.md
   context-model/
-    .gitkeep
+    CONTEXT-MODEL.md
+    index.md
+    log.md
+    purpose/PURPOSE.md
+    learnings/INBOX.md
   montmartre/
     README.md
     actions.md
@@ -69,8 +73,10 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
   - `.indiana/indianas/question/prompt.md`
   - `.indiana/indianas/hate/prompt.md`
   - same for `love`, `keep`, `elaborate`, `note`, `action`, `todo`, `delete`, `prompt`
-- `.indiana/context-model/` — current state, direction, rules. Scaffolded empty
-  (a `.gitkeep` only); the user fills it in per repo.
+- `.indiana/context-model/` — per-repo memory ([CM_PRD.md](../context-model/CM_PRD.md)).
+  Scaffolded with seed files: the schema (`CONTEXT-MODEL.md`), the journal
+  (`index.md`, `log.md`), `purpose/PURPOSE.md`, and `learnings/INBOX.md`.
+  The tree grows from there per the schema's own rules.
 - `.indiana/montmartre/` — project management: `README.md`, `actions.md`,
   `notes.md`, `focus.md`, each seeded with a one-line header.
 - `.indiana/montmartre/todos.db` — the Montmartre todo list (SQLite). Created
