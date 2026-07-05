@@ -27,7 +27,7 @@ approval: pending
   `purpose/PURPOSE.md`, and `learnings/INBOX.md`.
 - Read/write contract wired: every rendered copy payload opens with a loop preamble
   (`crates/core/templates/preamble.md`, embedded in `render_text`) — read protocol in, log entry and
-  `.indiana/montmartre/focus.md` todo update out. `::hate`/`::love`/`::note` templates instruct the
+  `.indiana/chief-of-staff/focus.md` todo update out. `::hate`/`::love`/`::note` templates instruct the
   `learnings/INBOX.md` write-back. Remaining Phase 5 work: [ACTION_PLAN.md](../../ACTION_PLAN.md).
 
 ## Rules

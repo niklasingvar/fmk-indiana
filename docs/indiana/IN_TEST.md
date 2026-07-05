@@ -130,7 +130,7 @@ Harness invariants (uphold for any new daemon test):
 | [IN_SCAN.md](IN_SCAN.md) | Deleted file → markers removed from index | `test_watch_delete` — delete a file with markers → markers gone from counts |
 | [IN_SCAN.md](IN_SCAN.md) | Burst of writes debounced to single rescan | `test_watch_debounce` — write 10 files in rapid succession → one rescan, not ten |
 
-## E12 — Montmartre todo CLI
+## E12 — Chief of Staff todo CLI
 | Ref | Requirement | Test |
 |-----|-------------|------|
 | [IN_FOLDER.md](IN_FOLDER.md) | `indiana todo add` stores a row; `list`/`delete` round-trip | `test_todo_add_list_delete` |
@@ -142,7 +142,7 @@ Harness invariants (uphold for any new daemon test):
 | [IN_PRINCIPLES.md](IN_PRINCIPLES.md) | Deleting a todo cascades dependency edges to and from it | `test_todo_dependency_cascade` |
 | [IN_FOLDER.md](IN_FOLDER.md) | Deleting a missing id is a clean failure | `test_todo_delete_not_found` |
 | [IN_FOLDER.md](IN_FOLDER.md) | `--domain` filters the list | `test_todo_list_domain_filter` |
-| [IN_FOLDER.md](IN_FOLDER.md) | The db lives at `.indiana/montmartre/todos.db` | `test_todo_db_path` |
+| [IN_FOLDER.md](IN_FOLDER.md) | The db lives at `.indiana/chief-of-staff/todos.db` | `test_todo_db_path` |
 
 ## What not to test
 - OS behavior: FSEvents delivery, `rename` atomicity, `fsync` durability — these are OS contracts, not Indiana's.

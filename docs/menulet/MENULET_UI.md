@@ -37,7 +37,7 @@ approval: pending
 - Click a folder row: copies its compiled bundle to clipboard. Visual feedback: "copied" flash.
 - Three-dot menu `[⋯]` per row:
   - `update indiana commands`: delegates to `indiana templates refresh <path>` via the sidecar. Creates missing `.indiana/indianas/<command>/prompt.md` files; existing files are left untouched.
-  - `replace indiana commands`: delegates to `indiana templates replace <path>` via the sidecar. Rewrites every `.indiana/indianas/<command>/prompt.md` with the embedded default — destructive, discards user edits to command templates. `context-model/` and `montmartre/` are not touched.
+  - `replace indiana commands`: delegates to `indiana templates replace <path>` via the sidecar. Rewrites every `.indiana/indianas/<command>/prompt.md` with the embedded default — destructive, discards user edits to command templates. `context-model/` and `chief-of-staff/` are not touched.
   - `remove folder`: sends remove command to daemon; daemon drops it from config.
 - Empty state: when no folders are monitored, show a centered "monitor a folder…" prompt that triggers the add picker.
 

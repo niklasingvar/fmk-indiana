@@ -9,8 +9,8 @@ approval: pending
 *The components (codenames live only here — paths and specs use the canonical names, see [MENTAL_MODEL.md](MENTAL_MODEL.md)):*
 - **Indiana** · headless command engine and CLI
 - **Casablanca** · the editor — rich markdown editing, with visual/presentation support as features (retired alias: nimbus)
-- **Montmartre** · human/agent focus management — ADHD style
-- **Context-model** · per-repo memory (retired aliases: COS, Boxydoc)
+- **Chief of Staff** · human/agent focus management — ADHD style (retired alias: montmartre)
+- **Context-model** · per-repo memory (retired aliases: Boxydoc, meta model)
 - **Menulet** · menu-bar surface (retired alias: Bangalore)
 
 ## The Wedge and the Destination
@@ -67,7 +67,7 @@ Everything lives in a `.indiana/` folder inside the repository:
 
 - `indianas/<command>/prompt.md` — one folder per command (`fix`, `hate`, `elaborate`...). Prompt wording fully configurable per project, so `::fix` reads one way in a dev repo and another in a presentation project.
 - `context-model/` — the context-model's home (see below): the rules, purpose, and accumulated learnings for this repo. Every command execution reads it; commands like `::hate` write back to it.
-- `montmartre/` — the focus layer's home (see below).
+- `chief-of-staff/` — the focus layer's home (see below).
 
 **Crucially, Indiana is harness-agnostic.** It never runs its own agent — the collected commands are handed to Claude Code, Codex, Cursor, whatever you already use. Their tokens, their quota, their harness. Indiana operates against the folder; so do they. It complements them rather than competing with them, which sidesteps the fatal problem of asking users to buy tokens in a new system.
 
@@ -101,21 +101,21 @@ The spectrum Casablanca navigates: **raw/native** mode (maximum speed and flexib
 
 **Architecture decision (revised 2026-07):** Casablanca *is* the editor — self-built (Electron + Lexical, `crates/casablanca`), already a working prototype. Nimbalyst (open source, nimbalyst.com) is vendored at `crates/casablanca/nimbalyst/` as reference only: we borrow patterns, not the codebase, and we don't take its name. Visual support — inline Excalidraw, rendered presentations, annotated views — is a set of features inside Casablanca, not a separate module or product. A local `settings.json` per project keeps viewer configuration alongside the repo — same philosophy as `.indiana/`: configuration is files in the folder.
 
-### Montmartre — human/agent focus management, ADHD style
+### Chief of Staff — human/agent focus management, ADHD style
 
 *Status: unbaked — this is vision, deliberately not yet designed. Architecture comes after the vision settles.*
 
-Not status-tracking; attention-tracking. Montmartre is focus management for a human working with agents, including a ticket system. The direction: two queues — **Human TODOs** (what the operator needs to decide, review, or provide) and **Agent TODOs** (work items the agents can pick up autonomously).
+Not status-tracking; attention-tracking. Chief of Staff is focus management for a human working with agents, including a ticket system. The direction: two queues — **Human TODOs** (what the operator needs to decide, review, or provide) and **Agent TODOs** (work items the agents can pick up autonomously).
 
 Indiana reads the Agent TODO queue and executes against it; completed loops and open questions flow back as Human TODOs. The point is a clean division of labor: the human queue stays short and decision-shaped, the agent queue drains in the background, and at any moment the answer to "what should I be doing right now?" is one glance away.
 
-(What exists today — a flat `todos.db` and scaffolded markdown files under `.indiana/montmartre/` — is a placeholder, not the design.)
+(What exists today — a flat `todos.db` and scaffolded markdown files under `.indiana/chief-of-staff/` — is a placeholder, not the design.)
 
 ### Menulet — the menu-bar surface
 
 A lightweight, always-visible macOS menu bar app. Today it is deliberately small: monitored folders, marker counts, one-click copy of the compiled Indiana payload — so the copy-paste-into-your-agent loop never requires opening a terminal ([MENULET_PRD.md](docs/menulet/MENULET_PRD.md)).
 
-In the future it becomes the smallest possible surface for the whole system: current focus, per-project status (what's running, what's waiting on you) — a window onto Montmartre. Either way it stays deliberately dumb: it visualizes, it triggers, it never computes. Its simplicity is the feature.
+In the future it becomes the smallest possible surface for the whole system: current focus, per-project status (what's running, what's waiting on you) — a window onto Chief of Staff. Either way it stays deliberately dumb: it visualizes, it triggers, it never computes. Its simplicity is the feature.
 
 ---
 

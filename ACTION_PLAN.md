@@ -10,17 +10,17 @@ approval: pending
 > North star: open a repo in Casablanca, edit markdown inline, tag `::` markers, hit `Copy all`, paste into the agent, watch the fix land — zero terminal.
 
 ## Phase 0 — Truth alignment (docs only)
-- [x] Canonical names adopted ([MENTAL_MODEL.md](MENTAL_MODEL.md)); COS, Boxydoc, Bangalore retired from paths and specs.
-- [x] Doc folders renamed: `docs/indiana/`, `docs/menulet/`, `docs/casablanca/`, `docs/context-model/`, `docs/montmartre/`.
+- [x] Canonical names adopted ([MENTAL_MODEL.md](MENTAL_MODEL.md)); Boxydoc, Bangalore retired from paths and specs. (COS was a context-model alias; reused as the chief-of-staff doc prefix in Phase 7.)
+- [x] Doc folders renamed: `docs/indiana/`, `docs/menulet/`, `docs/casablanca/`, `docs/context-model/`, `docs/chief-of-staff/`.
 - [x] Dead relative links fixed; CLAUDE.md updated.
 - [x] VISION.md aligned with reality: `.indiana/indianas/` layout, context-model naming, custom command kinds marked as planned, wedge/destination section added.
-- [x] Montmartre declared vision-first, architecture later ([MM_VISION.md](docs/montmartre/MM_VISION.md)).
+- [x] Chief of Staff declared vision-first, architecture later ([COS_VISION.md](docs/chief-of-staff/COS_VISION.md)).
 - [x] `temp_system.md` deleted; `COS_PRD.md` rewritten as [CM_PRD.md](docs/context-model/CM_PRD.md).
 - [x] Templates given one home: `crates/core/templates/` (full `prompt.md` files absorb `prompts.toml` + the Rust scaffold codegen + `scaffold/`). This repo's `.indiana/` is dogfood, free to diverge; `test_embedded_templates_match_marker_table` replaces the repo-mirror test.
 - [x] `.indiana/indianas/RULES.md` moved to [IN_COMMAND_RULES.md](docs/indiana/IN_COMMAND_RULES.md) — spec content, not instance data.
 - [x] Editor identity settled (2026-07): Casablanca is the editor, self-built at `crates/casablanca/`; nimbalyst is vendored reference only; presentations are a feature ([CASABLANCA_PRD.md](docs/casablanca/CASABLANCA_PRD.md)).
-- [ ] Sweep remaining docs (IN_*, MENULET_*) for stale claims. (Frontmatter part done: `indiana frontmatter` now flags only the four montmartre template seeds — that call is Phase 5's.)
-- Exit: `rg -i 'bangalore|boxydoc|\bCOS\b|visualviewer|\bnimbus\b'` finds nothing outside retired-alias notes and git history; every doc link resolves.
+- [ ] Sweep remaining docs (IN_*, MENULET_*) for stale claims. (Frontmatter part done: `indiana frontmatter` now flags only the four chief-of-staff template seeds — that call is Phase 5's.)
+- Exit: `rg -i 'bangalore|boxydoc|montmartre|visualviewer|\bnimbus\b'` finds nothing outside retired-alias notes and git history; every doc link resolves.
 
 ## Phase 1 — Casablanca MVP: the daily loop
 The goal state. Prototype exists (3-pane shell, vault, Lexical WYSIWYG, autosave, watcher); what's missing is safety and the button. Detail: [crates/casablanca/TASKS.md](crates/casablanca/TASKS.md).
@@ -52,8 +52,8 @@ Glue so all faces coexist on one machine, every day.
 ## Phase 5 — Context-model becomes real
 - [x] Define the read/write contract: schema authored in `files/CONTEXT-MODEL.md`, shipped as the seed `CONTEXT-MODEL.md`; [CM_PRD.md](docs/context-model/CM_PRD.md) points at it.
 - [x] Ship seed files in `crates/core/templates/context-model/` (schema, index, log, purpose, learnings INBOX) instead of a bare `.gitkeep`.
-- [ ] Decide seed frontmatter: the montmartre seeds ship without it and the linter flags them; adding it changes shipped bytes (and the byte-exact scaffold test). (Context-model seeds ship with schema frontmatter.)
-- [x] Wire the templates: `render_text` prepends a loop preamble (read protocol + log/focus.md write-back); `::hate`/`::love`/`::note` instruct the INBOX write-back; `::todo` lands in `.indiana/montmartre/focus.md`.
+- [ ] Decide seed frontmatter: the chief-of-staff seeds ship without it and the linter flags them; adding it changes shipped bytes (and the byte-exact scaffold test). (Context-model seeds ship with schema frontmatter.)
+- [x] Wire the templates: `render_text` prepends a loop preamble (read protocol + log/focus.md write-back); `::hate`/`::love`/`::note` instruct the INBOX write-back; `::todo` lands in `.indiana/chief-of-staff/focus.md`.
 - Exit: give feedback once in a fixture repo; the next compiled payload carries the learned rule.
 
 ## Phase 6 — Presentations as a feature
@@ -61,9 +61,9 @@ Glue so all faces coexist on one machine, every day.
 - Rendered deck view from template-first, content/design-separated files ([VISION.md](VISION.md) presentation flow); annotation boxes emit ordinary `::` markers into source.
 - Exit: review one real deck end to end without opening a code editor.
 
-## Phase 7 — Montmartre vision, then design
-- Settle [MM_VISION.md](docs/montmartre/MM_VISION.md): what a ticket is, queue semantics, what "focus" means operationally.
-- Only then write MM_PRD and build the human/agent queues; menulet gains the focus view after that.
+## Phase 7 — Chief of Staff vision, then design
+- Settle [COS_VISION.md](docs/chief-of-staff/COS_VISION.md): what a ticket is, queue semantics, what "focus" means operationally.
+- Only then write COS_PRD and build the human/agent queues; menulet gains the focus view after that.
 - Exit: "what should I be doing right now?" answered by one glance at the menulet.
 
 ## Phase 8 — Auto-run

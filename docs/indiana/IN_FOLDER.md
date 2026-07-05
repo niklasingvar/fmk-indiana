@@ -23,7 +23,7 @@ approval: pending
 
 ## Refresh
 - `indiana templates refresh <path>` creates any missing command template files
-  and any missing `context-model/` / `montmartre/` meta files.
+  and any missing `context-model/` / `chief-of-staff/` meta files.
 - Existing files are left byte-identical.
 - To take a newer embedded default for one command, delete that command's `prompt.md`, then refresh.
 - Menulet "update indiana commands" per-folder action delegates to this command via the sidecar.
@@ -34,7 +34,7 @@ approval: pending
 - It is destructive: user edits to command templates are discarded. Use it to
   reset a folder's commands back to the embedded wording.
 - Scoped to `indianas/` command templates only — `context-model/` and
-  `montmartre/` are not touched.
+  `chief-of-staff/` are not touched.
 - Menulet "replace indiana commands" per-folder action delegates to this command via the sidecar.
 
 ## Layout
@@ -61,7 +61,7 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
     log.md
     purpose/PURPOSE.md
     learnings/INBOX.md
-  montmartre/
+  chief-of-staff/
     README.md
     actions.md
     notes.md
@@ -77,11 +77,11 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
   Scaffolded with seed files: the schema (`CONTEXT-MODEL.md`), the journal
   (`index.md`, `log.md`), `purpose/PURPOSE.md`, and `learnings/INBOX.md`.
   The tree grows from there per the schema's own rules.
-- `.indiana/montmartre/` — project management: `README.md`, `actions.md`,
+- `.indiana/chief-of-staff/` — project management: `README.md`, `actions.md`,
   `notes.md`, `focus.md`, each seeded with a one-line header.
-- `.indiana/montmartre/todos.db` — the Montmartre todo list (SQLite). Created
+- `.indiana/chief-of-staff/todos.db` — the Chief of Staff todo list (SQLite). Created
   on first `indiana todo` command, not by `add`/`refresh` scaffolding. See
-  [IN_PRINCIPLES.md](IN_PRINCIPLES.md) Montmartre carve-out: it is authoritative
+  [IN_PRINCIPLES.md](IN_PRINCIPLES.md) Chief of Staff carve-out: it is authoritative
   state separate from `::todo` markers. Fields: `id` (Indiana-style), `todo`
   (max 29 words), `domain`, and `dependencies` (ids of existing todos). `indiana
   todo add|list|delete` is the read/write face; `--json` is the agent surface.
@@ -92,7 +92,7 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
 the on-disk `.indiana/` is real, editable content — not derived cache:
 - Everything comes from `crates/core/templates/`, the single authoring source:
   command templates (`indianas/<command>/prompt.md`, full files written
-  verbatim) and meta folder seeds (`context-model/`, `montmartre/`). Edit a
+  verbatim) and meta folder seeds (`context-model/`, `chief-of-staff/`). Edit a
   file there to change what new monitored roots start with.
 - A root's existing file always wins; delete it and `indiana templates refresh`
   to re-seed. Existing files on disk are left byte-identical.

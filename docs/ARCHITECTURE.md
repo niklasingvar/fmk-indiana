@@ -18,7 +18,7 @@ approval: pending
 | MCP | agent face: compiled payload as structured data | `indiana mcp` | built, unverified |
 | menulet | glanceable face: folders, counts, one-click copy | Tauri app (`crates/menulet`) | shipped |
 | context-model | per-repo memory agents read and write back | files in `.indiana/context-model/` | scaffold only |
-| montmartre | per-repo todos for humans and agents | `todos.db` + `indiana todo` | v1 shipped |
+| chief-of-staff | per-repo todos for humans and agents | `todos.db` + `indiana todo` | v1 shipped |
 | casablanca | the editor: rich markdown editing, artifact review | Electron app (`crates/casablanca`) | prototype — MVP is ACTION_PLAN Phase 1 |
 
 ## The two loops
@@ -46,14 +46,14 @@ approval: pending
 | copy cursor | `~/.indiana/copied.json` | interaction history | safe to delete |
 | command templates | `.indiana/indianas/` | user-authored input | re-scaffold defaults |
 | context-model | `.indiana/context-model/` | accumulated knowledge | no — this is the point |
-| montmartre todos | `.indiana/montmartre/todos.db` | authoritative state | no |
+| chief-of-staff todos | `.indiana/chief-of-staff/todos.db` | authoritative state | no |
 
 ## Boundaries
 - Core computes; faces (CLI, MCP, menulet, casablanca) render. A face never parses, counts, or assembles prompts.
 - One write chokepoint mutates user files: byte-preserving, atomic, mtime-guarded, idempotent.
 - Indiana never runs an agent. It compiles; existing harnesses (Claude Code, Codex, Cursor) execute. Their tokens, their quota.
 - casablanca is downstream of the agent, indiana is downstream of the human. They meet only in the folder.
-- montmartre state does not flow through the markdown chokepoint; `indiana todo` is its single face.
+- chief-of-staff state does not flow through the markdown chokepoint; `indiana todo` is its single face.
 
 ## Handoff evolution
 1. Copy-paste — `indiana copy` to clipboard. Shipped.

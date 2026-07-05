@@ -1,10 +1,10 @@
 ---
 status: draft
-purpose: Vision for Montmartre — human/agent focus management including a ticket system. Deliberately not yet designed.
+purpose: Vision for Chief of Staff — human/agent focus management including a ticket system. Deliberately not yet designed.
 approval: pending
 ---
 
-# MM — VISION
+# COS — VISION
 
 > Unbaked by decision (2026-07): vision first, architecture later. Nothing here is a spec; do not build against this file.
 
@@ -19,11 +19,11 @@ approval: pending
 - The menulet becomes its glanceable surface — later ([MENULET_PRD.md](../menulet/MENULET_PRD.md) stays lightweight for now).
 
 ## What exists today (placeholder, not design)
-- `.indiana/montmartre/todos.db` — flat list via `indiana todo add|list|delete`, `--json` for agents.
+- `.indiana/chief-of-staff/todos.db` — flat list via `indiana todo add|list|delete`, `--json` for agents.
 - Scaffolded `actions.md`, `notes.md`, `focus.md`.
 - Treat these as a stub that proved plumbing; the queue model above may replace them wholesale.
 
 ## Before any architecture
 - Settle the vision: what is a ticket, what state moves it between queues, what does "focus" mean operationally.
 - Decide the relationship between `::todo`/`::action` markers and the queues.
-- Then, and only then, an MM_PRD.
+- Then, and only then, a COS_PRD.

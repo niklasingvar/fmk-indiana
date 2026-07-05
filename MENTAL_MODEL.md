@@ -26,10 +26,10 @@ fmk-indiana is simultaneously a thing being built, a thing being specified, a th
 
 ### Product specs
 - Define each product: scope, invariants, behavior. Spec wins or spec changes ([IN_PRINCIPLES.md](docs/indiana/IN_PRINCIPLES.md)).
-- `docs/ARCHITECTURE.md` (system), `docs/indiana/IN_*.md`, `docs/menulet/MENULET_*.md`, `docs/casablanca/CASABLANCA_*.md`, `docs/context-model/CM_*.md`, `docs/montmartre/MM_*.md`.
+- `docs/ARCHITECTURE.md` (system), `docs/indiana/IN_*.md`, `docs/menulet/MENULET_*.md`, `docs/casablanca/CASABLANCA_*.md`, `docs/context-model/CM_*.md`, `docs/chief-of-staff/COS_*.md`.
 
 ### Templates
-- The single authoring source for everything a monitored root starts with: `crates/core/templates/` — full `indianas/<command>/prompt.md` files (written verbatim) plus meta seeds for `context-model/` and `montmartre/`.
+- The single authoring source for everything a monitored root starts with: `crates/core/templates/` — full `indianas/<command>/prompt.md` files (written verbatim) plus meta seeds for `context-model/` and `chief-of-staff/`.
 - Embedded into the binary at compile time; lives inside `crates/core/` because a packaged crate build carries only the crate dir.
 - Not documentation. Specs describe the fix command; the template file *is* the fix command. Changing a word here changes what users receive.
 - Guard: `test_embedded_templates_match_marker_table` pins each template's frontmatter to its marker TABLE row.
@@ -55,8 +55,8 @@ fmk-indiana is simultaneously a thing being built, a thing being specified, a th
 | marker engine + daemon + CLI | indiana | `IN_` | — |
 | menu-bar face | menulet | `MENULET_` | Bangalore |
 | the editor | casablanca | `CASABLANCA_` | nimbus, visualviewer |
-| per-repo memory | context-model | `CM_` | COS, Boxydoc, meta model |
-| human/agent focus layer | montmartre | `MM_` | — |
+| per-repo memory | context-model | `CM_` | Boxydoc, meta model |
+| human/agent focus layer | chief-of-staff | `COS_` | montmartre |
 
 - Build doc: `ALLCAPS.md` at repo root or `docs/` root. No prefix.
 - Spec: `docs/<canonical>/<PREFIX>_TOPIC.md`. Folder name = canonical name, nothing appended (`docs/indiana/`, not `docs/indiana-engine/`).
