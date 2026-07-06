@@ -55,16 +55,14 @@ export function FolderPane({ vault }: { vault: Vault }) {
           </div>
         )}
 
-        {tree?.children?.length ? (
-          tree.children.map((node) => (
-            <FileTree
-              key={node.path}
-              node={node}
-              depth={0}
-              activePath={activeNote?.path ?? null}
-              onOpen={openNote}
-            />
-          ))
+        {tree?.children?.length && vaultState.status === 'ready' ? (
+          <FileTree
+            key={vaultState.rootPath}
+            tree={tree}
+            activePath={activeNote?.path ?? null}
+            onOpen={openNote}
+            vaultKey={vaultState.rootPath}
+          />
         ) : (
           <p className="px-3 py-4 text-xs text-text-muted">
             No notes yet. Create one with +.
