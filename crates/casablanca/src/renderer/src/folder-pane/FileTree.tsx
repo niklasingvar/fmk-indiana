@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { TreeNode } from '@shared/domain'
+import type { GitStatusMap, TreeNode } from '@shared/domain'
 import { ancestorsOf, flattenTree, type FlatTreeNode } from '@shared/flatten-tree'
 import { FileTreeRow } from './FileTreeRow'
 import { treeKeyAction, typeAheadIndex } from './tree-keys'
@@ -16,12 +16,14 @@ export function FileTree({
   tree,
   activePath,
   onOpen,
-  vaultKey
+  vaultKey,
+  gitStatus
 }: {
   tree: TreeNode
   activePath: string | null
   onOpen: (rel: string) => void
   vaultKey: string
+  gitStatus: GitStatusMap
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed(vaultKey))
   const [focused, setFocused] = useState<number | null>(null)
@@ -35,11 +37,11 @@ export function FileTree({
 
   useEffect(() => saveCollapsed(vaultKey, collapsed), [vaultKey, collapsed])
 
-  // Reveal the active file: expand its ancestors when it changes.
+  // Reveal the active file: expand the root and its ancestors when it changes.
   useEffect(() => {
     if (!activePath) return
     setCollapsed((prev) => {
-      const hidden = ancestorsOf(activePath).filter((a) => prev.has(a))
+      const hidden = ['', ...ancestorsOf(activePath)].filter((a) => prev.has(a))
       if (hidden.length === 0) return prev
       const next = new Set(prev)
       for (const a of hidden) next.delete(a)
@@ -109,7 +111,12 @@ export function FileTree({
             else rowRefs.current.delete(node.index)
           }}
         >
-          <FileTreeRow node={node} isFocused={focused === node.index} onClick={clickRow} />
+          <FileTreeRow
+            node={node}
+            isFocused={focused === node.index}
+            status={node.path === '' ? undefined : gitStatus[node.path]}
+            onClick={clickRow}
+          />
         </div>
       ))}
     </div>

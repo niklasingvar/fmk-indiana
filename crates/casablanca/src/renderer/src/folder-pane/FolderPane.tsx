@@ -5,12 +5,9 @@ import { FileTree } from './FileTree'
 type Vault = ReturnType<typeof useVault>
 
 export function FolderPane({ vault }: { vault: Vault }) {
-  const { tree, vaultState, activeNote, openNote, createNote } = vault
+  const { tree, gitStatus, vaultState, activeNote, openNote, createNote } = vault
   const [creatingIn, setCreatingIn] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
-
-  const rootName =
-    vaultState.status === 'ready' ? vaultState.rootPath.split('/').pop() ?? 'Vault' : 'Vault'
 
   const submitNew = async (dirRel: string): Promise<void> => {
     const name = newName.trim()
@@ -23,7 +20,7 @@ export function FolderPane({ vault }: { vault: Vault }) {
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-pane-border px-3 py-2">
         <span className="truncate text-xs font-semibold uppercase tracking-wide text-text-muted">
-          {rootName}
+          Files
         </span>
         <button
           title="New note in vault root"
@@ -62,6 +59,7 @@ export function FolderPane({ vault }: { vault: Vault }) {
             activePath={activeNote?.path ?? null}
             onOpen={openNote}
             vaultKey={vaultState.rootPath}
+            gitStatus={gitStatus}
           />
         ) : (
           <p className="px-3 py-4 text-xs text-text-muted">

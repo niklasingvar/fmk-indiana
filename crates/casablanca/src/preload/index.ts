@@ -4,6 +4,7 @@ import type {
   AnnotationRequest,
   AnnotationResult,
   CopyAllResult,
+  GitStatusMap,
   Note,
   TreeNode,
   VaultState
@@ -46,6 +47,13 @@ const api = {
       const listener = (_e: unknown, relPath: string): void => cb(relPath)
       ipcRenderer.on(IPC.PREVIEW_CHANGED, listener)
       return () => ipcRenderer.removeListener(IPC.PREVIEW_CHANGED, listener)
+    }
+  },
+  git: {
+    onChanged: (cb: (map: GitStatusMap) => void): (() => void) => {
+      const listener = (_e: unknown, map: GitStatusMap): void => cb(map)
+      ipcRenderer.on(IPC.GIT_CHANGED, listener)
+      return () => ipcRenderer.removeListener(IPC.GIT_CHANGED, listener)
     }
   },
   indiana: {

@@ -27,9 +27,10 @@ const tree: TreeNode = {
 }
 
 describe('flattenTree', () => {
-  it('flattens depth-first with depth, index, and parent tracking', () => {
+  it('emits the root row first, then flattens depth-first', () => {
     const flat = flattenTree(tree, new Set(), null)
     expect(flat.map((n) => n.path)).toEqual([
+      '',
       'docs',
       'docs/a.md',
       'docs/deep',
@@ -37,21 +38,35 @@ describe('flattenTree', () => {
       'site',
       'readme.md'
     ])
-    expect(flat.map((n) => n.depth)).toEqual([0, 1, 1, 2, 0, 0])
-    expect(flat.map((n) => n.index)).toEqual([0, 1, 2, 3, 4, 5])
-    expect(flat[3].parentPath).toBe('docs/deep')
-    expect(flat[5].parentPath).toBeNull()
+    expect(flat.map((n) => n.depth)).toEqual([0, 1, 2, 2, 3, 1, 1])
+    expect(flat.map((n) => n.index)).toEqual([0, 1, 2, 3, 4, 5, 6])
+    expect(flat[0].name).toBe('vault')
+    expect(flat[1].parentPath).toBe('')
+    expect(flat[4].parentPath).toBe('docs/deep')
   })
 
   it('skips the whole subtree of a collapsed folder', () => {
     const flat = flattenTree(tree, new Set(['docs']), null)
-    expect(flat.map((n) => n.path)).toEqual(['docs', 'site', 'readme.md'])
+    expect(flat.map((n) => n.path)).toEqual(['', 'docs', 'site', 'readme.md'])
+    expect(flat[1].isExpanded).toBe(false)
+  })
+
+  it('collapsing the root folds the whole tree', () => {
+    const flat = flattenTree(tree, new Set(['']), null)
+    expect(flat.map((n) => n.path)).toEqual([''])
     expect(flat[0].isExpanded).toBe(false)
   })
 
   it('collapsing a nested folder keeps its siblings visible', () => {
     const flat = flattenTree(tree, new Set(['docs/deep']), null)
-    expect(flat.map((n) => n.path)).toEqual(['docs', 'docs/a.md', 'docs/deep', 'site', 'readme.md'])
+    expect(flat.map((n) => n.path)).toEqual([
+      '',
+      'docs',
+      'docs/a.md',
+      'docs/deep',
+      'site',
+      'readme.md'
+    ])
   })
 
   it('marks the active file and empty folders', () => {

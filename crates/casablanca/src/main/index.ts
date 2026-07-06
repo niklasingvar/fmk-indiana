@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { registerIpc } from './ipc'
 import { watchVault } from './watcher'
 import { readTree } from './lib/vault'
+import { gitStatus } from './lib/git'
 import { registerVaultProtocol, registerVaultSchemeAsPrivileged } from './preview/protocol'
 import { IPC } from '@shared/ipc'
 
@@ -55,6 +56,7 @@ app.whenReady().then(async () => {
     mainWindow.webContents.once('did-finish-load', async () => {
       try {
         mainWindow?.webContents.send(IPC.TREE_CHANGED, await readTree(vault))
+        mainWindow?.webContents.send(IPC.GIT_CHANGED, await gitStatus(vault))
       } catch (err) {
         console.error('[main] initial tree push failed', err)
       }

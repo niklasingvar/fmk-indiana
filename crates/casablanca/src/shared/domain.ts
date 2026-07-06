@@ -82,6 +82,12 @@ export interface VaultConfig {
   rootPath: string
 }
 
+/** Simplified git working-tree state, used to tint tree rows. */
+export type GitFileStatus = 'modified' | 'new' | 'deleted'
+
+/** Vault-relative path → status; folders carry their children's aggregate. */
+export type GitStatusMap = Record<string, GitFileStatus>
+
 export type VaultState =
   | { status: 'unset' }
   | { status: 'ready'; rootPath: string }

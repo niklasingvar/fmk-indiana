@@ -39,6 +39,10 @@ export async function readTree(vault: VaultConfig): Promise<TreeNode> {
   return root
 }
 
+/** Heavy or derived folders the tree never shows; dotfolders like .indiana stay visible. */
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'target', 'dist', 'out'])
+const SKIP_FILES = new Set(['.DS_Store'])
+
 async function walk(root: string, rel: string): Promise<TreeNode[]> {
   const abs = join(root, rel)
   const out: TreeNode[] = []
@@ -49,7 +53,7 @@ async function walk(root: string, rel: string): Promise<TreeNode[]> {
     return out
   }
   for (const d of dirents) {
-    if (d.name.startsWith('.')) continue
+    if (d.isDirectory() ? SKIP_DIRS.has(d.name) : SKIP_FILES.has(d.name)) continue
     const childRel = rel ? `${rel}/${d.name}` : d.name
     if (d.isDirectory()) {
       out.push({ path: childRel, name: d.name, type: 'folder' })

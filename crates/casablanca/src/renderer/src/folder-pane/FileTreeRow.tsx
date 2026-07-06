@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import type { GitFileStatus } from '@shared/domain'
 import type { FlatTreeNode } from '@shared/flatten-tree'
 
 /** Base indent (px) applied to every row, growing by depth. */
@@ -14,22 +15,33 @@ export function fileKind(name: string): FileKind {
   return 'other'
 }
 
+const GIT_TINT: Record<GitFileStatus, string> = {
+  modified: 'text-git-modified',
+  new: 'text-git-new',
+  deleted: 'text-git-deleted'
+}
+
 /**
  * One tree row, purely presentational (nimbalyst's FileTreeRow split).
  * Rows are divs, not buttons: focus stays on the tree container, which owns
  * the keyboard; `isFocused` draws the roving cursor distinct from active.
+ * Git status tints the icon+name; guides mark each open ancestor level.
  */
 export const FileTreeRow = memo(function FileTreeRow({
   node,
   isFocused,
+  status,
   onClick
 }: {
   node: FlatTreeNode
   isFocused: boolean
+  status?: GitFileStatus
   onClick: (node: FlatTreeNode) => void
 }) {
   const indent = node.depth * INDENT_STEP + INDENT_BASE
   const isFolder = node.type === 'folder'
+  const isRoot = node.path === ''
+  const tint = status ? GIT_TINT[status] : ''
 
   return (
     <div
@@ -38,32 +50,41 @@ export const FileTreeRow = memo(function FileTreeRow({
       aria-expanded={isFolder ? node.isExpanded : undefined}
       aria-selected={node.isActive}
       onClick={() => onClick(node)}
-      className={`relative flex h-7 w-full cursor-pointer items-center gap-1.5 rounded-md pr-2 text-[13px] transition-colors ${
+      className={`relative flex h-8 w-full cursor-pointer items-center rounded-md pr-2 text-sm transition-colors ${
         node.isActive
-          ? 'bg-pane-active text-gray-50'
-          : isFolder
-            ? 'text-text-muted hover:bg-pane-hover hover:text-gray-200'
-            : 'text-gray-300 hover:bg-pane-hover hover:text-gray-100'
-      } ${isFocused ? 'ring-1 ring-inset ring-accent/60' : ''}`}
+          ? 'bg-pane-active ring-1 ring-inset ring-accent'
+          : 'hover:bg-pane-hover'
+      } ${!node.isActive && isFocused ? 'ring-1 ring-inset ring-accent/50' : ''}`}
       style={{ paddingLeft: indent }}
     >
-      {node.isActive && (
-        <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-accent" />
-      )}
-      {isFolder ? (
-        <>
-          <Chevron open={node.isExpanded} />
-          <FolderIcon open={node.isExpanded} />
-          <span className="truncate">{node.name}</span>
-        </>
-      ) : (
-        <>
-          {/* Spacer aligns file names under folder names (chevron width). */}
-          <span className="w-4 shrink-0" />
-          <FileIcon kind={fileKind(node.name)} active={node.isActive} />
-          <span className="truncate">{displayName(node.name)}</span>
-        </>
-      )}
+      {/* Indent guides: one ruler per open ancestor level. */}
+      {Array.from({ length: node.depth }, (_, a) => (
+        <span
+          key={a}
+          className="pointer-events-none absolute top-0 bottom-0 w-px bg-pane-border"
+          style={{ left: a * INDENT_STEP + INDENT_BASE + 7 }}
+        />
+      ))}
+      <span
+        className={`flex min-w-0 items-center gap-1.5 ${
+          tint || (isRoot ? 'font-medium text-text-strong' : 'text-text-body')
+        }`}
+      >
+        {isFolder ? (
+          <>
+            <Chevron open={node.isExpanded} />
+            <FolderIcon open={node.isExpanded} />
+            <span className="truncate">{node.name}</span>
+          </>
+        ) : (
+          <>
+            {/* Spacer aligns file names under folder names (chevron width). */}
+            <span className="w-4 shrink-0" />
+            <FileIcon kind={fileKind(node.name)} />
+            <span className="truncate">{displayName(node.name)}</span>
+          </>
+        )}
+      </span>
     </div>
   )
 })
@@ -82,7 +103,7 @@ function Chevron({ open }: { open: boolean }) {
       height="16"
       viewBox="0 0 16 16"
       fill="none"
-      className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}
+      className={`shrink-0 text-text-muted transition-transform ${open ? 'rotate-90' : ''}`}
       aria-hidden
     >
       <path
@@ -118,25 +139,16 @@ function FolderIcon({ open }: { open: boolean }) {
   )
 }
 
-function FileIcon({ kind, active }: { kind: FileKind; active: boolean }) {
-  const tone = active ? 'text-accent' : kind === 'sidecar' ? 'text-accent/70' : 'text-text-muted'
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      className={`shrink-0 ${tone}`}
-      aria-hidden
-    >
-      <path
-        d="M4.5 1.75h4L12 5.25v8a1 1 0 01-1 1H4.5a1 1 0 01-1-1v-10.5a1 1 0 011-1z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
-      <path d="M8.25 1.75V5.5H12" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-      {kind === 'html' && (
+function FileIcon({ kind }: { kind: FileKind }) {
+  if (kind === 'html') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0" aria-hidden>
+        <path
+          d="M4.5 1.75h4L12 5.25v8a1 1 0 01-1 1H4.5a1 1 0 01-1-1v-10.5a1 1 0 011-1z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+        />
         <path
           d="M6.4 8.2L5.2 9.4l1.2 1.2M9.6 8.2l1.2 1.2-1.2 1.2"
           stroke="currentColor"
@@ -144,11 +156,36 @@ function FileIcon({ kind, active }: { kind: FileKind; active: boolean }) {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-      )}
+      </svg>
+    )
+  }
+  if (kind === 'other') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0" aria-hidden>
+        <path
+          d="M4.5 1.75h4L12 5.25v8a1 1 0 01-1 1H4.5a1 1 0 01-1-1v-10.5a1 1 0 011-1z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+        />
+        <path d="M8.25 1.75V5.5H12" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+  // Open book for markdown; sidecars add the two annotation dots.
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0" aria-hidden>
+      <path
+        d="M8 3.6c-1.2-.9-3-1.1-5-.9v9.5c2-.2 3.8 0 5 .9 1.2-.9 3-1.1 5-.9V2.7c-2-.2-3.8 0-5 .9z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path d="M8 3.6v9.5" stroke="currentColor" strokeWidth="1.2" />
       {kind === 'sidecar' && (
         <>
-          <circle cx="6.4" cy="9.5" r="0.9" fill="currentColor" />
-          <circle cx="9.6" cy="9.5" r="0.9" fill="currentColor" />
+          <circle cx="5.2" cy="7.4" r="0.8" fill="currentColor" />
+          <circle cx="10.8" cy="7.4" r="0.8" fill="currentColor" />
         </>
       )}
     </svg>

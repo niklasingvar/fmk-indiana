@@ -3,6 +3,7 @@ import { sep } from 'node:path'
 import { BrowserWindow } from 'electron'
 import { IPC } from '@shared/ipc'
 import { readTree } from './lib/vault'
+import { gitStatus } from './lib/git'
 import type { TreeNode, VaultConfig } from '@shared/domain'
 
 /**
@@ -20,6 +21,9 @@ export function watchVault(vault: VaultConfig, getWindow: () => BrowserWindow | 
     timer = setTimeout(() => {
       void readTree(vault).then((tree: TreeNode) => {
         getWindow()?.webContents.send(IPC.TREE_CHANGED, tree)
+      })
+      void gitStatus(vault).then((map) => {
+        getWindow()?.webContents.send(IPC.GIT_CHANGED, map)
       })
     }, 150)
   }
@@ -41,7 +45,8 @@ export function watchVault(vault: VaultConfig, getWindow: () => BrowserWindow | 
     .watch(['**/*.md', '**/*.mdx', '**/*.html', '**/*.htm'], {
       cwd: vault.rootPath,
       ignoreInitial: true,
-      ignored: /(^|[/\\])\./,
+      // Dotfolders like .indiana are watched; only heavy/derived dirs are not.
+      ignored: (p: string) => /(^|[/\\])(\.git|node_modules|target|dist|out)([/\\]|$)/.test(p),
       awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 }
     })
     .on('all', (event, path) => {

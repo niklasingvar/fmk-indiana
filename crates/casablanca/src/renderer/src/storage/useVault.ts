@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Note, NoteDocument, TreeNode, VaultState } from '@shared/domain'
+import type { GitStatusMap, Note, NoteDocument, TreeNode, VaultState } from '@shared/domain'
 import { isHtmlPath } from '@shared/annotation-line'
 import { parseNoteDocument, serializeNoteDocument } from '@shared/note-serialization'
 
@@ -17,6 +17,7 @@ const AUTOSAVE_MS = 500
 export function useVault() {
   const [vaultState, setVaultState] = useState<VaultState>({ status: 'unset' })
   const [tree, setTree] = useState<TreeNode | null>(null)
+  const [gitStatus, setGitStatus] = useState<GitStatusMap>({})
   const [activeNote, setActiveNote] = useState<Note | null>(null)
   const [draft, setDraft] = useState<NoteDocument | null>(null)
   const [saving, setSaving] = useState(false)
@@ -32,6 +33,12 @@ export function useVault() {
     const off = window.api.tree.onChanged((t) => setTree(t))
     void window.api.tree.read().then(setTree)
     return off
+  }, [vaultState])
+
+  // Git working-tree status pushed alongside every tree refresh.
+  useEffect(() => {
+    if (vaultState.status !== 'ready') return
+    return window.api.git.onChanged(setGitStatus)
   }, [vaultState])
 
   // Debounced autosave: when the serialized draft diverges from the saved
@@ -89,6 +96,7 @@ export function useVault() {
   return {
     vaultState,
     tree,
+    gitStatus,
     activeNote,
     draft,
     saving,

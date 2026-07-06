@@ -49,7 +49,20 @@ export function flattenTree(
     }
   }
 
-  walk(root, 0, null)
+  // The vault root is row 0; collapsing it folds the whole tree.
+  const rootExpanded = !collapsed.has(root.path)
+  out.push({
+    path: root.path,
+    name: root.name,
+    type: 'folder',
+    depth: 0,
+    index: 0,
+    parentPath: null,
+    hasChildren: (root.children?.length ?? 0) > 0,
+    isExpanded: rootExpanded,
+    isActive: false
+  })
+  if (rootExpanded) walk(root, 1, root.path)
   return out
 }
 

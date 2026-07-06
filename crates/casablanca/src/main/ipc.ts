@@ -5,6 +5,7 @@ import type { AnnotationRequest, VaultConfig } from '@shared/domain'
 import { getVaultConfig, setVaultConfig } from './lib/config'
 import { copyAllMarkers } from './lib/indiana'
 import { appendAnnotation } from './lib/annotations'
+import { gitStatus } from './lib/git'
 import { readTree, readNote, writeNote, createNote, deleteNote, toRelative } from './lib/vault'
 
 type Sender = Pick<BrowserWindow, 'webContents'>
@@ -30,7 +31,9 @@ export async function registerIpc(sender: Sender): Promise<IpcRegistration> {
   }
 
   const refresh = async (): Promise<void> => {
-    if (vault) sender.webContents.send(IPC.TREE_CHANGED, await readTree(vault))
+    if (!vault) return
+    sender.webContents.send(IPC.TREE_CHANGED, await readTree(vault))
+    sender.webContents.send(IPC.GIT_CHANGED, await gitStatus(vault))
   }
 
   const handle = (channel: string, fn: (...args: unknown[]) => unknown): void => {

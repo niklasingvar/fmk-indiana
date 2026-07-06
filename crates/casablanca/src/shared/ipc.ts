@@ -18,6 +18,7 @@ export const IPC = {
 
   TREE_CHANGED: 'tree:changed',
   PREVIEW_CHANGED: 'preview:changed',
+  GIT_CHANGED: 'git:changed',
 
   ANNOTATION_APPEND: 'annotation:append',
 
