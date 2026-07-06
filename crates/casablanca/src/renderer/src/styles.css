@@ -6,7 +6,9 @@
   --pane: 30 30 33;
   --pane-border: 48 48 52;
   --pane-hover: 42 42 46;
+  --pane-active: 52 54 62;
   --text-muted: 140 140 150;
+  --accent: 96 132 250;
   color-scheme: dark;
 }
 

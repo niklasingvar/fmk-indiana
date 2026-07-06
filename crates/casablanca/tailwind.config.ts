@@ -8,7 +8,9 @@ export default {
         pane: 'rgb(var(--pane) / <alpha-value>)',
         'pane-border': 'rgb(var(--pane-border) / <alpha-value>)',
         'pane-hover': 'rgb(var(--pane-hover) / <alpha-value>)',
-        'text-muted': 'rgb(var(--text-muted) / <alpha-value>)'
+        'pane-active': 'rgb(var(--pane-active) / <alpha-value>)',
+        'text-muted': 'rgb(var(--text-muted) / <alpha-value>)',
+        accent: 'rgb(var(--accent) / <alpha-value>)'
       }
     }
   },
