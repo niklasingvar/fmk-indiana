@@ -8,12 +8,19 @@ import {
 } from '@lexical/markdown'
 
 import { createTableTransformer } from './TableMarkdownTransformer'
+import { $mergeCodeLinks, CODE_LINK_EXPORT } from './merge-code-links'
 
 export type TransformerPack = Transformer[]
 
 const TABLE = createTableTransformer(() => MARKDOWN_TRANSFORMERS)
 
-export const MARKDOWN_TRANSFORMERS: TransformerPack = [TABLE, ...TRANSFORMERS]
+export const MARKDOWN_TRANSFORMERS: TransformerPack = [TABLE, CODE_LINK_EXPORT, ...TRANSFORMERS]
+
+/** Import markdown + the code-text link repair pass (see merge-code-links). */
+export function $importMarkdown(markdown: string, transformers: TransformerPack): void {
+  $convertFromMarkdownString(markdown, transformers)
+  $mergeCodeLinks()
+}
 
 interface Props {
   markdown: string
@@ -33,7 +40,7 @@ export function MarkdownPlugin({ markdown, onChange, transformers }: Props) {
   // Import the initial markdown into the editor once it is ready.
   useEffect(() => {
     editor.update(() => {
-      $convertFromMarkdownString(markdown, transformers)
+      $importMarkdown(markdown, transformers)
       lastEmitted.current = markdown
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps

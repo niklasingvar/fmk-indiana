@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createHeadlessEditor } from '@lexical/headless'
-import { $convertFromMarkdownString, $convertToMarkdownString } from '@lexical/markdown'
+import { $convertToMarkdownString } from '@lexical/markdown'
 import { HeadingNode, QuoteNode } from '@lexical/rich-text'
 import { ListNode, ListItemNode } from '@lexical/list'
-import { LinkNode } from '@lexical/link'
+import { $isLinkNode, LinkNode } from '@lexical/link'
 import { CodeNode, CodeHighlightNode } from '@lexical/code'
 import { TableCellNode, TableNode, TableRowNode } from '@lexical/table'
-import { MARKDOWN_TRANSFORMERS } from './plugins/MarkdownPlugin'
+import { $getRoot, $isElementNode, type LexicalNode } from 'lexical'
+import { $importMarkdown, MARKDOWN_TRANSFORMERS } from './plugins/MarkdownPlugin'
 
 /**
  * Marker safety: `::` marker lines must survive markdown → Lexical → markdown.
@@ -15,17 +16,21 @@ import { MARKDOWN_TRANSFORMERS } from './plugins/MarkdownPlugin'
  * transformers as the real editor (Editor.tsx).
  */
 
-function roundTrip(markdown: string): string {
-  const editor = createHeadlessEditor({
+function makeEditor() {
+  return createHeadlessEditor({
     namespace: 'casablanca-test',
     nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, CodeHighlightNode, TableNode, TableRowNode, TableCellNode],
     onError: (error: Error) => {
       throw error
     }
   })
+}
+
+function roundTrip(markdown: string): string {
+  const editor = makeEditor()
   editor.update(
     () => {
-      $convertFromMarkdownString(markdown, MARKDOWN_TRANSFORMERS)
+      $importMarkdown(markdown, MARKDOWN_TRANSFORMERS)
     },
     { discrete: true }
   )
@@ -34,6 +39,25 @@ function roundTrip(markdown: string): string {
     out = $convertToMarkdownString(MARKDOWN_TRANSFORMERS)
   })
   return out
+}
+
+function countLinks(markdown: string): number {
+  const editor = makeEditor()
+  editor.update(
+    () => {
+      $importMarkdown(markdown, MARKDOWN_TRANSFORMERS)
+    },
+    { discrete: true }
+  )
+  let count = 0
+  editor.read(() => {
+    const walk = (node: LexicalNode): void => {
+      if ($isLinkNode(node)) count++
+      if ($isElementNode(node)) node.getChildren().forEach(walk)
+    }
+    walk($getRoot())
+  })
+  return count
 }
 
 describe('marker tokens survive the round-trip', () => {
@@ -126,5 +150,35 @@ describe('document round-trip stability (canonical form)', () => {
     const out = roundTrip(doc)
     expect(out).toContain('line one ::fix tighten')
     expect(out).toContain('line two ::hate')
+  })
+})
+
+describe('links import as LinkNodes and round-trip', () => {
+  it('plain links stay links and byte-stable', () => {
+    const doc = 'see [the spec](./docs/spec.md) for details'
+    expect(roundTrip(doc)).toBe(doc)
+    expect(countLinks(doc)).toBe(1)
+  })
+
+  it('links with inline-code text become links (merge pass) and round-trip', () => {
+    const doc = 'see [`ANNOTATE.md`](./ANNOTATE.md) for classes'
+    expect(roundTrip(doc)).toBe(doc)
+    expect(countLinks(doc)).toBe(1)
+  })
+
+  it('merges code-text links inside table cells', () => {
+    const table = [
+      '| I want to... | Go to |',
+      '| --- | --- |',
+      '| Annotate | [`review/annotate.html`](./review/annotate.html) |'
+    ].join('\n')
+    expect(roundTrip(table)).toBe(table)
+    expect(countLinks(table)).toBe(1)
+  })
+
+  it('leaves near-misses untouched', () => {
+    const doc = 'brackets [ `code` ] (not-a-link) and `code`](dangling)'
+    expect(roundTrip(doc)).toBe(doc)
+    expect(countLinks(doc)).toBe(0)
   })
 })
