@@ -47,6 +47,36 @@ export interface CopyAllResult {
   message: string
 }
 
+/** Marker kinds offered by the HTML-preview annotation bubble. */
+export type AnnotationKind =
+  | 'question'
+  | 'fix'
+  | 'elaborate'
+  | 'hate'
+  | 'love'
+  | 'keep'
+  | 'delete'
+  | 'note'
+  | 'todo'
+
+/** A single element annotation made in the HTML preview. */
+export interface AnnotationRequest {
+  /** Vault-relative posix path of the annotated HTML document. */
+  docRelPath: string
+  /** CSS selector for the element, computed by the injected annotator. */
+  selector: string
+  /** Short visible-text excerpt of the element. */
+  excerpt: string
+  kind: AnnotationKind
+  /** User message; the contract per kind lives in `annotation-line.ts`. */
+  message?: string
+}
+
+export interface AnnotationResult {
+  /** Vault-relative path of the sidecar markdown file that received the line. */
+  sidecarRelPath: string
+}
+
 export interface VaultConfig {
   /** Absolute path to the vault folder on disk. */
   rootPath: string

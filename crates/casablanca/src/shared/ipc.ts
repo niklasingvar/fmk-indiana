@@ -17,6 +17,9 @@ export const IPC = {
   NOTE_DELETE: 'note:delete',
 
   TREE_CHANGED: 'tree:changed',
+  PREVIEW_CHANGED: 'preview:changed',
+
+  ANNOTATION_APPEND: 'annotation:append',
 
   INDIANA_COPY_ALL: 'indiana:copy-all'
 } as const
