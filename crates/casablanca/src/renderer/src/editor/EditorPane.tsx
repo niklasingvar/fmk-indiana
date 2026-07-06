@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isHtmlPath } from '@shared/annotation-line'
 import { isExternalLink, resolveVaultLink } from '@shared/resolve-link'
+import type { TreeNode } from '@shared/domain'
 import type { useVault } from '../storage/useVault'
 import { initTheme, setTheme, type Theme } from '../app/theme'
 import { HtmlPreview } from '../preview/HtmlPreview'
@@ -75,9 +76,22 @@ function ThemeToggle() {
 }
 
 export function EditorPane({ vault }: { vault: Vault }) {
-  const { activeNote, draft, setDraftBody, saving, openNote, goBack, goForward, canBack, canForward } =
+  const { activeNote, draft, setDraftBody, saving, openNote, goBack, goForward, canBack, canForward, tree } =
     vault
   const isHtml = activeNote !== null && isHtmlPath(activeNote.path)
+
+  // Every file in the vault, for the @-mention suggestion list.
+  const filePaths = useMemo(() => {
+    const out: string[] = []
+    const walk = (n: TreeNode): void => {
+      for (const c of n.children ?? []) {
+        if (c.type === 'file') out.push(c.path)
+        else walk(c)
+      }
+    }
+    if (tree) walk(tree)
+    return out
+  }, [tree])
 
   // Cmd/ctrl+click on a link: vault-internal targets open in the editor,
   // external ones go through main's window-open handler to the OS browser.
@@ -150,6 +164,8 @@ export function EditorPane({ vault }: { vault: Vault }) {
               markdown={draft.body}
               onChange={setDraftBody}
               onOpenLink={openLink}
+              notePath={activeNote.path}
+              filePaths={filePaths}
             />
           </div>
         </div>

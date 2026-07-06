@@ -39,3 +39,23 @@ export function resolveVaultLink(fromPath: string, href: string): string | null 
   if (!resolved) return null
   return /\.(mdx?|html?)$/i.test(resolved) ? resolved : `${resolved}.md`
 }
+
+/**
+ * The inverse: the relative href to write in the note at `fromPath` so it
+ * resolves to `toPath`. Same-or-deeper targets get a `./` prefix.
+ */
+export function relativeLink(fromPath: string, toPath: string): string {
+  const fromDirs = fromPath.split('/').slice(0, -1)
+  const toParts = toPath.split('/')
+  let common = 0
+  while (
+    common < fromDirs.length &&
+    common < toParts.length - 1 &&
+    fromDirs[common] === toParts[common]
+  ) {
+    common++
+  }
+  const ups = fromDirs.length - common
+  const rest = toParts.slice(common).join('/')
+  return ups === 0 ? `./${rest}` : `${'../'.repeat(ups)}${rest}`
+}

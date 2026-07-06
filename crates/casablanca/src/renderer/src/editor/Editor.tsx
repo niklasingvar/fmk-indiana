@@ -16,25 +16,29 @@ import { CodeNode, CodeHighlightNode } from '@lexical/code'
 import { TableCellNode, TableNode, TableRowNode } from '@lexical/table'
 
 import { MarkdownPlugin, MARKDOWN_TRANSFORMERS } from './plugins/MarkdownPlugin'
+import { MentionLinkPlugin } from './plugins/MentionLinkPlugin'
 
 interface Props {
   markdown: string
   onChange: (markdown: string) => void
-  /** Called with the raw href when the user cmd/ctrl+clicks a link. */
+  /** Called with the raw href when the user clicks a link. */
   onOpenLink?: (href: string) => void
+  /** Vault-relative path of this note — enables @-mention link insertion. */
+  notePath?: string
+  /** All file paths in the vault, for the @ suggestion list. */
+  filePaths?: string[]
 }
 
 /**
- * Cmd/ctrl+click follows links (plain click keeps placing the caret so link
- * text stays editable). The raw href goes to the host, which decides between
- * opening a vault note and the OS browser.
+ * Clicking a link follows it — browser feel. To edit link text, click beside
+ * the link and arrow in (or edit the markdown around it). The raw href goes
+ * to the host, which decides between a vault note and the OS browser.
  */
 function LinkOpenPlugin({ onOpenLink }: { onOpenLink: (href: string) => void }) {
   const [editor] = useLexicalComposerContext()
 
   useEffect(() => {
     const onClick = (e: MouseEvent): void => {
-      if (!e.metaKey && !e.ctrlKey) return
       const anchor = (e.target as HTMLElement | null)?.closest?.('a')
       const href = anchor?.getAttribute('href')
       if (!href) return
@@ -51,7 +55,7 @@ function LinkOpenPlugin({ onOpenLink }: { onOpenLink: (href: string) => void }) 
   return null
 }
 
-export function LexicalEditor({ markdown, onChange, onOpenLink }: Props) {
+export function LexicalEditor({ markdown, onChange, onOpenLink, notePath, filePaths }: Props) {
   const config = {
     namespace: 'casablanca-editor',
     nodes: [
@@ -70,7 +74,7 @@ export function LexicalEditor({ markdown, onChange, onOpenLink }: Props) {
       root: 'casablanca-editor',
       paragraph: 'my-2',
       text: { bold: 'font-semibold', italic: 'italic', code: 'rounded bg-code-bg px-1 font-mono' },
-      link: 'text-accent underline',
+      link: 'text-accent underline cursor-pointer',
       list: { ul: 'list-disc pl-6', ol: 'list-decimal pl-6', listitem: 'my-0.5' },
       code: 'block rounded bg-code-bg p-3 font-mono text-sm overflow-auto',
       quote: 'border-l-2 border-pane-border pl-4 italic text-text-muted',
@@ -99,6 +103,9 @@ export function LexicalEditor({ markdown, onChange, onOpenLink }: Props) {
       <TablePlugin hasHorizontalScroll />
       <LinkPlugin />
       {onOpenLink && <LinkOpenPlugin onOpenLink={onOpenLink} />}
+      {notePath && filePaths && filePaths.length > 0 && (
+        <MentionLinkPlugin notePath={notePath} filePaths={filePaths} />
+      )}
       <HistoryPlugin />
       <AutoFocusPlugin />
       <MarkdownPlugin markdown={markdown} onChange={onChange} transformers={MARKDOWN_TRANSFORMERS} />
