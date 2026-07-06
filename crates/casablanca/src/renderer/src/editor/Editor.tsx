@@ -33,18 +33,41 @@ interface Props {
  * Clicking a link follows it — browser feel. To edit link text, click beside
  * the link and arrow in (or edit the markdown around it). The raw href goes
  * to the host, which decides between a vault note and the OS browser.
+ *
+ * Docs in the wild also wrap whole links — or bare paths — in inline code
+ * (`[x](./x.md)`, `build/page.html`). Those are code spans in markdown, not
+ * links, but the click intent is obvious: clicking such a chip extracts the
+ * target and follows it too. Unresolvable targets no-op.
  */
+function chipTarget(code: HTMLElement): string | null {
+  const text = (code.textContent ?? '').trim()
+  const fullLink = text.match(/^\[[^\]]*\]\(([^()\s]+)\)$/)
+  if (fullLink) return fullLink[1]
+  if (/^[\w./-]+\.[A-Za-z0-9]+\/?$/.test(text)) return text
+  return null
+}
+
 function LinkOpenPlugin({ onOpenLink }: { onOpenLink: (href: string) => void }) {
   const [editor] = useLexicalComposerContext()
 
   useEffect(() => {
     const onClick = (e: MouseEvent): void => {
-      const anchor = (e.target as HTMLElement | null)?.closest?.('a')
+      const target = e.target as HTMLElement | null
+      const anchor = target?.closest?.('a')
       const href = anchor?.getAttribute('href')
-      if (!href) return
+      if (href) {
+        e.preventDefault()
+        e.stopPropagation()
+        onOpenLink(href)
+        return
+      }
+      const code = target?.closest?.('code')
+      if (!code) return
+      const chipHref = chipTarget(code)
+      if (!chipHref) return
       e.preventDefault()
       e.stopPropagation()
-      onOpenLink(href)
+      onOpenLink(chipHref)
     }
     return editor.registerRootListener((root, prevRoot) => {
       prevRoot?.removeEventListener('click', onClick)

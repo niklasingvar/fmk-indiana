@@ -62,6 +62,12 @@ body {
 }
 .casablanca-editor pre code { @apply bg-transparent p-0; }
 .casablanca-editor a { @apply text-accent underline cursor-pointer; }
+/* Code-formatted link text reads as a link, not a chip. */
+.casablanca-editor a code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
 .casablanca-editor blockquote {
   @apply border-l-2 border-pane-border pl-4 text-text-muted italic my-3;
 }

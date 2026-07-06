@@ -40,6 +40,11 @@ describe('resolveVaultLink', () => {
     expect(resolveVaultLink('docs/guide.md', '#anchor')).toBeNull()
     expect(resolveVaultLink('top.md', '../../etc/passwd')).toBeNull()
   })
+
+  it('rejects non-editor extensions instead of appending .md', () => {
+    expect(resolveVaultLink('docs/guide.md', './logo.png')).toBeNull()
+    expect(resolveVaultLink('docs/guide.md', './card.css')).toBeNull()
+  })
 })
 
 describe('relativeLink', () => {

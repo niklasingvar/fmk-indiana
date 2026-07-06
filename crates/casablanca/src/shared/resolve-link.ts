@@ -37,7 +37,11 @@ export function resolveVaultLink(fromPath: string, href: string): string | null 
   }
   const resolved = segs.join('/')
   if (!resolved) return null
-  return /\.(mdx?|html?)$/i.test(resolved) ? resolved : `${resolved}.md`
+  if (/\.(mdx?|html?)$/i.test(resolved)) return resolved
+  // Other extensions (images, css, …) aren't openable in the editor; only
+  // extensionless targets get the wiki-style `.md` appended.
+  if (/\.[A-Za-z0-9]+$/.test(resolved)) return null
+  return `${resolved}.md`
 }
 
 /**
