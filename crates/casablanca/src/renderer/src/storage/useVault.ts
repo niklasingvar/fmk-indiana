@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitStatusMap, Note, NoteDocument, TreeNode, VaultState } from '@shared/domain'
 import { isHtmlPath } from '@shared/annotation-line'
 import { parseNoteDocument, serializeNoteDocument } from '@shared/note-serialization'
@@ -63,7 +63,7 @@ export function useVault() {
     if (res) setVaultState(res)
   }, [])
 
-  const openNote = useCallback(async (rel: string) => {
+  const loadNote = useCallback(async (rel: string) => {
     // HTML documents render in the preview, not Lexical: no content read,
     // no draft, no autosave — the preview iframe loads via vault:// itself.
     if (isHtmlPath(rel)) {
@@ -76,12 +76,52 @@ export function useVault() {
     setDraft(parseNoteDocument(note.content))
   }, [])
 
-  const createNote = useCallback(async (dirRel: string, name: string) => {
-    const note = await window.api.notes.create(dirRel, name)
-    setActiveNote(note)
-    setDraft(parseNoteDocument(note.content))
-    return note
+  // Browser-style history over opened paths: openNote pushes, back/forward
+  // move the cursor and load without pushing.
+  const nav = useRef({ stack: [] as string[], cursor: -1 })
+  const [, setNavTick] = useState(0)
+
+  const pushNav = useCallback((rel: string) => {
+    const { stack, cursor } = nav.current
+    if (stack[cursor] === rel) return
+    nav.current = { stack: [...stack.slice(0, cursor + 1), rel], cursor: cursor + 1 }
+    setNavTick((t) => t + 1)
   }, [])
+
+  const openNote = useCallback(
+    async (rel: string) => {
+      await loadNote(rel)
+      pushNav(rel)
+    },
+    [loadNote, pushNav]
+  )
+
+  const goBack = useCallback(async () => {
+    const { stack, cursor } = nav.current
+    if (cursor <= 0) return
+    nav.current = { stack, cursor: cursor - 1 }
+    setNavTick((t) => t + 1)
+    await loadNote(stack[cursor - 1]).catch(() => {})
+  }, [loadNote])
+
+  const goForward = useCallback(async () => {
+    const { stack, cursor } = nav.current
+    if (cursor >= stack.length - 1) return
+    nav.current = { stack, cursor: cursor + 1 }
+    setNavTick((t) => t + 1)
+    await loadNote(stack[cursor + 1]).catch(() => {})
+  }, [loadNote])
+
+  const createNote = useCallback(
+    async (dirRel: string, name: string) => {
+      const note = await window.api.notes.create(dirRel, name)
+      setActiveNote(note)
+      setDraft(parseNoteDocument(note.content))
+      pushNav(note.path)
+      return note
+    },
+    [pushNav]
+  )
 
   const closeNote = useCallback(() => {
     setActiveNote(null)
@@ -104,6 +144,10 @@ export function useVault() {
     chooseVault,
     openNote,
     createNote,
-    closeNote
+    closeNote,
+    goBack,
+    goForward,
+    canBack: nav.current.cursor > 0,
+    canForward: nav.current.cursor < nav.current.stack.length - 1
   }
 }

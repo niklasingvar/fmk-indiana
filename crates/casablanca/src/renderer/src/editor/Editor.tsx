@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { AutoFocusPlugin } from '@lexical/react/LexicalAutoFocusPlugin'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
 import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin'
@@ -18,9 +20,38 @@ import { MarkdownPlugin, MARKDOWN_TRANSFORMERS } from './plugins/MarkdownPlugin'
 interface Props {
   markdown: string
   onChange: (markdown: string) => void
+  /** Called with the raw href when the user cmd/ctrl+clicks a link. */
+  onOpenLink?: (href: string) => void
 }
 
-export function LexicalEditor({ markdown, onChange }: Props) {
+/**
+ * Cmd/ctrl+click follows links (plain click keeps placing the caret so link
+ * text stays editable). The raw href goes to the host, which decides between
+ * opening a vault note and the OS browser.
+ */
+function LinkOpenPlugin({ onOpenLink }: { onOpenLink: (href: string) => void }) {
+  const [editor] = useLexicalComposerContext()
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent): void => {
+      if (!e.metaKey && !e.ctrlKey) return
+      const anchor = (e.target as HTMLElement | null)?.closest?.('a')
+      const href = anchor?.getAttribute('href')
+      if (!href) return
+      e.preventDefault()
+      e.stopPropagation()
+      onOpenLink(href)
+    }
+    return editor.registerRootListener((root, prevRoot) => {
+      prevRoot?.removeEventListener('click', onClick)
+      root?.addEventListener('click', onClick)
+    })
+  }, [editor, onOpenLink])
+
+  return null
+}
+
+export function LexicalEditor({ markdown, onChange, onOpenLink }: Props) {
   const config = {
     namespace: 'casablanca-editor',
     nodes: [
@@ -67,6 +98,7 @@ export function LexicalEditor({ markdown, onChange }: Props) {
       <ListPlugin />
       <TablePlugin hasHorizontalScroll />
       <LinkPlugin />
+      {onOpenLink && <LinkOpenPlugin onOpenLink={onOpenLink} />}
       <HistoryPlugin />
       <AutoFocusPlugin />
       <MarkdownPlugin markdown={markdown} onChange={onChange} transformers={MARKDOWN_TRANSFORMERS} />

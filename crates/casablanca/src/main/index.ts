@@ -33,8 +33,15 @@ function createWindow(): BrowserWindow {
   win.on('ready-to-show', () => win.show())
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    if (/^https?:/i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  // The window never navigates away from the app; external URLs go to the
+  // OS browser (Track 2 security boundary).
+  win.webContents.on('will-navigate', (e, url) => {
+    e.preventDefault()
+    if (/^https?:/i.test(url)) void shell.openExternal(url)
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
