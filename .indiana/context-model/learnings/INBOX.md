@@ -24,3 +24,7 @@ updated: 2026-07-06
 ### [2026-07-06] adopt | .indiana/context-model
 insight: hand notes from the retired INDIANA.md folded here on adoption; the one idea not yet in the tree — "information cone hierarchy: depth 1 = domain modelling" (the rest already live in the schema and rules/GLOBAL.md).
 promote_to: architecture
+
+### [2026-07-06] audit | commands ↔ schema §7
+insight: write-backs verified in the shipped templates (hate/love/note → INBOX, todo → chief-of-staff/focus.md, preamble → log.md); the one drift is §9's `::lint` — no such marker exists, recorded in [DECISIONS.md](../architecture/DECISIONS.md).
+promote_to: architecture.decisions
