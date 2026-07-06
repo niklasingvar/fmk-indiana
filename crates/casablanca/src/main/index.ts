@@ -3,10 +3,15 @@ import { join } from 'node:path'
 import { registerIpc } from './ipc'
 import { watchVault } from './watcher'
 import { readTree } from './lib/vault'
+import { registerVaultProtocol, registerVaultSchemeAsPrivileged } from './preview/protocol'
 import { IPC } from '@shared/ipc'
 
 let mainWindow: BrowserWindow | null = null
 let activeWatcher: ReturnType<typeof watchVault> | null = null
+
+// Must happen before app.whenReady() so vault:// is a standard scheme and
+// relative asset URLs inside previewed HTML resolve through the handler.
+registerVaultSchemeAsPrivileged()
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -42,7 +47,8 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(async () => {
   mainWindow = createWindow()
-  const vault = await registerIpc(mainWindow)
+  const { vault, getVault } = await registerIpc(mainWindow)
+  registerVaultProtocol(getVault)
 
   if (vault) {
     activeWatcher = watchVault(vault, () => mainWindow)
