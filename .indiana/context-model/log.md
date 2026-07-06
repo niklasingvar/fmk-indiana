@@ -1,13 +1,17 @@
 ---
-id: journal.log
+id: log
 layer: journal
 status: active
 owner: agent
-purpose: Append-only record of every loop that touched this repo — what ran, when, against what.
+purpose: Append-only record of every loop that touched this repo — greppable, chronological, never edited.
 upstream: []
-updated: 2026-07-05
+updated: 2026-07-06
 ---
 
-# log
+# LOG
 
-Append one entry per command execution: `## [YYYY-MM-DD] <command> | <target> — one-line outcome`
+- Entry format: `## [YYYY-MM-DD] <command> | <target> — one-line outcome`. Append only; never edit or delete an entry.
+- Greppable by design: `grep "^## \[" log.md | tail -5` shows the last five loops.
+
+## [2026-07-05] init | context-model — tree scaffolded per CONTEXT-MODEL.md schema; seed files created, all indexed.
+## [2026-07-06] adopt | .indiana/context-model — prepared tree from files/context-model installed as the dogfood instance; INDIANA.md folded into learnings/INBOX.md; stale montmartre folder removed.
