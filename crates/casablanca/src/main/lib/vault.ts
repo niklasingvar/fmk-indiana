@@ -3,6 +3,8 @@ import { basename, join, relative, sep } from 'node:path'
 import type { Note, TreeNode, VaultConfig } from '@shared/domain'
 
 const NOTE_EXTENSION = '.md'
+/** What the tree shows: notes plus previewable HTML documents. */
+const TRACKED_EXTENSIONS = ['.md', '.html', '.htm']
 
 function toPosix(p: string): string {
   return p.split(sep).join('/')
@@ -10,6 +12,11 @@ function toPosix(p: string): string {
 
 function isNote(name: string): boolean {
   return name.toLowerCase().endsWith(NOTE_EXTENSION)
+}
+
+function isTracked(name: string): boolean {
+  const lower = name.toLowerCase()
+  return TRACKED_EXTENSIONS.some((ext) => lower.endsWith(ext))
 }
 
 /** Read the vault into a sorted tree projection (folders first, then files). */
@@ -47,7 +54,7 @@ async function walk(root: string, rel: string): Promise<TreeNode[]> {
     if (d.isDirectory()) {
       out.push({ path: childRel, name: d.name, type: 'folder' })
       out.push(...(await walk(root, childRel)))
-    } else if (d.isFile() && isNote(d.name)) {
+    } else if (d.isFile() && isTracked(d.name)) {
       out.push({ path: childRel, name: d.name, type: 'file' })
     }
   }
