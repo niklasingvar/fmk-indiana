@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Note, NoteDocument, TreeNode, VaultState } from '@shared/domain'
+import { isHtmlPath } from '@shared/annotation-line'
 import { parseNoteDocument, serializeNoteDocument } from '@shared/note-serialization'
 
 const AUTOSAVE_MS = 500
@@ -56,6 +57,13 @@ export function useVault() {
   }, [])
 
   const openNote = useCallback(async (rel: string) => {
+    // HTML documents render in the preview, not Lexical: no content read,
+    // no draft, no autosave — the preview iframe loads via vault:// itself.
+    if (isHtmlPath(rel)) {
+      setActiveNote({ path: rel, name: rel.split('/').pop() ?? rel, content: '', updatedAt: 0 })
+      setDraft(null)
+      return
+    }
     const note = await window.api.notes.read(rel)
     setActiveNote(note)
     setDraft(parseNoteDocument(note.content))

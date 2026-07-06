@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isHtmlPath } from '@shared/annotation-line'
 import type { useVault } from '../storage/useVault'
+import { HtmlPreview } from '../preview/HtmlPreview'
 import { LexicalEditor } from './Editor'
 
 type Vault = ReturnType<typeof useVault>
@@ -54,17 +56,22 @@ function CopyAllButton() {
 
 export function EditorPane({ vault }: { vault: Vault }) {
   const { activeNote, draft, setDraftBody, saving } = vault
+  const isHtml = activeNote !== null && isHtmlPath(activeNote.path)
 
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-pane-border px-6 py-2 text-xs text-text-muted">
         <span className="truncate font-mono">{activeNote ? activeNote.path : 'No note open'}</span>
         <span className="flex items-center gap-3">
-          {activeNote && <span>{saving ? 'Saving…' : 'Saved'}</span>}
+          {activeNote && !isHtml && <span>{saving ? 'Saving…' : 'Saved'}</span>}
           <CopyAllButton />
         </span>
       </header>
-      {activeNote && draft ? (
+      {activeNote && isHtml ? (
+        <div className="flex-1 overflow-hidden">
+          <HtmlPreview key={activeNote.path} relPath={activeNote.path} />
+        </div>
+      ) : activeNote && draft ? (
         <div className="flex-1 overflow-auto">
           <div className="mx-auto max-w-3xl px-8 py-8">
             <LexicalEditor key={activeNote.path} markdown={draft.body} onChange={setDraftBody} />

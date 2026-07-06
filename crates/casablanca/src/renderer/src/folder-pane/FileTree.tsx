@@ -129,5 +129,8 @@ function FileIcon({ active }: { active: boolean }) {
 }
 
 function stripMd(name: string): string {
+  // Keep the .md visible on annotation sidecars ("page.html.md") so they
+  // stay distinguishable from the document they annotate ("page.html").
+  if (/\.html?\.md$/i.test(name)) return name
   return name.replace(/\.md$/i, '')
 }
