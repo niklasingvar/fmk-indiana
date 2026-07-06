@@ -38,15 +38,15 @@ export function LexicalEditor({ markdown, onChange }: Props) {
     theme: {
       root: 'casablanca-editor',
       paragraph: 'my-2',
-      text: { bold: 'font-semibold', italic: 'italic', code: 'rounded bg-black/30 px-1 font-mono' },
-      link: 'text-blue-400 underline',
+      text: { bold: 'font-semibold', italic: 'italic', code: 'rounded bg-code-bg px-1 font-mono' },
+      link: 'text-accent underline',
       list: { ul: 'list-disc pl-6', ol: 'list-decimal pl-6', listitem: 'my-0.5' },
-      code: 'block rounded bg-black/40 p-3 font-mono text-sm overflow-auto',
+      code: 'block rounded bg-code-bg p-3 font-mono text-sm overflow-auto',
       quote: 'border-l-2 border-pane-border pl-4 italic text-text-muted',
       heading: {
-        h1: 'text-2xl font-semibold mt-6 mb-3',
-        h2: 'text-xl font-semibold mt-5 mb-2',
-        h3: 'text-lg font-semibold mt-4 mb-2'
+        h1: 'text-2xl font-semibold mt-6 mb-3 text-text-strong',
+        h2: 'text-xl font-semibold mt-5 mb-2 text-text-strong',
+        h3: 'text-lg font-semibold mt-4 mb-2 text-text-strong'
       },
       table: 'casablanca-table',
       tableCell: 'casablanca-table-cell',

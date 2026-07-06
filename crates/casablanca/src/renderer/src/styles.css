@@ -2,13 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light is the default; .dark on <html> flips the palette (see app/theme.ts). */
 :root {
+  --pane: 236 236 234;
+  --pane-border: 213 213 209;
+  --pane-hover: 226 226 222;
+  --pane-active: 250 250 249;
+  --text-muted: 130 128 120;
+  --text-body: 68 66 60;
+  --text-strong: 40 38 34;
+  --accent: 66 110 245;
+  --code-bg: 224 224 220;
+  --git-modified: 158 124 16;
+  --git-new: 74 138 68;
+  --git-deleted: 191 82 60;
+  color-scheme: light;
+}
+
+:root.dark {
   --pane: 30 30 33;
   --pane-border: 48 48 52;
   --pane-hover: 42 42 46;
   --pane-active: 52 54 62;
   --text-muted: 140 140 150;
+  --text-body: 205 205 210;
+  --text-strong: 235 235 240;
   --accent: 96 132 250;
+  --code-bg: 18 18 21;
+  --git-modified: 205 174 66;
+  --git-new: 108 190 100;
+  --git-deleted: 235 120 100;
   color-scheme: dark;
 }
 
@@ -20,7 +43,7 @@ body,
 }
 
 body {
-  @apply bg-pane text-gray-100 antialiased;
+  @apply bg-pane text-text-body antialiased;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 
@@ -28,17 +51,17 @@ body {
 .casablanca-editor {
   @apply outline-none;
 }
-.casablanca-editor h1 { @apply text-2xl font-semibold mt-6 mb-3; }
-.casablanca-editor h2 { @apply text-xl font-semibold mt-5 mb-2; }
-.casablanca-editor h3 { @apply text-lg font-semibold mt-4 mb-2; }
+.casablanca-editor h1 { @apply text-2xl font-semibold mt-6 mb-3 text-text-strong; }
+.casablanca-editor h2 { @apply text-xl font-semibold mt-5 mb-2 text-text-strong; }
+.casablanca-editor h3 { @apply text-lg font-semibold mt-4 mb-2 text-text-strong; }
 .casablanca-editor p { @apply my-2 leading-relaxed; }
 .casablanca-editor ul { @apply list-disc pl-6 my-2; }
 .casablanca-editor ol { @apply list-decimal pl-6 my-2; }
 .casablanca-editor code {
-  @apply rounded bg-black/30 px-1 py-0.5 text-[0.9em] font-mono;
+  @apply rounded bg-code-bg px-1 py-0.5 text-[0.9em] font-mono;
 }
 .casablanca-editor pre code { @apply bg-transparent p-0; }
-.casablanca-editor a { @apply text-blue-400 underline; }
+.casablanca-editor a { @apply text-accent underline cursor-pointer; }
 .casablanca-editor blockquote {
   @apply border-l-2 border-pane-border pl-4 text-text-muted italic my-3;
 }

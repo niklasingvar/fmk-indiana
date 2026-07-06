@@ -108,7 +108,7 @@ export function HtmlPreview({ relPath }: { relPath: string }) {
       <div className="flex items-center justify-between border-b border-pane-border px-6 py-1.5 text-xs text-text-muted">
         <span className="truncate">
           {status.kind === 'done' ? (
-            <span className={status.ok ? 'text-accent' : 'text-red-400'} title={status.message}>
+            <span className={status.ok ? 'text-accent' : 'text-git-deleted'} title={status.message}>
               {status.message}
             </span>
           ) : (
@@ -118,13 +118,13 @@ export function HtmlPreview({ relPath }: { relPath: string }) {
         <span className="flex items-center gap-2">
           <button
             onClick={() => setVersion((v) => v + 1)}
-            className="rounded border border-pane-border px-2 py-0.5 hover:bg-black/20"
+            className="rounded border border-pane-border px-2 py-0.5 hover:bg-pane-hover"
           >
             Reload
           </button>
           <button
             onClick={toggleAnnotating}
-            className={`rounded border px-2 py-0.5 hover:bg-black/20 ${
+            className={`rounded border px-2 py-0.5 hover:bg-pane-hover ${
               annotating ? 'border-accent text-accent' : 'border-pane-border'
             }`}
           >

@@ -20,8 +20,8 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     if (this.state.error) {
       return (
         <div className="flex h-screen w-screen flex-col items-center justify-center gap-2 bg-pane p-6 text-center">
-          <h1 className="text-xl font-semibold text-red-400">Renderer error</h1>
-          <pre className="max-w-2xl overflow-auto rounded bg-black/40 p-3 text-left text-xs text-red-200">
+          <h1 className="text-xl font-semibold text-git-deleted">Renderer error</h1>
+          <pre className="max-w-2xl overflow-auto rounded bg-code-bg p-3 text-left text-xs text-git-deleted">
             {this.state.error.message}
             {this.state.error.stack}
           </pre>

@@ -31,7 +31,7 @@ export function FolderPane({ vault }: { vault: Vault }) {
             setCreatingIn('')
             setNewName('')
           }}
-          className="rounded px-1.5 text-text-muted hover:bg-pane-hover hover:text-gray-100"
+          className="rounded px-1.5 text-text-muted hover:bg-pane-hover hover:text-text-strong"
         >
           +
         </button>
@@ -50,7 +50,7 @@ export function FolderPane({ vault }: { vault: Vault }) {
               }}
               onBlur={() => creatingIn !== null && void submitNew(creatingIn)}
               placeholder="note name"
-              className="w-full rounded border border-pane-border bg-black/30 px-2 py-1 text-sm outline-none focus:border-blue-500"
+              className="w-full rounded border border-pane-border bg-pane-active px-2 py-1 text-sm outline-none focus:border-accent"
             />
           </div>
         )}

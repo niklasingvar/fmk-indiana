@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isHtmlPath } from '@shared/annotation-line'
 import type { useVault } from '../storage/useVault'
+import { initTheme, setTheme, type Theme } from '../app/theme'
 import { HtmlPreview } from '../preview/HtmlPreview'
 import { LexicalEditor } from './Editor'
 
@@ -37,7 +38,7 @@ function CopyAllButton() {
     <span className="flex items-center gap-2">
       {status.kind === 'done' && (
         <span
-          className={`max-w-md truncate ${status.ok ? 'text-text-muted' : 'text-red-400'}`}
+          className={`max-w-md truncate ${status.ok ? 'text-text-muted' : 'text-git-deleted'}`}
           title={status.message}
         >
           {status.message}
@@ -46,11 +47,29 @@ function CopyAllButton() {
       <button
         onClick={copyAll}
         disabled={status.kind === 'busy'}
-        className="rounded border border-pane-border px-2 py-0.5 text-xs hover:bg-black/20 disabled:opacity-50"
+        className="rounded border border-pane-border px-2 py-0.5 text-xs hover:bg-pane-hover disabled:opacity-50"
       >
         {status.kind === 'busy' ? 'Copying…' : 'Copy all'}
       </button>
     </span>
+  )
+}
+
+function ThemeToggle() {
+  const [theme, setThemeState] = useState<Theme>(() => initTheme())
+  const flip = (): void => {
+    const next: Theme = theme === 'light' ? 'dark' : 'light'
+    setTheme(next)
+    setThemeState(next)
+  }
+  return (
+    <button
+      onClick={flip}
+      title={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+      className="rounded border border-pane-border px-2 py-0.5 text-xs hover:bg-pane-hover"
+    >
+      {theme === 'light' ? '☾' : '☀'}
+    </button>
   )
 }
 
@@ -65,6 +84,7 @@ export function EditorPane({ vault }: { vault: Vault }) {
         <span className="flex items-center gap-3">
           {activeNote && !isHtml && <span>{saving ? 'Saving…' : 'Saved'}</span>}
           <CopyAllButton />
+          <ThemeToggle />
         </span>
       </header>
       {activeNote && isHtml ? (

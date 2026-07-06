@@ -65,7 +65,7 @@ export function AnnotationBubble({
           <button
             key={s.kind}
             onClick={() => pick(s.kind)}
-            className={`rounded border px-1.5 py-0.5 text-[11px] hover:bg-black/20 ${
+            className={`rounded border px-1.5 py-0.5 text-[11px] hover:bg-pane-hover ${
               kind === s.kind ? 'border-accent text-accent' : 'border-pane-border'
             }`}
           >
@@ -83,12 +83,12 @@ export function AnnotationBubble({
               if (e.key === 'Enter' && canConfirm) onConfirm(kind as AnnotationKind, message)
             }}
             placeholder={spec.message === 'required' ? 'message (required)' : 'message (optional)'}
-            className="min-w-0 flex-1 rounded border border-pane-border bg-black/20 px-2 py-1 text-xs outline-none focus:border-accent"
+            className="min-w-0 flex-1 rounded border border-pane-border bg-pane-active px-2 py-1 text-xs outline-none focus:border-accent"
           />
           <button
             disabled={!canConfirm}
             onClick={() => onConfirm(kind as AnnotationKind, message)}
-            className="rounded border border-pane-border px-2 py-1 text-xs hover:bg-black/20 disabled:opacity-50"
+            className="rounded border border-pane-border px-2 py-1 text-xs hover:bg-pane-hover disabled:opacity-50"
           >
             Add
           </button>
