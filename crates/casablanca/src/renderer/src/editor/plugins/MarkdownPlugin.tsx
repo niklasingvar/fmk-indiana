@@ -7,9 +7,13 @@ import {
   type Transformer
 } from '@lexical/markdown'
 
+import { createTableTransformer } from './TableMarkdownTransformer'
+
 export type TransformerPack = Transformer[]
 
-export const MARKDOWN_TRANSFORMERS: TransformerPack = [...TRANSFORMERS]
+const TABLE = createTableTransformer(() => MARKDOWN_TRANSFORMERS)
+
+export const MARKDOWN_TRANSFORMERS: TransformerPack = [TABLE, ...TRANSFORMERS]
 
 interface Props {
   markdown: string

@@ -5,6 +5,7 @@ import { HeadingNode, QuoteNode } from '@lexical/rich-text'
 import { ListNode, ListItemNode } from '@lexical/list'
 import { LinkNode } from '@lexical/link'
 import { CodeNode, CodeHighlightNode } from '@lexical/code'
+import { TableCellNode, TableNode, TableRowNode } from '@lexical/table'
 import { MARKDOWN_TRANSFORMERS } from './plugins/MarkdownPlugin'
 
 /**
@@ -17,7 +18,7 @@ import { MARKDOWN_TRANSFORMERS } from './plugins/MarkdownPlugin'
 function roundTrip(markdown: string): string {
   const editor = createHeadlessEditor({
     namespace: 'casablanca-test',
-    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, CodeHighlightNode],
+    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, CodeHighlightNode, TableNode, TableRowNode, TableCellNode],
     onError: (error: Error) => {
       throw error
     }
@@ -81,6 +82,16 @@ describe('marker tokens survive the round-trip', () => {
     const out = roundTrip(doc)
     expect(out).toContain('::todo break this down')
     expect(out).toContain('::keep')
+  })
+
+  it('GFM tables round-trip stably', () => {
+    const table = [
+      '| Category | Count | Examples |',
+      '| --- | --- | --- |',
+      '| flags | 5 | triangular-flag, crossed-flags |',
+      '| geography | 8 | globe, compass, world-map |'
+    ].join('\n')
+    expect(roundTrip(table)).toBe(table)
   })
 })
 

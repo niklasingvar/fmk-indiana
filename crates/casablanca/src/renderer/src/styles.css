@@ -41,3 +41,14 @@ body {
   @apply border-l-2 border-pane-border pl-4 text-text-muted italic my-3;
 }
 .casablanca-editor hr { @apply border-pane-border my-6; }
+
+.casablanca-table {
+  @apply my-4 w-full border-collapse text-sm;
+}
+.casablanca-table-cell,
+.casablanca-table-cell-header {
+  @apply border border-pane-border px-3 py-2 align-top;
+}
+.casablanca-table-cell-header {
+  @apply bg-pane-hover font-semibold;
+}

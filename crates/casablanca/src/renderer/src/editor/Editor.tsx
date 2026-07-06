@@ -4,12 +4,14 @@ import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
 import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin'
 import { ListPlugin } from '@lexical/react/LexicalListPlugin'
+import { TablePlugin } from '@lexical/react/LexicalTablePlugin'
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin'
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
 import { HeadingNode, QuoteNode } from '@lexical/rich-text'
 import { ListNode, ListItemNode } from '@lexical/list'
 import { LinkNode } from '@lexical/link'
 import { CodeNode, CodeHighlightNode } from '@lexical/code'
+import { TableCellNode, TableNode, TableRowNode } from '@lexical/table'
 
 import { MarkdownPlugin, MARKDOWN_TRANSFORMERS } from './plugins/MarkdownPlugin'
 
@@ -28,7 +30,10 @@ export function LexicalEditor({ markdown, onChange }: Props) {
       ListItemNode,
       LinkNode,
       CodeNode,
-      CodeHighlightNode
+      CodeHighlightNode,
+      TableNode,
+      TableRowNode,
+      TableCellNode
     ],
     theme: {
       root: 'casablanca-editor',
@@ -42,7 +47,10 @@ export function LexicalEditor({ markdown, onChange }: Props) {
         h1: 'text-2xl font-semibold mt-6 mb-3',
         h2: 'text-xl font-semibold mt-5 mb-2',
         h3: 'text-lg font-semibold mt-4 mb-2'
-      }
+      },
+      table: 'casablanca-table',
+      tableCell: 'casablanca-table-cell',
+      tableCellHeader: 'casablanca-table-cell-header'
     },
     onError: (error: Error) => {
       console.error('[lexical]', error)
@@ -57,6 +65,7 @@ export function LexicalEditor({ markdown, onChange }: Props) {
         ErrorBoundary={LexicalErrorBoundary}
       />
       <ListPlugin />
+      <TablePlugin hasHorizontalScroll />
       <LinkPlugin />
       <HistoryPlugin />
       <AutoFocusPlugin />
