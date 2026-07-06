@@ -34,7 +34,7 @@ export function FolderPane({ vault }: { vault: Vault }) {
         </button>
       </header>
 
-      <div className="flex-1 overflow-auto px-2 py-2 text-sm">
+      <div className="flex-1 overflow-auto px-2 py-1 text-sm">
         {creatingIn !== null && (
           <div className="px-2 py-1">
             <input

@@ -50,7 +50,7 @@ export const FileTreeRow = memo(function FileTreeRow({
       aria-expanded={isFolder ? node.isExpanded : undefined}
       aria-selected={node.isActive}
       onClick={() => onClick(node)}
-      className={`relative flex h-8 w-full cursor-pointer items-center rounded-md pr-2 text-sm transition-colors ${
+      className={`relative flex h-[26px] w-full cursor-pointer items-center rounded pr-2 text-[13px] transition-colors ${
         node.isActive
           ? 'bg-pane-active ring-1 ring-inset ring-accent'
           : 'hover:bg-pane-hover'
