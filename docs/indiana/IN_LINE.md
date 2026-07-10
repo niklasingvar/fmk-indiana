@@ -22,8 +22,9 @@ approval: pending
 ## Status
 - Open task: `::action[happy-otter]` — no status word.
 - Resolved: `::action[happy-otter:done] buy milk` or `::action[happy-otter:failed] buy milk`.
-- Status applies to `::action` / `::todo` only ([IN_IDENTITY.md](IN_IDENTITY.md)). No other kind takes one.
-- `done` / `failed` are the only status words, after a `:` inside the bracket. Absence means open.
+- `done` / `failed` apply to `::action` / `::todo` — the user tasks tracked to closure ([IN_IDENTITY.md](IN_IDENTITY.md)).
+- `working` is the third status word: an auto-run agent directive whose turn is in flight — `::fix[happy-otter:working] banana`. It rides `::fix` / `::elaborate` / `::prompt` under auto-run, and is minted at dispatch, not scan ([IN_AUTORUN.md](IN_AUTORUN.md), [IN_IDENTITY.md](IN_IDENTITY.md)).
+- `working` / `done` / `failed` are the status words, after a `:` inside the bracket. Absence means open.
 
 ## Discipline
 - Idempotent: a line that already has its bracket is left byte-identical on re-tag ([IN_SCAN.md](IN_SCAN.md): write chokepoint).

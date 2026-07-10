@@ -8,7 +8,7 @@ approval: pending
 
 ## Boundaries
 - Casablanca is not Indiana.
-- Casablanca does not parse, own, render, or mutate `::` markers.
+- Casablanca does not own, semantically parse, or mutate `::` markers; it may apply presentation-only highlighting to recognized marker text.
 - Casablanca formats agent output going to the human.
 - Indiana compiles human markers going to the agent.
 
@@ -38,4 +38,4 @@ approval: pending
 - Visual app.
 - Agent SDK integration.
 - Shared timeline with Indiana.
-- Any marker-aware features.
+- Semantic marker-aware features.

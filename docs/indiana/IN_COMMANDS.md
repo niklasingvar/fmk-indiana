@@ -7,13 +7,15 @@ approval: pending
 
 # COMMANDS — marker grammar
 
-> Single source of truth for the `::` markers. One indiana is one `::` command in the source. They belong to [Indiana](IN_PRD.md): it monitors repos, parses these markers, and compiles them on `indiana copy`. Agents read them over [IN_MCP.md](IN_MCP.md); the [Menulet](../menulet/MENULET_PRD.md) only displays Indiana's output; [Casablanca](../casablanca/CASABLANCA_PRD.md) is unrelated to markers.
+> Single source of truth for the `::` markers. One indiana is one `::` command in the source. They belong to [Indiana](IN_PRD.md): it monitors repos, parses these markers, and compiles them on `indiana copy`. Agents read them over [IN_MCP.md](IN_MCP.md); the [Menulet](../menulet/MENULET_PRD.md) only displays Indiana's output; [Casablanca](../casablanca/CASABLANCA_OVERVIEW.md) emits markers from rendered views but never parses or compiles them.
 
 ## Syntax
 - `::<cmd>` at column 0, or inline at end of a content line.
 - Short or long form, e.g. `::h` == `::hate`.
 - A message follows the token only when the kind takes one (see the table; pure reactions take none).
+- Auto-run flag: `-a` / `--auto` immediately after the token (before the message) asks the daemon to run this marker at once over ACP — `::fix -a banana`. Honored only on agent directives that act directly (`::fix`, `::elaborate`, `::prompt`); on any other kind a leading `-a` is ordinary message text. The daemon claims the marker (`::fix[id:working]`, flag consumed), dispatches, and the agent resolves it. Full lifecycle: [IN_AUTORUN.md](IN_AUTORUN.md).
 - Inside a code fence → ignored.
+- Frontmatter property comments use `# frontmatter.<key> ::<cmd> [message]`; their inline scope is the named property.
 - Why `::` (not `[]`): survives every markdown parser; `rg '^::'` has zero false positives.
 
 ## Identity and scope

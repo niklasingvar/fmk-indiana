@@ -51,11 +51,11 @@ approval: pending
 ## Boundaries
 - Core computes; faces (CLI, MCP, menulet, casablanca) render. A face never parses, counts, or assembles prompts.
 - One write chokepoint mutates user files: byte-preserving, atomic, mtime-guarded, idempotent.
-- Indiana never runs an agent. It compiles; existing harnesses (Claude Code, Codex, Cursor) execute. Their tokens, their quota.
+- The core never runs an agent — it compiles; existing harnesses (Claude Code, Codex, Cursor) execute. Their tokens, their quota. The **daemon** is the one exception: when a marker opts in with `-a`, it dispatches that marker to an agent over ACP ([indiana/IN_AUTORUN.md](indiana/IN_AUTORUN.md)). The crossing is deliberate, marker-scoped, and off by default.
 - casablanca is downstream of the agent, indiana is downstream of the human. They meet only in the folder.
 - chief-of-staff state does not flow through the markdown chokepoint; `indiana todo` is its single face.
 
 ## Handoff evolution
 1. Copy-paste — `indiana copy` to clipboard. Shipped.
 2. MCP — agent pulls the payload itself. Built; verify end to end.
-3. Auto-run — daemon dispatches markers as they appear, pausable. Not started; requires MCP proven first.
+3. Auto-run — daemon dispatches markers as they appear, pausable. In progress: opt-in per marker via the `-a` flag, driven over ACP ([indiana/IN_AUTORUN.md](indiana/IN_AUTORUN.md)). Off by default (`config.auto_run`).

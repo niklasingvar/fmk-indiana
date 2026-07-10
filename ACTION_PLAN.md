@@ -18,7 +18,7 @@ approval: pending
 - [x] `temp_system.md` deleted; `COS_PRD.md` rewritten as [CM_PRD.md](docs/context-model/CM_PRD.md).
 - [x] Templates given one home: `crates/core/templates/` (full `prompt.md` files absorb `prompts.toml` + the Rust scaffold codegen + `scaffold/`). This repo's `.indiana/` is dogfood, free to diverge; `test_embedded_templates_match_marker_table` replaces the repo-mirror test.
 - [x] `.indiana/indianas/RULES.md` moved to [IN_COMMAND_RULES.md](docs/indiana/IN_COMMAND_RULES.md) — spec content, not instance data.
-- [x] Editor identity settled (2026-07): Casablanca is the editor, self-built at `crates/casablanca/`; nimbalyst is vendored reference only; presentations are a feature ([CASABLANCA_PRD.md](docs/casablanca/CASABLANCA_PRD.md)).
+- [x] Editor identity settled (2026-07): Casablanca is the editor, self-built at `crates/casablanca/`; nimbalyst is vendored reference only; presentations are a feature ([CASABLANCA_ARCHITECTURE.md](docs/casablanca/CASABLANCA_ARCHITECTURE.md)).
 - [ ] Sweep remaining docs (IN_*, MENULET_*) for stale claims. (Frontmatter part done: `indiana frontmatter` now flags only the four chief-of-staff template seeds — that call is Phase 5's.)
 - Exit: `rg -i 'bangalore|boxydoc|montmartre|visualviewer|\bnimbus\b'` finds nothing outside retired-alias notes and git history; every doc link resolves.
 
@@ -66,10 +66,12 @@ Glue so all faces coexist on one machine, every day.
 - Only then write COS_PRD and build the human/agent queues; menulet gains the focus view after that.
 - Exit: "what should I be doing right now?" answered by one glance at the menulet.
 
-## Phase 8 — Auto-run
+## Phase 8 — Auto-run (in progress)
 - Daemon dispatches compiled markers to the agent as they appear; pausable for batching.
 - Requires Phase 3 proven and the write-chokepoint guarantees extended to dispatch.
-- Exit: mark `::fix`, keep reading, the fix lands without a run command.
+- [x] First slice: opt-in per marker via `-a`, dispatched over ACP to Claude Code; claim → `[id:working]` → agent resolves + commits, or `:failed`. Off by default (`config.auto_run`). Spec: [IN_AUTORUN.md](docs/indiana/IN_AUTORUN.md).
+- Remaining: verify against the real `claude-code-acp` adapter end to end; a menulet/Casablanca "working…" indicator; per-repo permission policy; batching/pause UX.
+- Exit: mark `::fix -a`, keep reading, the fix lands without a run command.
 
 ## Parked toward VISION (planned, not scheduled)
 - Per-repo custom command kinds. Today grammar is global and only wording is tunable ([IN_FOLDER.md](docs/indiana/IN_FOLDER.md)); VISION wants user-defined commands (`::design`). Needs a marker-table extension mechanism that keeps the one-table invariant.

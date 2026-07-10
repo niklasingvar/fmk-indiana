@@ -73,7 +73,7 @@ Everything lives in a `.indiana/` folder inside the repository:
 
 How the handoff happens evolves in three phases, each one removing a manual step:
 
-- **Phase 1 — copy-paste.** `indiana copy-all` collects every `::` payload across the repo into one prompt. You paste it into your agent and hit enter. Degraded mode by design — and honestly a great workflow already.
+- **Phase 1 — copy-paste.** `indiana copy` collects every `::` payload across the repo into one prompt. You paste it into your agent and hit enter. Degraded mode by design — and honestly a great workflow already.
 - **Phase 2 — MCP.** Claude Code connects to the Indiana server via MCP: the agent pulls the payload itself, no clipboard involved. Click run in Casablanca or the menulet, and the loop fires.
 - **Phase 3 — auto-run.** The Indiana server monitors the folder and dispatches commands as you write them. You mark `::fix` on a line, keep reading, and it's fixed by the time you scroll back. Pausable, of course — sometimes you want to stack up a bulk of annotations and fire them in one go.
 
@@ -89,13 +89,13 @@ The contract is bidirectional: Indiana's prompt templates read from the context-
 
 Cursor is a terrible place to look at a presentation. Chat is a terrible place to point at slide three. Casablanca renders artifacts as what they actually are — slides as slides, documents as documents — with annotation directly on the rendered view. Mark a section as hate, click run, and the feedback flows into Indiana.
 
-Artifact types, roughly in order of attack:
+Artifact types, roughly in order of attack ([CASABLANCA_ROADMAP.md](docs/casablanca/CASABLANCA_ROADMAP.md); what is built today: [CASABLANCA_PRD.md](docs/casablanca/CASABLANCA_PRD.md)):
 
-1. **Presentations** — rendered slide decks with annotation boxes.
-2. **Documents / text** — a proper reading, writing, and annotating view for markdown. Writing happens *in* the rendered view — no split between edit mode and preview mode.
+1. **Documents / text** — a proper reading, writing, and annotating view for markdown. Writing happens *in* the rendered view — no split between edit mode and preview mode. Shipped as the wedge's MVP.
+2. **Presentations** — rendered slide decks with annotation boxes.
 3. **Code** — shown raw; devs want raw. Annotation and inline commands, not prettification.
 4. **Excalidraw** — a visual canvas as a first-class artifact type; sometimes the fastest way to think is to draw.
-5. **Apps** — web only, always. The DOM gives the system a way to know what happened to the UI; native doesn't.
+5. **Apps** — web only, always. The DOM gives the system a way to know what happened to the UI; native doesn't. (Annotatable HTML previews already exist in Casablanca.)
 
 The spectrum Casablanca navigates: **raw/native** mode (maximum speed and flexibility, crap UX) versus **rendered** mode (great UX, but human edits require version handling — a real technical problem, parked for now).
 
@@ -124,7 +124,7 @@ In the future it becomes the smallest possible surface for the whole system: cur
 1. You, the operator, select a repository (folder).
 2. You create a `brief.md` in Casablanca and type what you want: "five slides pitching X."
 3. Laziness kicks in — you mark it `::elaborate`.
-4. You hit run — in Phase 1 that means `indiana copy-all` and a paste into Claude Code; from Phase 2 the agent pulls the payload itself over MCP. Either way, the prompt template turns your one-liner into an elaborated `brief.md`.
+4. You hit run — in Phase 1 that means `indiana copy` and a paste into Claude Code; from Phase 2 the agent pulls the payload itself over MCP. Either way, the prompt template turns your one-liner into an elaborated `brief.md`.
 5. You hit `::prompt` to render the slides. The agent scaffolds from a **template**: pre-built, pretty-enough slide components, with **content separated from design**.
 6. Casablanca renders the deck. You annotate directly on it: `::hate` on a couple of things, `::fix` on the title, a free-text note on slide four.
 7. You hit run. Indiana diagnoses the feedback, updates content files (cheap, fast) without touching design files, logs the change to the relevant context files, and updates the context-model so the next iteration already knows your preferences.

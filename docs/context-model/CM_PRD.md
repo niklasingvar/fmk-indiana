@@ -26,9 +26,10 @@ approval: pending
   `crates/core/templates/context-model/CONTEXT-MODEL.md`; scaffold seeds the schema, `index.md`, `log.md`,
   `purpose/PURPOSE.md`, and `learnings/INBOX.md`.
 - Read/write contract wired: every rendered copy payload opens with a loop preamble
-  (`crates/core/templates/preamble.md`, embedded in `render_text`) — read protocol in, log entry and
-  `.indiana/chief-of-staff/focus.md` todo update out. `::hate`/`::love`/`::note` templates instruct the
-  `learnings/INBOX.md` write-back. Remaining Phase 5 work: [ACTION_PLAN.md](../../ACTION_PLAN.md).
+  (`crates/core/templates/preamble.md`, embedded in `render_text`) — read protocol in, log entry,
+  `.indiana/chief-of-staff/focus.md` todo update, and one git commit per command out (stage only the
+  files that command touched; message mirrors the log entry). `::hate`/`::love`/`::note` templates
+  instruct the `learnings/INBOX.md` write-back. Remaining Phase 5 work: [ACTION_PLAN.md](../../ACTION_PLAN.md).
 
 ## Rules
 - One row = one thing.

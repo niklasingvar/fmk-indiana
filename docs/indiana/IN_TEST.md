@@ -33,6 +33,7 @@ approval: pending
 | [IN_SCAN.md](IN_SCAN.md) | ` ``` ` and `~~~` tracked independently | `test_fence_independent` — ` ``` ` opens, `~~~` appears inside, ` ``` ` closes → `~~~` still open, markers after still ignored |
 | [IN_SCAN.md](IN_SCAN.md) | Unclosed fence → markers after are ignored | `test_fence_unclosed` — ` ``` ` opens, never closes, file has `::h` at end → marker ignored |
 | (decided here) | YAML frontmatter `---` is a fence | `test_fence_yaml_frontmatter` — `---` opens, `::h` inside, `---` closes → marker ignored |
+| [IN_SCAN.md](IN_SCAN.md) | Explicit frontmatter property comments are markers; other YAML stays inert | `test_frontmatter_property_comment_marker`, `test_frontmatter_ordinary_comments_and_values_stay_ignored`, `test_frontmatter_property_comment_scope_and_identity` |
 | (decided here) | Indented `::` (column ≥ 4) is ignored | `test_indented_ignored` — `    ::h` at column 4 → not a marker |
 | [IN_SCAN.md](IN_SCAN.md) | Marker inside an inline code span is ignored | `test_inline_code_ignored` — `` `::hate` `` in prose → not a marker; CommonMark run matching covers a triple ``` shown inline (`test_inline_code_span_with_backtick_run`) |
 
@@ -144,6 +145,17 @@ Harness invariants (uphold for any new daemon test):
 | [IN_FOLDER.md](IN_FOLDER.md) | `--domain` filters the list | `test_todo_list_domain_filter` |
 | [IN_FOLDER.md](IN_FOLDER.md) | The db lives at `.indiana/chief-of-staff/todos.db` | `test_todo_db_path` |
 
+## E13 — Auto-run dispatch (ACP)
+Behind `--features test-support`; driven against a mock ACP agent for determinism.
+| Ref | Requirement | Test |
+|-----|-------------|------|
+| [IN_AUTORUN.md](IN_AUTORUN.md) | `-a` / `--auto` parses to `auto`, stripped from the message; only on directives | `test_auto_flag_short`, `test_auto_flag_ignored_on_non_directive`, `test_auto_runnable_directives_only` |
+| [IN_AUTORUN.md](IN_AUTORUN.md), [IN_LINE.md](IN_LINE.md) | Claim mints an id + `working`, strips the flag, idempotent | `test_claim_working_mints_id_and_strips_flag`, `test_claim_working_idempotent` |
+| [IN_AUTORUN.md](IN_AUTORUN.md) | A `::fix -a` marker is claimed, dispatched, resolved, and committed | `test_autorun_success_resolves_and_commits` |
+| [IN_AUTORUN.md](IN_AUTORUN.md) | A turn that leaves the marker → `failed`, not re-dispatched | `test_autorun_failure_marks_failed` |
+| [IN_AUTORUN.md](IN_AUTORUN.md) | `config.auto_run` off leaves the marker untouched | `test_autorun_disabled_leaves_marker` |
+| [IN_AUTORUN.md](IN_AUTORUN.md) | Permission requests are auto-granted (allow-always preferred) | `test_grant_permission_prefers_allow_always` |
+
 ## What not to test
 - OS behavior: FSEvents delivery, `rename` atomicity, `fsync` durability — these are OS contracts, not Indiana's.
 - Tauri/NSPanel rendering: visual tests go in the menulet, not in Indiana core.
@@ -152,3 +164,4 @@ Harness invariants (uphold for any new daemon test):
 
 ## Open
 - E11 watch tests may be flaky by nature. Keep in CI while fast and stable; move to manual-only if they start failing nondeterministically.
+- E13 auto-run tests are watch- and process-driven (spawn a daemon + a mock ACP agent), so the same flakiness caveat applies. They are deterministic single-threaded; treat parallel timing failures as environmental, not regressions.

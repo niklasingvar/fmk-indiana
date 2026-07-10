@@ -7,7 +7,7 @@ approval: pending
 
 # INDIANA - PRD
 
-> The server. Why: [PURPOSE.md](../PURPOSE.md). Where: [GOAL.md](../GOAL.md) / [PHASES.md](../PHASES.md). Markers: [IN_COMMANDS.md](IN_COMMANDS.md). MCP: [IN_MCP.md](IN_MCP.md). Daemon: [IN_DAEMON.md](IN_DAEMON.md). Invariants: [IN_PRINCIPLES.md](IN_PRINCIPLES.md).
+> The server. Why: [PURPOSE.md](../PURPOSE.md). Where: [GOAL.md](../GOAL.md) / [ACTION_PLAN.md](../../ACTION_PLAN.md). Markers: [IN_COMMANDS.md](IN_COMMANDS.md). MCP: [IN_MCP.md](IN_MCP.md). Daemon: [IN_DAEMON.md](IN_DAEMON.md). Invariants: [IN_PRINCIPLES.md](IN_PRINCIPLES.md).
 
 ## What it is
 - A server you point at a repository.
@@ -21,8 +21,8 @@ approval: pending
 - Clients talk to the daemon over a Unix domain socket at `~/.indiana/indiana.sock`. Protocol: minimal JSON or bincode. No HTTP, local-only.
 
 ## The loop
-1. Coding agent writes terse markdown ([Casablanca](../casablanca/CASABLANCA_PRD.md)).
-2. User reviews and tags lines: `::h ::l ::k ::f ::e ::q ::n ::a ::td`.
+1. Coding agent writes markdown.
+2. User reviews and tags lines — in any editor, or from [Casablanca](../casablanca/CASABLANCA_OVERVIEW.md)'s rendered views: `::h ::l ::k ::f ::e ::q ::n ::a ::td`.
 3. Indiana scans the repo, collects every marker + its context.
 4. Indiana exposes the compiled payload through [IN_MCP.md](IN_MCP.md).
 5. Agent reads the payload itself and acts.
@@ -45,7 +45,7 @@ approval: pending
 - Resolved scope ([IN_SCOPE.md](IN_SCOPE.md)) travels into the payload so the agent sees exactly what was tagged.
 
 ## Out of scope
-- Producing markers — humans tag; agents emit [Casablanca](../casablanca/CASABLANCA_PRD.md) output.
+- Producing markers — humans tag, directly or through [Casablanca](../casablanca/CASABLANCA_OVERVIEW.md); agents emit artifacts.
 
 ## Decided
 - Each indiana in the payload carries file path, line number, and ID so the agent can locate the target.

@@ -4,6 +4,10 @@ SIDECAR := crates/menulet/src-tauri/binaries/indiana-$(HOST)
 BIN := target/release/indiana
 
 .PHONY: build scratch serve add scan copy install help menulet casablanca sidecar-copy release dist
+# make invokes recipes via /bin/sh, which never sources ~/.zshrc, so nvm's
+# npm/node are missing even when they work fine in an interactive shell.
+# Load nvm explicitly before any npm-shaped recipe.
+NVM_INIT = export NVM_DIR="$$HOME/.nvm"; [ -s "$$NVM_DIR/nvm.sh" ] && . "$$NVM_DIR/nvm.sh" && nvm use default;
 # Extract the first "version": "x.y.z" from a JSON manifest.
 json_version = $(shell sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' $(1) | head -1)
 VERSION := $(call json_version,crates/menulet/src-tauri/tauri.conf.json)
@@ -55,11 +59,11 @@ sidecar-copy: build
 
 # Build the daemon, refresh the bundled sidecar, launch the menulet (foreground).
 menulet: sidecar-copy
-	cd crates/menulet && npm install && npm run dev
+	$(NVM_INIT) cd crates/menulet && npm install && npm run dev
 
 # Launch the Casablanca editor in dev mode (electron-vite dev).
 casablanca:
-	cd crates/casablanca && npm install && npm run dev
+	$(NVM_INIT) cd crates/casablanca && npm install && npm run dev
 .PHONY: release
 release: build
 	tar -czf indiana-aarch64-apple-darwin.tar.gz -C target/release indiana
@@ -70,8 +74,8 @@ release: build
 # .dmg, with the SHA256s the Homebrew tap needs. Mirrors .github/workflows/release.yml
 # so you can validate a build before pushing a tag.
 dist: sidecar-copy
-	cd crates/menulet && npm ci && npm run build
-	cd crates/casablanca && npm ci && npm run dist
+	$(NVM_INIT) cd crates/menulet && npm ci && npm run build
+	$(NVM_INIT) cd crates/casablanca && npm ci && npm run dist
 	tar -czf indiana-aarch64-apple-darwin.tar.gz -C target/release indiana
 	@echo ""
 	@echo "== Release artifacts (menulet v$(VERSION), casablanca v$(CBL_VERSION)) =="

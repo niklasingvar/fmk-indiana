@@ -6,7 +6,7 @@ approval: pending
 
 # DISTRO — distribution
 
-> How [Indiana](indiana/IN_PRD.md) (CLI + server), the [Menulet](menulet/MENULET_PRD.md), and [Casablanca](casablanca/CASABLANCA_PRD.md) reach users. Steps mirror [PHASES.md](PHASES.md).
+> How [Indiana](indiana/IN_PRD.md) (CLI + server), the [Menulet](menulet/MENULET_PRD.md), and [Casablanca](casablanca/CASABLANCA_OVERVIEW.md) reach users. Steps mirror [ACTION_PLAN.md](../ACTION_PLAN.md).
 
 ## Now (dogfood)
 - One binary, multi-mode: `indiana serve` (daemon), `indiana scan`, `indiana copy`, `indiana service install`, `indiana todo`.
@@ -49,6 +49,13 @@ brew install niklasingvar/fmk-indiana/indiana           # optional standalone CL
   so `brew install --cask indiana-casablanca` pulls the CLI; "Copy all" shells out to
   it. Start the daemon separately — `indiana serve`, `indiana service install`, or
   open the menulet. One daemon, all faces (ACTION_PLAN Phase 2).
+- Auto-run needs Node: the `indiana` formula `depends_on "node"`, and the daemon
+  launches Claude Code's ACP adapter via `npx -y @zed-industries/claude-code-acp`
+  (fetched + cached on first dispatch — nothing pinned; IN_AUTORUN.md). This covers
+  CLI users and Casablanca (its cask depends on the formula). Gap: a menulet-only
+  install bundles `indiana` but not the formula, so those users need Node separately
+  before auto-run works — fold Node into the menulet cask when that path matters.
+  Auto-run is off by default (`config.auto_run`), so this changes nothing until opted in.
 - Validate a build locally before tagging with `make dist` (same steps, prints SHA256s).
 
 ### One-time setup: HOMEBREW_TAP_TOKEN

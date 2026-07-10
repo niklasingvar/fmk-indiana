@@ -27,7 +27,7 @@ approval: pending
 - Inline code spans suppress markers too, by the same rule: a `::` inside a backtick span is sample text. CommonMark run matching — an opener of N backticks closes only at the next run of exactly N — so a span may itself contain a `` ``` `` shown inline. An unmatched backtick is literal; a marker after it still counts.
 - Why: agents quote `::` in code, fenced or inline; those must never trigger. Found by dogfooding — Indiana's own specs quote every marker inline, and a fence-only rule reported dozens of false positives.
 - An unclosed fence swallows the rest of the file (everything after is ignored). Accepted; warn on EOF inside an open fence so the silence is visible.
-- YAML frontmatter: a leading `---` block at file start (line 1, closed by the next `---`) is ignored. This is the only special case — not a general `---` fence, so a thematic break mid-document never starts one.
+- YAML frontmatter: a leading `---` block at file start (line 1, closed by the next `---`) is ignored except for explicit column-zero property comments shaped `# frontmatter.<key> ::<cmd>`. Values, ordinary comments, and indented block-scalar content stay inert. This is the only `---` special case — a thematic break mid-document never starts one.
 - Indented code blocks are not detected. A `::` inside a 4-space block still resolves by the column-0 / end-of-line rule; we do not track paragraph state to exclude it. Simplicity over completeness.
 
 ## Walk and watch

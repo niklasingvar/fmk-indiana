@@ -1,42 +1,91 @@
 ---
 status: draft
-purpose: Specify Casablanca — the editor. Rich inline markdown editing plus visual/presentation features.
+purpose: Casablanca implemented-feature inventory — one row per feature, grounded in the code.
 approval: pending
 ---
 
 # CASABLANCA — PRD
 
-> The visual layer of [VISION.md](../../VISION.md). Why the system exists: [PURPOSE.md](../PURPOSE.md). System shape: [ARCHITECTURE.md](../ARCHITECTURE.md). Roadmap: [ACTION_PLAN.md](../../ACTION_PLAN.md) Phase 1.
+> What the editor is: [CASABLANCA_OVERVIEW.md](CASABLANCA_OVERVIEW.md). Decisions and boundaries: [CASABLANCA_ARCHITECTURE.md](CASABLANCA_ARCHITECTURE.md). Forward-looking roadmap: [CASABLANCA_ROADMAP.md](CASABLANCA_ROADMAP.md). Open questions: [CASABLANCA_QUESTIONS.md](CASABLANCA_QUESTIONS.md).
 
-## What it is
-- The editor: open a repo, edit markdown inline as rich text (WYSIWYG, no edit/preview split), see artifacts as what they are — documents as documents, slides as slides.
-- Annotating emits ordinary `::` markers into the source file. Casablanca is a face; [Indiana](../indiana/IN_PRD.md) owns the markers.
-- A `Copy all` button hands the compiled Indiana payload to the clipboard — the iterate loop without a terminal.
+Features actually built today. One row = one feature. Paths are relative to `crates/casablanca/src/`.
 
-## Architecture decision (revised 2026-07)
-- Casablanca is the editor, self-built: Electron + electron-vite + React + Lexical + Tailwind at `crates/casablanca/`. Prototype exists: 3-pane shell, vault folder pane, Lexical WYSIWYG with markdown round-trip, autosave, file watcher.
-- Nimbalyst (open source, nimbalyst.com) is vendored at `crates/casablanca/nimbalyst/` as reference only — patterns are borrowed (e.g. its `FlatFileTree`/`FileTreeRow` split), the codebase and name are not.
-- Visual/presentation support (inline Excalidraw, rendered decks, annotated views) is a feature set inside Casablanca — not a separate module or product.
-- Superseded: "Nimbalyst is the editor, Casablanca builds on it" (earlier 2026-07 framing); Casablanca as a terse agent-output template format (earlier still).
+## Shell & app
+- App shell: folder pane + editor pane — `renderer/src/app/Shell.tsx`
+- Vault-unset empty state with folder picker — `renderer/src/app/EmptyState.tsx`
+- Preload-bridge-missing guard screen — `renderer/src/App.tsx`
+- Renderer error boundary — `renderer/src/app/ErrorBoundary.tsx`
+- Theme init before first paint + light/dark toggle — `renderer/src/app/theme.ts`, `renderer/src/editor/EditorPane.tsx`
 
-## MVP — the daily loop
-- Inline rich markdown editing of repo files, round-trip byte-stable for what the editor doesn't touch:
-  - YAML frontmatter preserved as an opaque block (every repo doc carries one).
-  - `::` marker lines survive open → edit elsewhere → autosave unchanged.
-- `Copy all` button: runs `indiana copy` for the open vault; payload lands on the clipboard; paste into any coding agent.
-- Detail lives in [crates/casablanca/TASKS.md](../../crates/casablanca/TASKS.md).
+## Folder pane / file tree
+- Flat file tree with click-to-expand/collapse and click-to-open — `renderer/src/folder-pane/FileTree.tsx`, `shared/flatten-tree.ts`
+- Collapse state persisted per vault in localStorage — `renderer/src/folder-pane/FileTree.tsx`
+- Auto-reveal active file's ancestors — `renderer/src/folder-pane/FileTree.tsx`, `shared/flatten-tree.ts`
+- Active-row highlight + roving keyboard focus — `renderer/src/folder-pane/FileTree.tsx`, `renderer/src/folder-pane/FileTreeRow.tsx`
+- Keyboard navigation (arrows, Home, End, Enter) + type-ahead name search — `renderer/src/folder-pane/FileTree.tsx`, `renderer/src/folder-pane/tree-keys.ts`
+- Scroll focused row into view — `renderer/src/folder-pane/FileTree.tsx`
+- Chevron + open/closed folder icons + per-file-type icons — `renderer/src/folder-pane/FileTreeRow.tsx`
+- Depth indent + vertical guides + name alignment under folders — `renderer/src/folder-pane/FileTreeRow.tsx`
+- Hide `.md` in labels, keep sidecars full — `renderer/src/folder-pane/FileTreeRow.tsx`
+- ARIA tree semantics (role=tree, aria-level/expanded/selected) — `renderer/src/folder-pane/FileTree.tsx`, `renderer/src/folder-pane/FileTreeRow.tsx`
+- New note at vault root with inline name input — `renderer/src/folder-pane/FolderPane.tsx`
+- Delete visible files and folders with confirmation, path validation, and OS Trash — `renderer/src/folder-pane/FileTree.tsx`, `renderer/src/folder-pane/FolderPane.tsx`, `main/lib/file-operations.ts`
+- Empty-tree state — `renderer/src/folder-pane/FolderPane.tsx`
+- Git status tinting on rows with folder aggregation — `renderer/src/folder-pane/FileTreeRow.tsx`, `main/lib/git.ts`
 
-## Artifact types, in order of attack
-1. Documents — write in the rendered view; no edit/preview split. (MVP)
-2. Presentations — rendered decks with annotation boxes. (feature, after MVP)
-3. Code — raw, with inline commands.
-4. Excalidraw canvases — inline diagrams as a first-class artifact type.
-5. Web apps — DOM-observable only.
+## Editor
+- Lexical WYSIWYG markdown editor, per-note remount — `renderer/src/editor/Editor.tsx`, `renderer/src/editor/EditorPane.tsx`
+- Markdown import on mount + export on edit — `renderer/src/editor/plugins/MarkdownPlugin.tsx`
+- Headings, blockquotes, ordered/unordered lists, inline & fenced code, bold/italic — `renderer/src/editor/Editor.tsx`
+- Markdown links import/export — `renderer/src/editor/Editor.tsx`
+- GFM tables import/export — `renderer/src/editor/plugins/TableMarkdownTransformer.ts`
+- Code-text link merge (``[`text`](url)``) — `renderer/src/editor/plugins/merge-code-links.ts`
+- Indiana `::` marker survival through round-trip — `renderer/src/editor/plugins/MarkdownPlugin.tsx`, `renderer/src/editor/markdown-roundtrip.test.ts`
+- Presentation-only highlighting for recognized Indiana marker suffixes; fenced and inline code remain plain; rich clipboard data omits the presentation style — `renderer/src/editor/plugins/MarkerHighlightPlugin.tsx`
+- Undo/redo, auto-focus, placeholder — `renderer/src/editor/Editor.tsx`
+- Clickable links → vault note or external browser — `renderer/src/editor/Editor.tsx`, `renderer/src/editor/EditorPane.tsx`
+- Clickable "code chip" links — `renderer/src/editor/Editor.tsx`
+- @-mention vault file links with suggestion list — `renderer/src/editor/plugins/MentionLinkPlugin.tsx`, `renderer/src/editor/EditorPane.tsx`
+- Frontmatter preserved as opaque YAML block — `shared/note-serialization.ts`, `renderer/src/storage/useVault.ts`
+- Right-side Properties inspector: editable top-level scalar fields, add/remove, and raw-YAML fallback — `renderer/src/editor/FrontmatterPanel.tsx`, `shared/frontmatter.ts`
+- Per-property Indiana comments stored as explicit YAML comment lines — `renderer/src/editor/FrontmatterPanel.tsx`, `shared/frontmatter.ts`
+- Debounced autosave (500ms) with Saved/Saving status — `renderer/src/storage/useVault.ts`, `renderer/src/editor/EditorPane.tsx`
+- Note navigation history with back/forward + ⌘[/⌘] shortcuts — `renderer/src/storage/useVault.ts`, `renderer/src/editor/EditorPane.tsx`
+- Active-note path in header — `renderer/src/editor/EditorPane.tsx`
+- Copy all → `indiana copy` with inline success/failure status — `renderer/src/editor/EditorPane.tsx`, `main/lib/indiana.ts`
+- Per-note history panel: commits touching the note + "Current changes" entry, unified red/green source diff, read-only — `renderer/src/history/HistoryPanel.tsx`, `shared/diff.ts`
 
-## Boundaries
-- Casablanca renders and annotates; it never scans, counts, or compiles ([IN_PRINCIPLES.md](../indiana/IN_PRINCIPLES.md): core computes, faces render). `Copy all` delegates to `indiana copy`.
-- Viewer config is a local `settings.json` per project — configuration is files in the folder.
+## HTML preview & annotations
+- HTML notes open in preview iframe (not Lexical) via `vault://` — `renderer/src/preview/HtmlPreview.tsx`
+- Manual reload + annotate toggle — `renderer/src/preview/HtmlPreview.tsx`
+- Injected annotator: hover/click/select element — `main/preview/annotator.js`, `renderer/src/preview/HtmlPreview.tsx`
+- Shared marker composer with command chips, free-text autocomplete, and keyboard submission — `renderer/src/MarkerComposer.tsx`
+- Annotation bubble overlay → shared composer writes `::` marker to `.html.md` sidecar — `renderer/src/preview/AnnotationBubble.tsx`, `main/lib/annotations.ts`
+- 9 annotation kinds with message contracts — `shared/annotation-line.ts`, `renderer/src/preview/AnnotationBubble.tsx`
 
-## Open questions
-- Human edits on rendered views need version handling — parked ([VISION.md](../../VISION.md) non-goals).
-- Whether the vendored nimbalyst reference stays in-tree or becomes a link once its patterns are absorbed.
+## Main / IPC / vault backend
+- Electron bootstrap + sandboxed BrowserWindow with contextIsolation — `main/index.ts`
+- External URL security boundary (setWindowOpenHandler + will-navigate → openExternal) — `main/index.ts`
+- Privileged `vault://` scheme + custom protocol handler — `main/preview/protocol.ts`
+- Vault path traversal guard + MIME mapping — `main/preview/resolve-path.ts`
+- HTML annotator script injection via protocol — `main/preview/protocol.ts`
+- Vault config persistence in userData — `main/lib/config.ts`
+- Vault folder chooser dialog — `main/ipc.ts`, `renderer/src/app/EmptyState.tsx`
+- Vault tree projection: folders-first, natural case-insensitive sort, skip heavy dirs (.git/node_modules/target/dist/out) — `main/lib/vault.ts`
+- Note read/write/create IPC with post-mutation tree+git refresh — `main/ipc.ts`, `main/lib/vault.ts`
+- Generic entry-delete IPC with recursive folder support through OS Trash — `main/ipc.ts`, `main/lib/file-operations.ts`, `shared/ipc.ts`, `preload/index.ts`
+- New note created with default `# title` body — `main/lib/vault.ts`
+- File watcher (chokidar) → tree/git/preview refresh, cleanup on quit — `main/watcher.ts`, `main/index.ts`
+- Git working-tree status (porcelain) with folder aggregation — `main/lib/git.ts`
+- Auto `git init` + initial snapshot commit for projects without a repo (only git write Casablanca ever does; loop commits belong to the coding agent) — `main/lib/git.ts` (`ensureRepo`), `main/ipc.ts`
+- Per-note git log + diff IPC (`git:log`, `git:diff-commit`, `git:diff-head`), untracked files synthesized via `--no-index` — `main/lib/git.ts`, `main/ipc.ts`
+- Indiana binary resolution across standard paths — `main/lib/indiana.ts`
+- IPC channel-name registry shared main/preload — `shared/ipc.ts`
+- Shared domain types (Note, TreeNode, AnnotationRequest, GitStatusMap) — `shared/domain.ts`
+
+## Known gaps (not yet wired — listed for honesty, not as features)
+- Inline Excalidraw canvas — `renderer/src/editor/plugins/ExcalidrawPlugin.tsx` is a dead stub (`NOT WIRED YET`).
+- Auto-linking typed URLs; interactive GFM task lists.
+- Inline rename, context menu, drag-and-drop move, per-folder create.
+- Git blame; external-edit draft reload for an open note.
+- `vault:set`, `vault:rel` — main-process handlers exist, but nothing in the renderer UI calls them, so users cannot reach them.

@@ -31,7 +31,7 @@ approved_file_length: 50 rows
 ## The products
 - [Indiana](indiana/IN_PRD.md) — the server. Monitors repos, compiles `::` markers, exposes the payload through MCP, copies the bundle as fallback. Owns the markers end to end. CLI + menulet.
 - [Menulet](menulet/MENULET_PRD.md) — a UI view onto Indiana: monitored folders, one-click copy. Shows, never computes.
-- [Casablanca](casablanca/CASABLANCA_PRD.md) — the editor: rich inline markdown editing, visual/presentation support as features. Emits `::` markers from rendered views; Indiana still owns them.
+- [Casablanca](casablanca/CASABLANCA_OVERVIEW.md) — the editor: rich inline markdown editing, visual/presentation support as features. Emits `::` markers from rendered views; Indiana still owns them.
 
 ## Direction
 - This file is the wedge; the destination is [VISION.md](../VISION.md). Concern map: [MENTAL_MODEL.md](../MENTAL_MODEL.md).
