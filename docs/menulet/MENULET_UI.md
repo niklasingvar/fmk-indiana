@@ -16,7 +16,8 @@ approval: pending
 ┌─────────────────────────────────┐
 │  + add folder              ⚙    │  ← toolbar: add left, theme cog right
 ├─────────────────────────────────┤
-│  ~/projects/indiana  3⨯  run ⋯ │  ← folder row: path, count, run, three-dot menu
+│  ~/projects/indiana  3⨯  run ⋯ │  ← folder row: path, count, copy, three-dot menu
+│    -1 · 2 commands   run copy   │  ← numeric batch: daemon count + actions
 │  ~/projects/site     7⨯  run ⋯ │  │  ⋯ → update / replace indiana commands
 │  ~/work/notes        0⨯  run ⋯ │  │  ⋯ → copy actions / remove folder
 ├─────────────────────────────────┤
@@ -35,6 +36,8 @@ approval: pending
 - List: each folder shows its basename (or tilde-path) and the live marker count Indiana reports.
 - Add folder: done via the toolbar `[+ add folder]` button.
 - Click a folder row: copies its compiled bundle to clipboard. Visual feedback: "copied" flash.
+- Numeric batch rows show the daemon-supplied member count and separate Run/Copy actions. Run sends one ACP turn for the whole repo-scoped batch.
+- Panel shortcuts: `Ctrl+1`…`Ctrl+9` run the topmost visible group with that label; `Ctrl+Alt+1`…`Ctrl+Alt+9` copy it. Larger labels use row actions.
 - Three-dot menu `[⋯]` per row:
   - `update indiana commands`: delegates to `indiana templates refresh <path>` via the sidecar. Creates missing `.indiana/indianas/<command>/prompt.md` files; existing files are left untouched.
   - `replace indiana commands`: delegates to `indiana templates replace <path>` via the sidecar. Rewrites every `.indiana/indianas/<command>/prompt.md` with the embedded default — destructive, discards user edits to command templates. `context-model/` and `chief-of-staff/` are not touched.

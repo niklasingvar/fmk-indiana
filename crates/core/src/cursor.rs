@@ -21,6 +21,10 @@ pub fn identity(located: &Located) -> String {
         long_name(located.kind),
         &located.raw_token,
         located.message.as_deref().unwrap_or(""),
+        &located
+            .group
+            .map(|group| group.to_string())
+            .unwrap_or_default(),
         &located.scope.content,
     )
 }
@@ -36,18 +40,30 @@ pub fn identity_compiled(marker: &CompiledMarker) -> String {
         long_name(marker.kind),
         &marker.raw_token,
         marker.message.as_deref().unwrap_or(""),
+        &marker
+            .group
+            .map(|group| group.to_string())
+            .unwrap_or_default(),
         &marker.scope_content,
     )
 }
 
 // ── helpers ──
 
-fn fingerprint(path: &str, kind: &str, raw_token: &str, message: &str, scope: &str) -> String {
+fn fingerprint(
+    path: &str,
+    kind: &str,
+    raw_token: &str,
+    message: &str,
+    group: &str,
+    scope: &str,
+) -> String {
     let fp = fnv1a_hex(&[
         path.as_bytes(),
         kind.as_bytes(),
         raw_token.as_bytes(),
         message.as_bytes(),
+        group.as_bytes(),
         scope.as_bytes(),
     ]);
     format!("fp:{fp}")
@@ -85,6 +101,7 @@ mod tests {
             kind,
             raw_token: raw_token.to_string(),
             message: msg.map(|s| s.to_string()),
+            group: None,
             id: None,
             status: None,
             auto: false,
@@ -140,6 +157,15 @@ mod tests {
         assert_ne!(identity(&a), identity(&b));
     }
 
+    #[test]
+    fn test_identity_ephemeral_group_matters() {
+        let mut a = located(Kind::Fix, "fix", Some("tighten"), "loop");
+        a.group = Some(1);
+        let mut b = a.clone();
+        b.group = Some(2);
+        assert_ne!(identity(&a), identity(&b));
+    }
+
     // identity and identity_compiled must agree for the same marker, so the cursor
     // a copy records (compiled) matches what the filter excludes (located).
     #[test]
@@ -151,6 +177,7 @@ mod tests {
             raw_token: "h".into(),
             compiled_prompt: "ignored by identity".into(),
             message: None,
+            group: None,
             path: l.path.clone(),
             line: 42, // line differs — must not affect identity
             scope_kind: ScopeKind::Inline,

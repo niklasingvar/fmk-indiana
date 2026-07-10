@@ -9,6 +9,8 @@
 //!     session cwd and committing, and end the turn.
 //!   - `fail`: request permission but leave the marker line in place, so the
 //!     daemon observes a surviving `:working` marker and records `:failed`.
+//!   - `question`: ask one ACP form question, then resolve only after the
+//!     client accepts it.
 
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
@@ -59,9 +61,14 @@ fn main() {
                         }
                     }),
                 );
-                request_permission(&mut out);
-                let granted = read_permission_response(&mut reader);
-                if granted && mode == "succeed" {
+                let may_resolve = if mode == "question" {
+                    request_question(&mut out);
+                    read_question_response(&mut reader)
+                } else {
+                    request_permission(&mut out);
+                    read_permission_response(&mut reader)
+                };
+                if may_resolve && (mode == "succeed" || mode == "question") {
                     resolve_markers(Path::new(&cwd));
                     commit(Path::new(&cwd));
                 }
@@ -109,6 +116,27 @@ fn request_permission(out: &mut impl Write) {
     );
 }
 
+fn request_question(out: &mut impl Write) {
+    send(
+        out,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 9998,
+            "method": "elicitation/create",
+            "params": {
+                "sessionId": "mock-session",
+                "mode": "form",
+                "message": "Which spelling should I use?",
+                "requestedSchema": {
+                    "type": "object",
+                    "properties": { "spelling": { "type": "string" } },
+                    "required": ["spelling"]
+                }
+            }
+        }),
+    );
+}
+
 /// Read messages until the client answers our permission request (id 9999).
 fn read_permission_response(reader: &mut impl BufRead) -> bool {
     loop {
@@ -125,6 +153,26 @@ fn read_permission_response(reader: &mut impl BufRead) -> bool {
         };
         if msg.get("id").and_then(Value::as_i64) == Some(9999) {
             return msg["result"]["outcome"]["outcome"].as_str() == Some("selected");
+        }
+    }
+}
+
+fn read_question_response(reader: &mut impl BufRead) -> bool {
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line).unwrap_or(0) == 0 {
+            return false;
+        }
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(msg) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if msg.get("id").and_then(Value::as_i64) == Some(9998) {
+            return msg["result"]["action"].as_str() == Some("accept")
+                && msg["result"]["content"]["spelling"].as_str().is_some();
         }
     }
 }

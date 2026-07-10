@@ -8,8 +8,8 @@ use crate::config::Config;
 use crate::dispatch::Dispatcher;
 use crate::paths::{indiana_dir, socket_path};
 use crate::protocol::{
-    AddResponse, CopyResponse, FolderInfo, PayloadResponse, RemoveResponse, Request, Response,
-    StatusResponse,
+    AddResponse, AnswerJobResponse, CopyResponse, FolderInfo, GroupInfo, JobsResponse,
+    PayloadResponse, RemoveResponse, Request, Response, RunGroupResponse, StatusResponse,
 };
 use indiana_core::compile::{compile_with_options, render_text, CompileOptions, CompiledPayload};
 use indiana_core::index::{Index, ScanReport};
@@ -18,6 +18,7 @@ use indiana_core::templates::init_folder_indiana;
 use indiana_core::write::OwnWriteTracker;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
+use std::collections::BTreeMap;
 use std::io::{self, BufRead, BufReader, ErrorKind, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -51,6 +52,26 @@ fn watch_root(deb: &mut Deb, root: &Path) -> io::Result<()> {
         .map_err(io::Error::other)?;
     deb.cache().add_root(root, RecursiveMode::Recursive);
     Ok(())
+}
+
+/// Resolve a face-supplied path to the spelling held by the daemon index.
+/// macOS may canonicalize `/var/...` to `/private/var/...`; comparing only the
+/// canonical request against non-canonical configured roots makes a valid
+/// folder appear empty.
+fn indexed_root(path: &Path, roots: &[PathBuf]) -> PathBuf {
+    if let Some(root) = roots.iter().find(|root| root.as_path() == path) {
+        return root.clone();
+    }
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    roots
+        .iter()
+        .find(|root| {
+            root.canonicalize()
+                .map(|candidate| candidate == canonical)
+                .unwrap_or(false)
+        })
+        .cloned()
+        .unwrap_or(canonical)
 }
 
 /// Run the daemon: bind the socket (recovering a stale one) and serve.
@@ -132,7 +153,7 @@ pub fn serve(root: Option<PathBuf>) -> io::Result<()> {
         Arc::clone(&roots),
         Arc::clone(&index),
         Arc::clone(&own_writes),
-        dispatcher,
+        dispatcher.clone(),
     );
 
     let listener = UnixListener::bind(&sock)?;
@@ -147,7 +168,8 @@ pub fn serve(root: Option<PathBuf>) -> io::Result<()> {
             Ok(s) => {
                 // Sequential is fine: requests are tiny and rare. A slow
                 // client cannot starve others meaningfully yet.
-                if let Err(e) = handle(s, &roots, &index, &own_writes, &mut debouncer) {
+                if let Err(e) = handle(s, &roots, &index, &own_writes, &dispatcher, &mut debouncer)
+                {
                     eprintln!("indiana: client error: {e}");
                 }
             }
@@ -274,7 +296,8 @@ fn handle(
     stream: UnixStream,
     roots: &Mutex<Vec<PathBuf>>,
     index: &Mutex<Index>,
-    own_writes: &Mutex<OwnWriteTracker>,
+    own_writes: &Arc<Mutex<OwnWriteTracker>>,
+    dispatcher: &Dispatcher,
     debouncer: &mut Deb,
 ) -> io::Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
@@ -320,9 +343,19 @@ fn handle(
                 .iter()
                 .map(|r| {
                     let count = idx.markers.iter().filter(|m| m.path.starts_with(r)).count();
+                    let mut grouped = BTreeMap::<u64, usize>::new();
+                    for marker in idx.markers.iter().filter(|m| m.path.starts_with(r)) {
+                        if let Some(group) = marker.group {
+                            *grouped.entry(group).or_default() += 1;
+                        }
+                    }
                     FolderInfo {
                         path: r.display().to_string(),
                         count,
+                        groups: grouped
+                            .into_iter()
+                            .map(|(group, count)| GroupInfo { group, count })
+                            .collect(),
                     }
                 })
                 .collect();
@@ -336,9 +369,10 @@ fn handle(
             let resp = remove_folder_live(&path, roots, index, own_writes, debouncer)?;
             serde_json::to_string(&resp).map_err(io::Error::other)?
         }
-        Request::Copy { path, kind } => {
+        Request::Copy { path, kind, group } => {
             let idx = index.lock().unwrap().clone();
-            let abs = path.canonicalize().unwrap_or(path);
+            let snap = roots.lock().unwrap().clone();
+            let abs = indexed_root(&path, &snap);
             let filtered: Vec<_> = idx
                 .markers
                 .iter()
@@ -357,6 +391,7 @@ fn handle(
             } else {
                 let opts = CompileOptions {
                     kind: kind_filter,
+                    group,
                     roots: Some(vec![abs]),
                     ..Default::default()
                 };
@@ -364,6 +399,29 @@ fn handle(
             };
             serde_json::to_string(&CopyResponse { text }).map_err(io::Error::other)?
         }
+        Request::RunGroup { path, group } => {
+            let idx = index.lock().unwrap().clone();
+            let snap = roots.lock().unwrap().clone();
+            let abs = indexed_root(&path, &snap);
+            let count = dispatcher.run_group(&idx, &abs, group, &snap, &Config::load(), own_writes);
+            serde_json::to_string(&RunGroupResponse {
+                accepted: count > 0,
+                count,
+            })
+            .map_err(io::Error::other)?
+        }
+        Request::Jobs => serde_json::to_string(&JobsResponse {
+            jobs: dispatcher.jobs(),
+        })
+        .map_err(io::Error::other)?,
+        Request::AnswerJob {
+            job_id,
+            action,
+            answer,
+        } => serde_json::to_string(&AnswerJobResponse {
+            accepted: dispatcher.answer_job(&job_id, action, answer),
+        })
+        .map_err(io::Error::other)?,
         Request::Shutdown => {
             let ack = r#"{"ok":true}"#;
             let mut stream = stream;
@@ -473,6 +531,27 @@ pub fn client_copy(path: &Path) -> Option<CopyResponse> {
     let req = serde_json::to_string(&Request::Copy {
         path: path.to_path_buf(),
         kind: None,
+        group: None,
+    })
+    .ok()?;
+    writer.write_all(req.as_bytes()).ok()?;
+    writer.write_all(b"\n").ok()?;
+    writer.flush().ok()?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).ok()?;
+    serde_json::from_str(line.trim()).ok()
+}
+
+/// Dispatch one numeric group through a running daemon.
+#[allow(dead_code)]
+pub fn client_run_group(path: &Path, group: u64) -> Option<RunGroupResponse> {
+    let stream = UnixStream::connect(socket_path()).ok()?;
+    let mut writer = stream.try_clone().ok()?;
+    let req = serde_json::to_string(&Request::RunGroup {
+        path: path.to_path_buf(),
+        group,
     })
     .ok()?;
     writer.write_all(req.as_bytes()).ok()?;

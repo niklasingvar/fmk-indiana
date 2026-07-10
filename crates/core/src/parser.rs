@@ -35,6 +35,8 @@ pub struct Marker {
     pub kind: Kind,
     pub raw_token: String,
     pub message: Option<String>,
+    /// Numeric batch label (`-1`, `-2`, …), stripped from the message.
+    pub group: Option<u64>,
     pub id: Option<String>,
     pub status: Option<Status>,
     pub column: usize,
@@ -244,25 +246,36 @@ fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
         }
     }
 
-    // Flags: leading `-a` / `--auto` tokens after the bracket, before the
-    // message (IN_AUTORUN.md). Parsed only on auto-runnable kinds so a leading
-    // `-a` in any other kind's message is left untouched. Unknown `-x` stops
-    // the scan and falls into the message.
+    // Flags after the bracket, before the message. Numeric labels group markers
+    // for manual batch copy/run. `-a` / `--auto` remains restricted to
+    // auto-runnable kinds. Unknown or duplicate flags stop the scan and become
+    // ordinary message text.
     let mut auto = false;
-    if markers::is_auto_runnable(spec.kind) {
-        let mut scan = rest.trim_start();
-        loop {
-            let end = scan.find(char::is_whitespace).unwrap_or(scan.len());
-            match &scan[..end] {
-                "-a" | "--auto" => {
-                    auto = true;
-                    scan = scan[end..].trim_start();
-                }
-                _ => break,
+    let mut group = None;
+    let mut scan = rest.trim_start();
+    loop {
+        let end = scan.find(char::is_whitespace).unwrap_or(scan.len());
+        let flag = &scan[..end];
+        if matches!(flag, "-a" | "--auto") && markers::is_auto_runnable(spec.kind) && !auto {
+            auto = true;
+            scan = scan[end..].trim_start();
+            continue;
+        }
+        if group.is_none() {
+            if let Some(number) = flag
+                .strip_prefix('-')
+                .filter(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+                .and_then(|digits| digits.parse::<u64>().ok())
+                .filter(|number| *number > 0)
+            {
+                group = Some(number);
+                scan = scan[end..].trim_start();
+                continue;
             }
         }
-        rest = scan;
+        break;
     }
+    rest = scan;
 
     // Message: remainder to end of line, trimmed. Only kinds that take one keep it.
     let msg_text = rest.trim();
@@ -276,6 +289,7 @@ fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
         kind: spec.kind,
         raw_token: format!("::{token}"),
         message,
+        group,
         id,
         status,
         column: at,
@@ -403,6 +417,37 @@ mod tests {
         assert_eq!(m.id.as_deref(), Some("happy-otter"));
         assert_eq!(m.message.as_deref(), Some("banana"));
         assert!(!m.auto, "claimed line no longer carries the flag");
+    }
+
+    #[test]
+    fn test_numeric_group_flag() {
+        let m = marker("::fix -1 tighten this");
+        assert_eq!(m.group, Some(1));
+        assert_eq!(m.message.as_deref(), Some("tighten this"));
+        assert!(!m.auto);
+    }
+
+    #[test]
+    fn test_numeric_groups_support_multiple_labels() {
+        assert_eq!(marker("::fix -2 first").group, Some(2));
+        assert_eq!(marker("::note -42 second").group, Some(42));
+    }
+
+    #[test]
+    fn test_numeric_group_coexists_with_auto_in_either_order() {
+        for line in ["::fix -7 -a banana", "::fix --auto -7 banana"] {
+            let m = marker(line);
+            assert_eq!(m.group, Some(7), "{line}");
+            assert!(m.auto, "{line}");
+            assert_eq!(m.message.as_deref(), Some("banana"), "{line}");
+        }
+    }
+
+    #[test]
+    fn test_zero_is_not_a_group_flag() {
+        let m = marker("::fix -0 keep literal");
+        assert_eq!(m.group, None);
+        assert_eq!(m.message.as_deref(), Some("-0 keep literal"));
     }
 
     #[test]

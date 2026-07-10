@@ -1,168 +1,129 @@
-# Auto-run: `::fix -a` dispatches Claude Code over ACP on save
+# Make auto-run actually work: per-repo opt-in + Casablanca wiring + real ACP
 
 ## Context
 
-Today Indiana **compiles** markers and hands them off — a human hits `Copy all`, pastes into
-an agent, the agent fixes. `docs/ARCHITECTURE.md:54` states the invariant: *"Indiana never runs
-an agent."* The roadmap's third handoff step (`ARCHITECTURE.md`, `ACTION_PLAN.md` Phase 8) is
-**Auto-run — daemon dispatches markers as they appear**, explicitly "not started."
+Auto-run (`::fix -a` → daemon dispatches to Claude Code over ACP) is built and
+unit/mock-tested, but three things stop it from working in practice:
 
-This change ships the first slice of that step. The desired loop:
+1. **It's only been run against a mock ACP agent** — the real `claude-code-acp`
+   path is unproven, so a live run will surface protocol/auth mismatches to fix.
+2. **Casablanca never tells the daemon to monitor a folder.** Selecting a folder
+   updates only Casablanca's own `userData` config; `indiana add` (which
+   registers the folder in `~/.indiana/config.json`, scaffolds `.indiana/`, and
+   live-monitors) is never called. So the daemon never watches Casablanca repos.
+3. **Auto-run is a single global switch.** We want it **per-repo and
+   committable**, so opening a repo in Casablanca turns auto-run on for *that*
+   repo and the opt-in travels with the repo.
 
-1. User types `::fix -a banana` in any watched file and saves.
-2. The daemon sees the `-a` (auto) flag, **claims** the marker by rewriting the line to
-   `::fix[happy-otter:working] banana` (id minted, `working` status, `-a` consumed).
-3. The daemon spawns a Claude Code **ACP agent** subprocess and runs one turn with the compiled
-   prompt.
-4. The agent applies the fix, **removes the marker line**, and commits.
+Goal (dev mode — ignore the released build): open a folder in Casablanca → it's
+monitored, scaffolded, and auto-run is on → typing `::fix -a` fixes and commits
+via real Claude Code, hands-free.
 
-**Transport is Zed's Agent Client Protocol (ACP)** — JSON-RPC 2.0 over stdio between a *client*
-(Indiana's daemon) and an *agent* (Claude Code, via its ACP adapter). This is the same protocol
-Zed uses to drive agents, and the vendored nimbalyst tree already speaks it to Codex
-(`@agentclientprotocol/sdk`, `@zed-industries/codex-acp`). We follow that pattern but implement the
-client natively in Rust.
+Decisions locked: per-repo committable auto-run opt-in; Casablanca folder-open
+monitors + enables auto-run automatically.
 
-This is a deliberate crossing of the "never runs an agent" line: the **daemon** (a face/runtime,
-not the pure core) may now run an agent when a marker opts in with `-a`. The core stays a compiler;
-the ACP client is new daemon-side code. Commit correctness itself is being sorted separately
-(`docs/AGENT_COMMIT.md`); here we only instruct the agent to commit.
+> Note: the tree is concurrently gaining a `group`/`RunGroup` feature (new
+> fields on `Located`/`CompiledMarker`, a protocol variant). Rebase these
+> changes onto that; the dispatch touch-points below are the same regardless.
 
-**Decisions locked with the user:** daemon dispatches (works in any editor) · **ACP is the
-transport** · on-disk form is `[id:working]` reusing the existing bracket · full autonomy
-(auto-grant ACP permission requests, edit + git allowed) · `-a` honored on all agent directives
-(`::fix`, `::elaborate`, `::prompt`; **not** gated `::delete`).
+## Part A — Auto-run opt-in goes per-repo (daemon)
 
-## Why ACP over headless `claude -p`
+Today `Dispatcher::consider` (`crates/indiana/src/dispatch.rs`) gates on the
+global `config.auto_run`. Change the gate to **per-repo, with the global flag as
+fallback default**:
 
-- **Structured turn** — the client receives streaming `session/update` events (agent text, tool
-  calls, plan) instead of scraping stdout; turn end is an explicit `stopReason`, not an exit code.
-- **Permission as a message** — full autonomy is auto-answering `session/request_permission` with
-  the allow option. Auditable and revocable per call, versus an opaque `--dangerously-skip-permissions`.
-- **Editor-agnostic and future-proof** — the same protocol Zed/Casablanca can drive; swapping
-  Claude Code for another ACP agent (codex-acp, etc.) is a config change, not a rewrite.
-- **Progress surface** — the streamed events feed a future menulet/Casablanca "working…" view.
+- Effective rule: a marker dispatches when `per_repo_autoRun ?? config.auto_run`
+  is true, where `per_repo_autoRun` is the owning repo's `.indiana/casablanca/
+  settings.json` `autoRun` key. Per-repo `true`/`false` overrides the global
+  default; unset falls back to global (still default off). This keeps the global
+  switch as a master default and makes per-repo the primary control.
+- In `consider`, compute each candidate's owning root (the existing
+  `owning_root` helper) and read `autoRun` via the settings module
+  (`crates/indiana/src/casablanca.rs::get(root, "autoRun")` → expect a JSON
+  bool). Reuse what's there; no new file format.
+- The ACP adapter config (`config.agent` command/args/env) **stays global** in
+  `~/.indiana/config.json` — it's a machine-level tool, not per-repo.
+- `IN_AUTORUN.md` + `IN_FOLDER.md`: document `autoRun` as the per-repo opt-in
+  living in `.indiana/casablanca/settings.json`, read by the daemon.
 
-## Lifecycle (the state machine)
+## Part B — Casablanca folder-open monitors + sets up (Electron)
 
-```
-::fix -a banana                      user types, saves
-      │  daemon debounce (~300ms) → rescan
-      ▼
-::fix[happy-otter:working] banana    CLAIM: mint id, set status=working, strip -a
-      │  (own-write suppressed; in-flight map keyed by id)
-      │  compile single marker → prompt + "remove this line & commit"
-      ▼
-ACP: spawn adapter → initialize → session/new (cwd = repo root) → session/prompt
-      │  stream session/update (agent msgs, tool calls)
-      │  session/request_permission → auto-grant (full autonomy)
-      ▼
-turn ends with stopReason
-      ├─ end_turn → line already gone = resolved (defensive: if line remains, set :done)
-      └─ error / refusal / cancelled → rewrite status to :failed (visible, not re-dispatched)
-```
+Reuse the existing `resolveIndianaBinary()` + `execFile` pattern in
+`crates/casablanca/src/main/lib/indiana.ts` (same as `copyAllMarkers`). Add:
 
-Guards against re-dispatch: (a) the `working`/`done`/`failed` status means "not a fresh
-candidate"; (b) an in-memory in-flight set keyed by marker id; (c) `OwnWriteTracker` already
-suppresses rescans from Indiana's own writes.
+- `ensureMonitored(rootPath)` — shells `indiana add <rootPath>` (idempotent:
+  registers in `~/.indiana/config.json`, scaffolds `.indiana/`, live-adds to a
+  running daemon). Best-effort with a friendly toast if `indiana` is missing,
+  mirroring `copyAllMarkers`.
+- Enable auto-run on **first add**: write `autoRun: true` into the repo's
+  settings via the existing `writeRepoSetting(rootPath, 'autoRun', true)`
+  (`main/lib/repo-settings.ts`) — no subprocess needed. Only on `PROJECTS_ADD`,
+  not on every re-select, so a later manual disable is respected.
 
-## Changes
+Wiring in `crates/casablanca/src/main/ipc.ts`:
+- `PROJECTS_ADD` handler: after `addProject`, call `ensureMonitored` +
+  enable auto-run.
+- `adopt()` (runs on add, switch, and initial active load): call
+  `ensureMonitored` so any active repo is watched when Casablanca launches or
+  switches. It sits naturally beside the existing `ensureRepo(vault)` (git init).
 
-### Core engine (`crates/core/`) — the grammar and write path
+Result: point 2 ("repo added to `~/.indiana/config.json` when monitored") falls
+out of `indiana add`; point 3 ("select a folder → monitor + setup") is the
+`adopt`/`PROJECTS_ADD` wiring.
 
-- **`parser.rs`** — add flag parsing to `parse_candidate` (~line 197): after the optional
-  `[id:status]` bracket and before the free-text message, consume leading `-a` / `--auto`
-  tokens and set a new `Marker.auto: bool`; the remainder is the message. Unknown `-x` tokens
-  stop flag scanning and fall into the message (backward compatible). Add `Working` to the
-  `Status` enum (line 13) and to `Status::parse` (line 20).
-- **`id.rs`** — `is_valid_status` (line 101) accepts `"working"` alongside `done`/`failed`.
-- **`markers.rs`** — add `is_auto_runnable(kind)` → true for `Fix`/`Elaborate`/`Prompt` (or an
-  `auto_runnable: bool` column on `MarkerSpec` to keep it table-driven per IN_PRINCIPLES
-  "one table drives everything").
-- **`write.rs`** — new claim write beside `inject`/`normalize_line`: given (path, line, status),
-  mint the id if absent, set the bracket to `[id:working]`, and strip a trailing `-a`/`--auto`
-  flag token — atomic, mtime-guarded, idempotent (a claimed line re-runs byte-identical). Reuse
-  `id.rs::format_bracket` / `parse_bracket`. Still the single write chokepoint.
-- **`index.rs` / `compile.rs`** — thread `auto` through `Located` and `CompiledMarker`; expose a
-  way to compile **one** marker's prompt (reuse `compile_with_options` filtered to the marker, or
-  a small `compile_one`) so the ACP prompt is the same text a paste would carry.
+## Part C — Get it working end-to-end against real Claude Code (dev)
 
-### Daemon dispatcher — the ACP client (`crates/indiana/`)
+Runbook, then iterate against the real adapter (only the mock has been exercised):
 
-- **New `crates/indiana/src/acp.rs`** — the ACP client, native Rust:
-  - Depend on Zed's official **`agent-client-protocol`** Rust crate (client role). Pin/verify the
-    version at implementation; mirror the message flow the vendored `CodexACPProtocol.ts` uses.
-  - Resolve the **agent adapter** binary the way `casablanca/src/main/lib/indiana.ts` resolves
-    `indiana` (explicit standard locations + PATH), overridable via config. Default adapter:
-    Claude Code's ACP adapter (`claude-code-acp`, run via node/npx). This node adapter is the one
-    external runtime dep; Indiana's own binary stays static.
-  - Per dispatch: spawn the adapter, `initialize`, `session/new { cwd: <owning root> }`,
-    `session/prompt { <compiled prompt> }`. Drive the connection to completion, forwarding
-    `session/update` events to `~/.indiana/dispatch/<id>.log`.
-  - **Permission handler = full autonomy:** answer `session/request_permission` by selecting the
-    allow / allow-always option so edits and `git` run without a human. (Later: a per-repo policy.)
-  - Detect turn end via `stopReason`. Tear down the session/subprocess after the turn.
-- **New `crates/indiana/src/dispatch.rs`** (or fold into `acp.rs`) — orchestration/state:
-  track in-flight turns in `HashMap<marker_id, DispatchHandle{ root, path, line, child }>`; cap
-  concurrent dispatches (`MAX_INFLIGHT`, e.g. 3); one dispatch per id; on completion resolve
-  (defensively set `:done` if the line remains) or on failure chokepoint-write `:failed`. Both
-  writes recorded in `OwnWriteTracker`.
-- **`daemon.rs`** — after each debounced rebuild (`spawn_watch_thread`, ~line 152), find
-  candidates (`auto == true`, auto-runnable kind, no working/done/failed status, id not in-flight),
-  claim each via the new write, then hand to `dispatch`. Startup policy: a `:working` marker with
-  no live turn (daemon restarted mid-run) is re-dispatched best-effort.
-- **`config.rs`** — extend `Config` (currently just `folders`) with an `agent` block describing the
-  **ACP adapter** command + args + env (Claude auth), and an `auto_run: bool` kill-switch (the
-  roadmap's "pausable"). Default adapter `claude-code-acp`; feature gated so it is opt-in until
-  proven.
+1. **Build + run from source**: `cargo build --release`; run the daemon in a
+   terminal (`indiana serve <repo>` or via config) so the spawned
+   `claude-code-acp` inherits your shell env — Node on PATH and Claude Code auth.
+   (A launchd/menulet daemon may lack that env; dev = run it in a terminal.)
+2. **Adapter reachable + authed**: confirm `npx -y @zed-industries/claude-code-acp`
+   starts and Claude Code is logged in (subscription) or `ANTHROPIC_API_KEY` is
+   set; if needed, put creds in `config.agent.env`.
+3. **Opt in**: `.indiana/casablanca/settings.json` `{"autoRun": true}` (or open
+   the repo in Casablanca once Part B lands).
+4. **Drive it**: type `::fix -a fix this typo`, save, watch
+   `~/.indiana/dispatch/<id>.log` for the ACP conversation.
+5. **Fix real-adapter mismatches** found in the log — likely spots in
+   `crates/indiana/src/acp.rs`: the `initialize` params/`clientCapabilities`
+   shape, an `authenticate` step if the adapter reports `authMethods`, the
+   `session/prompt` content-block format, the permission-option `kind` strings
+   the real adapter offers, `stopReason` values, and whether the agent commits
+   itself vs needs the coda tightened. Adjust and re-run until the marker line
+   is removed and a commit lands.
 
-### Content / templates
+## Files
 
-- **`crates/core/templates/`** — the dispatched prompt appends an auto-run coda instructing the
-  agent to delete the triggering marker line and commit. Put it in a small embedded
-  `autorun_coda.md` (or extend `preamble.md`) so wording stays data, not code
-  (IN_PRINCIPLES "content is data").
-
-### Specs (spec wins or spec changes — never silent drift)
-
-- **`docs/ARCHITECTURE.md:54`** — amend the invariant: the pure core never runs an agent; the
-  **daemon** may, only when a marker opts in with `-a`, **over ACP**. Move handoff step 3 to
-  "in progress."
-- **`docs/indiana/IN_COMMANDS.md`** — document the `-a` / `--auto` flag on agent directives.
-- **`docs/indiana/IN_LINE.md`** — add `working` as a third status; note it rides agent directives
-  under auto-run, not only `::action`/`::todo`.
-- **`docs/indiana/IN_IDENTITY.md`** — new rule: auto-run **mints identity at dispatch** (a plain
-  `::fix` stays ephemeral; `::fix -a` becomes tracked the moment it is claimed).
-- **New `docs/indiana/IN_AUTORUN.md`** — the lifecycle, the ACP client role and message flow,
-  adapter resolution, the permission policy (full autonomy = auto-grant), concurrency cap, pause
-  switch, failure and restart policy.
-- **`docs/indiana/IN_TEST.md`** + **`ACTION_PLAN.md`** — new E-criteria; mark Phase 8 started.
+- `crates/indiana/src/dispatch.rs` — per-repo gate in `consider` (reuse
+  `casablanca::get`, `owning_root`).
+- `crates/indiana/src/acp.rs` — real-adapter fixes as surfaced by step C5.
+- `crates/casablanca/src/main/lib/indiana.ts` — `ensureMonitored`.
+- `crates/casablanca/src/main/ipc.ts` — call `ensureMonitored` in `adopt`;
+  enable auto-run on `PROJECTS_ADD`.
+- `crates/casablanca/src/main/lib/repo-settings.ts` — reuse `writeRepoSetting`
+  (already present).
+- Docs: `IN_AUTORUN.md`, `IN_FOLDER.md` (per-repo `autoRun`).
 
 ## Verification
 
-- **Unit (core):** `-a`/`--auto` parses to `auto=true` and is stripped from the message; a
-  legitimate leading dash in a message is untouched; `working` parses, validates, and repairs;
-  the claim write turns `::fix -a banana` into `::fix[<id>:working] banana` and is idempotent on
-  re-run (byte-identical). Confirm existing byte-stability tests still pass.
-- **Integration (daemon, mock ACP agent):** ship a **mock ACP agent** script (a small node/stdio
-  program modeled on nimbalyst's `mockCodexAcpAgent.mjs`) that speaks ACP, requests one edit
-  permission, removes the marker line, runs `git commit`, and ends the turn. Point `config.agent`
-  at it. Fixture repo with `::fix -a`: assert the line becomes `[id:working]`, `session/new` gets
-  cwd = repo root, the prompt carries the compiled text, the permission request is auto-granted,
-  and on `end_turn` the marker is resolved; assert a turn that errors yields `[id:failed]`; assert
-  the concurrency cap and one-dispatch-per-id hold. Deterministic — no network, no real Claude.
-- **End-to-end (manual, dogfood):** set `config.agent` to the real `claude-code-acp` adapter, type
-  `::fix -a fix this typo` in a scratch file in this repo, save, and watch the daemon claim,
-  open an ACP session, and the fix + commit land. Run via the `run`/`verify` skill; inspect
-  `~/.indiana/dispatch/<id>.log` for the streamed `session/update` trail.
-- Keep the E11 watch tests' flakiness caveat in mind (`IN_TEST.md:154`); gate the ACP integration
-  test behind the mock agent so it stays deterministic.
+- **Rust unit**: `consider` dispatches only when the owning repo's `autoRun` is
+  true (extend the dispatch/mock-agent integration test — add a repo with
+  `autoRun:true` and one without; only the former resolves). Global-fallback
+  case covered too. Run `cargo test --workspace` and the feature-gated
+  `--features test-support --test autorun`.
+- **Casablanca**: `npm run typecheck` + `vitest run` in `crates/casablanca`
+  (needs Node — the TS from the prior session is still unverified there too).
+  Manually: open a fresh folder in the dev editor, confirm it appears in
+  `~/.indiana/config.json`, `.indiana/` is scaffolded, and
+  `.indiana/casablanca/settings.json` has `autoRun:true`.
+- **End-to-end (the real goal)**: with a terminal daemon + Claude auth, open a
+  scratch repo in Casablanca, type `::fix -a`, and watch the fix + commit land;
+  confirm via the dispatch log and `git log`. This is the acceptance test.
 
 ## Out of scope / follow-ups
-
-- `::delete -a` (auto + gated confirmation conflict) — excluded by decision.
-- Commit-message quality and the vendored nimbalyst commit machinery — being fixed separately.
-- A menulet/Casablanca "working…" indicator reading the new `:working` status and the streamed
-  ACP events (natural next step).
-- Per-repo permission policy (prompt vs auto-grant) instead of global full autonomy.
-- Additional ACP agents beyond Claude Code (codex-acp, etc.) — config `agent` block already
-  leaves room.
+- launchd/menulet daemon env + auth for auto-run (dev uses a terminal daemon).
+- A visible auto-run on/off toggle in the editor UI (chose auto-enable for now).
+- Moving `autoRun` to a face-neutral `.indiana/settings.json` if the coupling of
+  the daemon to a `casablanca/`-named file grates later.

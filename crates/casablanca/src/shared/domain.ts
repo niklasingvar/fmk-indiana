@@ -47,6 +47,32 @@ export interface CopyAllResult {
   message: string
 }
 
+/** A live ACP agent process, projected by the Indiana daemon. */
+export interface AgentJob {
+  id: string
+  root: string
+  markers: string[]
+  state: 'running' | 'awaiting_input'
+  question: AgentQuestion | null
+}
+
+/** The one text field Casablanca currently renders for an agent question. */
+export interface AgentQuestion {
+  message: string
+  field: string
+}
+
+export interface AgentJobsResult {
+  online: boolean
+  jobs: AgentJob[]
+}
+
+export type ElicitationAction = 'accept' | 'decline' | 'cancel'
+
+export interface AnswerAgentJobResult {
+  accepted: boolean
+}
+
 /** Marker kinds offered by the HTML-preview annotation bubble. */
 export type AnnotationKind =
   | 'question'

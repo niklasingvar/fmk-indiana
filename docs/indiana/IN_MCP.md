@@ -27,6 +27,7 @@ approval: pending
 - Marker kind and raw token.
 - Compiled prompt.
 - User message, when present.
+- Numeric group label, when present.
 - Source file path.
 - Source line number.
 - Resolved scope kind.

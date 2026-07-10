@@ -16,6 +16,7 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 - Preload-bridge-missing guard screen — `renderer/src/App.tsx`
 - Renderer error boundary — `renderer/src/app/ErrorBoundary.tsx`
 - Theme init before first paint + light/dark toggle — `renderer/src/app/theme.ts`, `renderer/src/editor/EditorPane.tsx`
+- Top-bar live agent-process chips, daemon-health dot, and question popover — `renderer/src/app/TopBar.tsx`, `main/lib/indiana.ts`
 
 ## Folder pane / file tree
 - Flat file tree with click-to-expand/collapse and click-to-open — `renderer/src/folder-pane/FileTree.tsx`, `shared/flatten-tree.ts`
@@ -30,6 +31,7 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 - ARIA tree semantics (role=tree, aria-level/expanded/selected) — `renderer/src/folder-pane/FileTree.tsx`, `renderer/src/folder-pane/FileTreeRow.tsx`
 - New note at vault root with inline name input — `renderer/src/folder-pane/FolderPane.tsx`
 - Delete visible files and folders with confirmation, path validation, and OS Trash — `renderer/src/folder-pane/FileTree.tsx`, `renderer/src/folder-pane/FolderPane.tsx`, `main/lib/file-operations.ts`
+- Right-click tree entries to reveal them in Finder — `renderer/src/folder-pane/FileTree.tsx`, `main/lib/file-operations.ts`
 - Empty-tree state — `renderer/src/folder-pane/FolderPane.tsx`
 - Git status tinting on rows with folder aggregation — `renderer/src/folder-pane/FileTreeRow.tsx`, `main/lib/git.ts`
 
@@ -47,8 +49,7 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 - Clickable "code chip" links — `renderer/src/editor/Editor.tsx`
 - @-mention vault file links with suggestion list — `renderer/src/editor/plugins/MentionLinkPlugin.tsx`, `renderer/src/editor/EditorPane.tsx`
 - Frontmatter preserved as opaque YAML block — `shared/note-serialization.ts`, `renderer/src/storage/useVault.ts`
-- Right-side Properties inspector: editable top-level scalar fields, add/remove, and raw-YAML fallback — `renderer/src/editor/FrontmatterPanel.tsx`, `shared/frontmatter.ts`
-- Per-property Indiana comments stored as explicit YAML comment lines — `renderer/src/editor/FrontmatterPanel.tsx`, `shared/frontmatter.ts`
+- Right-side Properties inspector: editable raw YAML frontmatter — `renderer/src/editor/FrontmatterPanel.tsx`, `shared/frontmatter.ts`
 - Debounced autosave (500ms) with Saved/Saving status — `renderer/src/storage/useVault.ts`, `renderer/src/editor/EditorPane.tsx`
 - Note navigation history with back/forward + ⌘[/⌘] shortcuts — `renderer/src/storage/useVault.ts`, `renderer/src/editor/EditorPane.tsx`
 - Active-note path in header — `renderer/src/editor/EditorPane.tsx`
@@ -71,7 +72,7 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 - HTML annotator script injection via protocol — `main/preview/protocol.ts`
 - Vault config persistence in userData — `main/lib/config.ts`
 - Vault folder chooser dialog — `main/ipc.ts`, `renderer/src/app/EmptyState.tsx`
-- Vault tree projection: folders-first, natural case-insensitive sort, skip heavy dirs (.git/node_modules/target/dist/out) — `main/lib/vault.ts`
+- Vault tree projection: Markdown, HTML, and JSON files; folders-first, natural case-insensitive sort; skip heavy dirs (.git/node_modules/target/dist/out) — `main/lib/vault.ts`
 - Note read/write/create IPC with post-mutation tree+git refresh — `main/ipc.ts`, `main/lib/vault.ts`
 - Generic entry-delete IPC with recursive folder support through OS Trash — `main/ipc.ts`, `main/lib/file-operations.ts`, `shared/ipc.ts`, `preload/index.ts`
 - New note created with default `# title` body — `main/lib/vault.ts`

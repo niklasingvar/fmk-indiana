@@ -1,6 +1,7 @@
 [package]
 name = "indiana"
 version = "0.3.0"
+default-run = "indiana"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true

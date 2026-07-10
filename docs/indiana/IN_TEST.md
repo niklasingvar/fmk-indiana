@@ -155,6 +155,10 @@ Behind `--features test-support`; driven against a mock ACP agent for determinis
 | [IN_AUTORUN.md](IN_AUTORUN.md) | A turn that leaves the marker → `failed`, not re-dispatched | `test_autorun_failure_marks_failed` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | `config.auto_run` off leaves the marker untouched | `test_autorun_disabled_leaves_marker` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | Permission requests are auto-granted (allow-always preferred) | `test_grant_permission_prefers_allow_always` |
+| [IN_AUTORUN.md](IN_AUTORUN.md) | ACP form question becomes a live job, accepts a human response, and resumes the same turn | `test_autorun_question_pauses_and_resumes` |
+| [IN_COMMANDS.md](IN_COMMANDS.md) | Positive numeric flags become group metadata and are stripped from messages; `-a` may coexist and is consumed on claim in either order | `test_numeric_group_flag`, `test_numeric_groups_support_multiple_labels`, `test_numeric_group_coexists_with_auto_in_either_order`, `test_claim_group_retains_group_and_strips_auto_in_either_order` |
+| [IN_AUTORUN.md](IN_AUTORUN.md) | Status reports sorted group counts; grouped Copy filters the payload; Run dispatches all members as one turn | `test_group_summary_copy_and_run_one_turn` |
+| [IN_AUTORUN.md](IN_AUTORUN.md) | A grouped turn that leaves markers marks every surviving member failed | `test_group_failure_marks_all_survivors_failed` |
 
 ## What not to test
 - OS behavior: FSEvents delivery, `rename` atomicity, `fsync` durability — these are OS contracts, not Indiana's.

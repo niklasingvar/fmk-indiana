@@ -1,7 +1,7 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
 import { promises as fs } from 'node:fs'
 import { IPC } from '@shared/ipc'
-import type { AnnotationRequest, VaultConfig, VaultState } from '@shared/domain'
+import type { AnnotationRequest, ElicitationAction, VaultConfig, VaultState } from '@shared/domain'
 import {
   getActiveProject,
   listProjects,
@@ -11,10 +11,11 @@ import {
   removeProject
 } from './lib/config'
 import type { ProjectRecord } from '@shared/projects'
-import { copyAllMarkers } from './lib/indiana'
+import { agentJobs, answerAgentJob, copyAllMarkers, ensureMonitored } from './lib/indiana'
+import { ensureRepoDefaults } from './lib/repo-settings'
 import { appendAnnotation } from './lib/annotations'
 import { ensureRepo, gitDiffCommit, gitDiffHead, gitLog, gitStatus } from './lib/git'
-import { deleteEntry } from './lib/file-operations'
+import { deleteEntry, revealEntry } from './lib/file-operations'
 import { readTree, readNote, writeNote, createNote, toRelative } from './lib/vault'
 
 type Sender = Pick<BrowserWindow, 'webContents'>
@@ -56,8 +57,17 @@ export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcReg
   const adopt = async (a: ProjectRecord | null): Promise<VaultState> => {
     active = a
     vault = a ? { rootPath: a.rootPath } : null
-    // Every project is git-backed: init + snapshot when no repo exists yet.
-    if (vault) await ensureRepo(vault)
+    if (vault) {
+      // Every open provisions what the repo needs, idempotently:
+      // 1. git-backed: init + snapshot when no repo exists yet.
+      await ensureRepo(vault)
+      // 2. Indiana monitors it: registers in the daemon config, scaffolds
+      //    .indiana/, starts watching.
+      await ensureMonitored(vault.rootPath)
+      // 3. Per-repo defaults (e.g. autoRun on) for any key not already set —
+      //    never clobbers a deliberate choice.
+      await ensureRepoDefaults(vault.rootPath)
+    }
     deps.retargetWatcher(vault)
     await refresh()
     return a ? readyState(a) : { status: 'unset' }
@@ -95,6 +105,7 @@ export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcReg
     if (result.canceled || result.filePaths.length === 0) return null
     const rootPath = result.filePaths[0]
     await fs.mkdir(rootPath, { recursive: true })
+    // adopt() provisions the repo (monitor + .indiana scaffold + default autoRun on).
     return adopt(await addProject(rootPath))
   })
 
@@ -138,6 +149,10 @@ export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcReg
     await refresh()
   })
 
+  handle(IPC.ENTRY_REVEAL, async (rel: unknown) => {
+    await revealEntry(requireVault(), String(rel), (absolutePath) => shell.showItemInFolder(absolutePath))
+  })
+
   // --- git history --------------------------------------------------------
 
   handle(IPC.GIT_LOG, async (rel: unknown) => gitLog(requireVault(), String(rel)))
@@ -159,6 +174,14 @@ export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcReg
   // --- indiana ------------------------------------------------------------
 
   handle(IPC.INDIANA_COPY_ALL, async () => copyAllMarkers(requireVault()))
+  handle(IPC.INDIANA_JOBS, async () => agentJobs())
+  handle(IPC.INDIANA_ANSWER_JOB, async (jobId: unknown, action: unknown, answer: unknown) =>
+    answerAgentJob(
+      String(jobId),
+      action as ElicitationAction,
+      typeof answer === 'string' ? answer : undefined
+    )
+  )
 
   // Utility: convert an absolute path to a vault-relative one.
   handle('vault:rel', async (abs: unknown) => toRelative(requireVault(), String(abs)))

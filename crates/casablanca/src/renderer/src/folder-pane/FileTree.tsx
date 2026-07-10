@@ -17,6 +17,7 @@ export function FileTree({
   activePath,
   onOpen,
   onDelete,
+  onReveal,
   vaultKey,
   gitStatus
 }: {
@@ -24,6 +25,7 @@ export function FileTree({
   activePath: string | null
   onOpen: (rel: string) => void
   onDelete: (node: FlatTreeNode) => void
+  onReveal: (node: FlatTreeNode) => void
   vaultKey: string
   gitStatus: GitStatusMap
 }) {
@@ -157,7 +159,7 @@ export function FileTree({
           className="fixed z-50 min-w-36 rounded border border-pane-border bg-pane p-1 text-xs shadow-lg"
           style={{
             left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 152)),
-            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 42))
+            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 76))
           }}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
@@ -165,6 +167,17 @@ export function FileTree({
         >
           <button
             autoFocus
+            role="menuitem"
+            className="w-full rounded px-2 py-1.5 text-left hover:bg-pane-hover"
+            onClick={() => {
+              const node = contextMenu.node
+              setContextMenu(null)
+              onReveal(node)
+            }}
+          >
+            Reveal in Finder
+          </button>
+          <button
             role="menuitem"
             className="w-full rounded px-2 py-1.5 text-left text-git-deleted hover:bg-pane-hover"
             onClick={() => {

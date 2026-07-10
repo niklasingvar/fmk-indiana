@@ -26,6 +26,8 @@ pub struct CompiledMarker {
     pub compiled_prompt: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<u64>,
     pub path: PathBuf,
     pub line: usize,
     pub scope_kind: ScopeKind,
@@ -48,6 +50,8 @@ pub struct CompileOptions {
     /// Exclude markers whose `cursor::identity` is in this set. None → no exclusion.
     /// Used by `--latest` to skip already-copied markers.
     pub copied: Option<HashSet<String>>,
+    /// Only include markers carrying this numeric batch label.
+    pub group: Option<u64>,
     /// Root folders for template lookup. None → embedded templates only.
     pub roots: Option<Vec<PathBuf>>,
 }
@@ -78,6 +82,10 @@ pub fn compile_with_options(index: &Index, options: &CompileOptions) -> Compiled
             Some(set) => !set.contains(&cursor::identity(m)),
             None => true,
         })
+        .filter(|m| match options.group {
+            Some(group) => m.group == Some(group),
+            None => true,
+        })
         .map(|marker| {
             let catalog = match &root_catalogs {
                 Some(cats) => owning_root(&marker.path, options.roots.as_ref().unwrap())
@@ -100,6 +108,7 @@ const PAYLOAD_PREAMBLE: &str = include_str!("../templates/preamble.md");
 /// Coda appended to a dispatched auto-run prompt: remove the marker line and
 /// commit (IN_AUTORUN.md). `{path}`/`{line}`/`{marker}` are filled per marker.
 const AUTORUN_CODA: &str = include_str!("../templates/autorun_coda.md");
+const GROUP_RUN_CODA: &str = include_str!("../templates/group_run_coda.md");
 
 /// One marker rendered as `path:line [kind]` + prompt + scope.
 fn marker_block(marker: &CompiledMarker) -> String {
@@ -143,6 +152,41 @@ pub fn render_dispatch(marker: &CompiledMarker) -> String {
     format!("{PAYLOAD_PREAMBLE}\n---\n{block}\n---\n{coda}")
 }
 
+/// One ACP prompt for every marker in a numeric batch. The daemon claims all
+/// members before compiling, so each target has an id and `:working` status.
+pub fn render_group_dispatch(payload: &CompiledPayload, group: u64) -> String {
+    let markers = payload
+        .markers
+        .iter()
+        .map(marker_block)
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    if markers.is_empty() {
+        return String::new();
+    }
+    let targets = payload
+        .markers
+        .iter()
+        .map(|marker| {
+            let token = match &marker.id {
+                Some(id) => format!("{}[{id}:working]", marker.raw_token),
+                None => marker.raw_token.clone(),
+            };
+            format!(
+                "- {}:{} bearing `{token}`",
+                marker.path.display(),
+                marker.line
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let coda = GROUP_RUN_CODA
+        .replace("{group}", &group.to_string())
+        .replace("{count}", &payload.markers.len().to_string())
+        .replace("{targets}", &targets);
+    format!("{PAYLOAD_PREAMBLE}\n---\n{markers}\n---\n{coda}")
+}
+
 fn compile_marker(marker: &Located, templates: &HashMap<String, String>) -> CompiledMarker {
     CompiledMarker {
         id: marker.id.clone(),
@@ -150,6 +194,7 @@ fn compile_marker(marker: &Located, templates: &HashMap<String, String>) -> Comp
         raw_token: marker.raw_token.clone(),
         compiled_prompt: prompt(marker, templates),
         message: marker.message.clone(),
+        group: marker.group,
         path: marker.path.clone(),
         line: marker.line,
         scope_kind: marker.scope.kind.clone(),
@@ -365,6 +410,7 @@ mod tests {
         let opts = CompileOptions {
             kind: Some(Kind::Note),
             copied: None,
+            group: None,
             roots: None,
         };
         let payload = compile_with_options(&idx, &opts);
@@ -379,6 +425,7 @@ mod tests {
         let opts = CompileOptions {
             kind: Some(Kind::Action),
             copied: None,
+            group: None,
             roots: None,
         };
         let payload = compile_with_options(&idx, &opts);
@@ -412,6 +459,7 @@ mod tests {
         let opts = CompileOptions {
             kind: None,
             copied: Some(copied),
+            group: None,
             roots: None,
         };
         let payload = compile_with_options(&idx, &opts);
@@ -429,6 +477,7 @@ mod tests {
         let opts = CompileOptions {
             kind: None,
             copied: Some(HashSet::new()),
+            group: None,
             roots: None,
         };
         let payload = compile_with_options(&idx, &opts);
@@ -442,6 +491,7 @@ mod tests {
         let opts = CompileOptions {
             kind: None,
             copied: None,
+            group: None,
             roots: None,
         };
         let payload = compile_with_options(&idx, &opts);
@@ -460,6 +510,7 @@ mod tests {
         let opts = CompileOptions {
             kind: Some(Kind::Action),
             copied: Some(copied),
+            group: None,
             roots: None,
         };
         let payload = compile_with_options(&idx, &opts);
@@ -478,6 +529,7 @@ mod tests {
             &CompileOptions {
                 kind: None,
                 copied: None,
+                group: None,
                 roots: None,
             },
         );
@@ -536,6 +588,42 @@ mod tests {
         );
         assert_eq!(payload.markers[0].compiled_prompt, "Fix this. tighten");
         assert_eq!(payload.warnings.len(), 1);
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_compile_numeric_group_only() {
+        let (d, idx) = index("::fix -1 first\n::note -2 other\n::elaborate -1 second\n");
+        let payload = compile_with_options(
+            &idx,
+            &CompileOptions {
+                group: Some(1),
+                ..Default::default()
+            },
+        );
+        assert_eq!(payload.markers.len(), 2);
+        assert!(payload.markers.iter().all(|marker| marker.group == Some(1)));
+        assert_eq!(payload.markers[0].message.as_deref(), Some("first"));
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_render_group_dispatch_lists_every_claimed_target() {
+        let (d, idx) = index(
+            "::fix[happy-otter:working] -3 first\n::elaborate[calm-tiger:working] -3 second\n",
+        );
+        let payload = compile_with_options(
+            &idx,
+            &CompileOptions {
+                group: Some(3),
+                ..Default::default()
+            },
+        );
+        let rendered = render_group_dispatch(&payload, 3);
+        assert!(rendered.contains("all 2 markers in group -3"));
+        assert!(rendered.contains("::fix[happy-otter:working]"));
+        assert!(rendered.contains("::elaborate[calm-tiger:working]"));
+        assert!(rendered.contains("one commit"));
         fs::remove_dir_all(d).ok();
     }
 }

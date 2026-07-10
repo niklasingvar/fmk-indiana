@@ -3,7 +3,10 @@ import { IPC } from '@shared/ipc'
 import type {
   AnnotationRequest,
   AnnotationResult,
+  AgentJobsResult,
+  AnswerAgentJobResult,
   CopyAllResult,
+  ElicitationAction,
   GitLogEntry,
   GitStatusMap,
   Note,
@@ -47,7 +50,8 @@ const api = {
       ipcRenderer.invoke(IPC.NOTE_CREATE, dirRel, name),
   },
   entries: {
-    remove: (rel: string): Promise<void> => ipcRenderer.invoke(IPC.ENTRY_DELETE, rel)
+    remove: (rel: string): Promise<void> => ipcRenderer.invoke(IPC.ENTRY_DELETE, rel),
+    reveal: (rel: string): Promise<void> => ipcRenderer.invoke(IPC.ENTRY_REVEAL, rel)
   },
   annotations: {
     append: (req: AnnotationRequest): Promise<AnnotationResult> =>
@@ -75,7 +79,14 @@ const api = {
     diffHead: (rel: string): Promise<string> => ipcRenderer.invoke(IPC.GIT_DIFF_HEAD, rel)
   },
   indiana: {
-    copyAll: (): Promise<CopyAllResult> => ipcRenderer.invoke(IPC.INDIANA_COPY_ALL)
+    copyAll: (): Promise<CopyAllResult> => ipcRenderer.invoke(IPC.INDIANA_COPY_ALL),
+    jobs: (): Promise<AgentJobsResult> => ipcRenderer.invoke(IPC.INDIANA_JOBS),
+    answerJob: (
+      jobId: string,
+      action: ElicitationAction,
+      answer?: string
+    ): Promise<AnswerAgentJobResult> =>
+      ipcRenderer.invoke(IPC.INDIANA_ANSWER_JOB, jobId, action, answer)
   }
 }
 

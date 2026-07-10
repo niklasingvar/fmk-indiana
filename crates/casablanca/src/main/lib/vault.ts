@@ -3,8 +3,8 @@ import { basename, join, relative, sep } from 'node:path'
 import type { Note, TreeNode, VaultConfig } from '@shared/domain'
 
 const NOTE_EXTENSION = '.md'
-/** What the tree shows: notes plus previewable HTML documents. */
-const TRACKED_EXTENSIONS = ['.md', '.html', '.htm']
+/** What the tree shows: notes, previewable HTML documents, and JSON settings. */
+const TRACKED_EXTENSIONS = ['.md', '.html', '.htm', '.json']
 
 function toPosix(p: string): string {
   return p.split(sep).join('/')

@@ -163,17 +163,35 @@ fn status_line(line: &[u8], status: &str, ids: &mut IdGenerator) -> Option<Vec<u
     Some(new_line.into_bytes())
 }
 
-/// Drop leading `-a` / `--auto` tokens (and the whitespace that separated them)
-/// from a marker's message tail, preserving the remaining text and terminator.
-fn strip_leading_auto_flags(s: &str) -> &str {
+/// Drop `-a` / `--auto` from the recognized flag prefix while retaining one
+/// numeric group label. This handles both `-a -1` and `-1 -a`.
+fn strip_leading_auto_flags(s: &str) -> String {
     let mut rest = s;
+    let mut group = None;
     loop {
         let trimmed = rest.trim_start_matches([' ', '\t']);
         let end = trimmed.find(char::is_whitespace).unwrap_or(trimmed.len());
-        match &trimmed[..end] {
-            "-a" | "--auto" => rest = &trimmed[end..],
-            _ => return rest,
+        let flag = &trimmed[..end];
+        if matches!(flag, "-a" | "--auto") {
+            rest = &trimmed[end..];
+            continue;
         }
+        if group.is_none()
+            && flag
+                .strip_prefix('-')
+                .filter(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+                .and_then(|digits| digits.parse::<u64>().ok())
+                .is_some_and(|number| number > 0)
+        {
+            group = Some(flag);
+            rest = &trimmed[end..];
+            continue;
+        }
+        break;
+    }
+    match group {
+        Some(group) => format!(" {group}{rest}"),
+        None => rest.to_string(),
     }
 }
 
@@ -434,6 +452,21 @@ mod tests {
         assert!(text.starts_with("::fix["));
         assert!(text.ends_with(":working]\n"), "no trailing space: {text:?}");
         fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn test_claim_group_retains_group_and_strips_auto_in_either_order() {
+        for (i, flags) in ["-1 -a", "-a -1"].into_iter().enumerate() {
+            let dir = tmp();
+            let file = dir.join(format!("doc-{i}.md"));
+            fs::write(&file, format!("::fix {flags} banana\n")).unwrap();
+
+            set_status(&file, 1, "working").unwrap();
+            let text = fs::read_to_string(&file).unwrap();
+            assert!(text.contains(":working] -1 banana\n"), "got: {text:?}");
+            assert!(!text.contains("-a"), "auto flag survived: {text:?}");
+            fs::remove_dir_all(dir).ok();
+        }
     }
 
     #[test]

@@ -3,6 +3,7 @@ import { resolve, sep } from 'node:path'
 import type { VaultConfig } from '@shared/domain'
 
 export type TrashItem = (absolutePath: string) => Promise<void>
+export type ShowItemInFolder = (absolutePath: string) => void
 
 /**
  * Resolve one vault-relative entry without allowing the operation to escape
@@ -28,4 +29,15 @@ export async function deleteEntry(
   const absolutePath = resolveEntryPath(vault, rel)
   await fs.lstat(absolutePath)
   await trashItem(absolutePath)
+}
+
+/** Reveal one existing file or folder in the operating system file manager. */
+export async function revealEntry(
+  vault: VaultConfig,
+  rel: string,
+  showItemInFolder: ShowItemInFolder
+): Promise<void> {
+  const absolutePath = resolveEntryPath(vault, rel)
+  await fs.lstat(absolutePath)
+  showItemInFolder(absolutePath)
 }

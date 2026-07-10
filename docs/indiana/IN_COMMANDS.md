@@ -14,6 +14,7 @@ approval: pending
 - Short or long form, e.g. `::h` == `::hate`.
 - A message follows the token only when the kind takes one (see the table; pure reactions take none).
 - Auto-run flag: `-a` / `--auto` immediately after the token (before the message) asks the daemon to run this marker at once over ACP — `::fix -a banana`. Honored only on agent directives that act directly (`::fix`, `::elaborate`, `::prompt`); on any other kind a leading `-a` is ordinary message text. The daemon claims the marker (`::fix[id:working]`, flag consumed), dispatches, and the agent resolves it. Full lifecycle: [IN_AUTORUN.md](IN_AUTORUN.md).
+- Numeric group flag: a positive `-<number>` before the message assigns the marker to that repo-wide batch — `::fix -1 banana`. All marker kinds may be grouped; the flag is metadata and does not enter the compiled message. A menulet Run dispatches every member as one ACP turn; Copy renders only that group. `-a` and a numeric group may coexist, in either order, but `-a` still dispatches that marker individually.
 - Inside a code fence → ignored.
 - Frontmatter property comments use `# frontmatter.<key> ::<cmd> [message]`; their inline scope is the named property.
 - Why `::` (not `[]`): survives every markdown parser; `rg '^::'` has zero false positives.
@@ -60,4 +61,5 @@ approval: pending
 
 ## Decided
 - Pure reactions (`::hate`, `::love`, `::keep`) take no message — keeps tagging fast (PURPOSE: no essays).
+- Numeric labels are scoped to one monitored root. The same `-1` in another root is a different group.
 - Prompt wording is tunable content, not frozen here ([IN_PRINCIPLES.md](IN_PRINCIPLES.md): content is data). The intent above is the contract; phrasing can change.

@@ -32,11 +32,14 @@ approval: pending
 - Monitored folders — list; add / remove a folder (registers it with Indiana).
 - Per folder row: name · count (`N ::`) · copy. Copy puts Indiana's compiled
   bundle on the clipboard; right-click removes the folder.
+- Numeric batch rows sit below their folder, sorted by label: `-1 · 4 commands · run · copy`. Counts and grouping come from the daemon.
 - Empty state: "monitor a folder" picker.
 
 ## Behavior
 - All data comes from the Indiana core. The menulet never scans or counts.
 - Updates as Indiana reports changes over the socket.
+- Batch Run asks the daemon for one ACP turn covering that repo's group. Batch Copy asks for the same filtered compiled payload.
+- While the panel is focused, `Ctrl+1` through `Ctrl+9` run the topmost visible matching group; adding Alt copies it instead. Groups above 9 use their row actions.
 - Local only; no accounts, no sync.
 - On launch: checks for a running `indiana serve` daemon on the Unix socket. If alive, connects. If not, spawns the bundled binary as a child process.
 

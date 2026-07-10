@@ -7,6 +7,7 @@ import { getVersion } from "@tauri-apps/api/app";
 let homeDir = "";
 let openFolderMenu = null;
 let connecting = false;
+let currentFolders = [];
 
 // DOM
 const foldersList = document.getElementById("folders");
@@ -52,6 +53,7 @@ function firstLine(err) {
   return String(err).split("\n")[0].slice(0, 48);
 }
 function renderFolders(folders) {
+  currentFolders = folders;
   foldersList.innerHTML = "";
   if (folders.length === 0) { foldersList.hidden = true; return; }
   foldersList.hidden = false;
@@ -73,7 +75,7 @@ function renderFolders(folders) {
       runBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
         try {
-          const text = await invoke("copy_folder", { path: f.path });
+          const text = await invoke("copy_folder", { path: f.path, group: null });
           await writeText(text);
           flashText("copied");
         } catch (err) { console.error("copy failed:", err); }
@@ -117,7 +119,7 @@ function renderFolders(folders) {
         e.stopPropagation();
         closeFolderMenu();
         try {
-          const text = await invoke("copy_folder", { path: f.path, kind: "action" });
+          const text = await invoke("copy_folder", { path: f.path, kind: "action", group: null });
           await writeText(text);
           flashText("copied");
         } catch (err) { console.error("copy actions failed:", err); }
@@ -151,7 +153,66 @@ function renderFolders(folders) {
       li.appendChild(menuBtn);
       li.appendChild(menu);
       foldersList.appendChild(li);
+
+      for (const group of f.groups || []) {
+        const groupRow = document.createElement("li");
+        groupRow.className = "group";
+
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = "-" + group.group;
+
+        const memberCount = document.createElement("span");
+        memberCount.className = "member-count";
+        memberCount.textContent = group.count + (group.count === 1 ? " command" : " commands");
+
+        const groupRun = document.createElement("button");
+        groupRun.textContent = "run";
+        groupRun.title = group.group < 10 ? "Ctrl+" + group.group : "Run group -" + group.group;
+        groupRun.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await runGroup(f.path, group.group);
+        });
+
+        const groupCopy = document.createElement("button");
+        groupCopy.textContent = "copy";
+        groupCopy.title = group.group < 10
+          ? "Ctrl+Alt+" + group.group
+          : "Copy group -" + group.group;
+        groupCopy.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await copyGroup(f.path, group.group);
+        });
+
+        groupRow.appendChild(label);
+        groupRow.appendChild(memberCount);
+        groupRow.appendChild(groupRun);
+        groupRow.appendChild(groupCopy);
+        foldersList.appendChild(groupRow);
+      }
     }
+}
+
+async function copyGroup(path, group) {
+  try {
+    const text = await invoke("copy_folder", { path, group });
+    await writeText(text);
+    flashText("copied -" + group);
+  } catch (err) {
+    console.error("copy group failed:", err);
+    flashText("copy failed");
+  }
+}
+
+async function runGroup(path, group) {
+  try {
+    const result = await invoke("run_group", { path, group });
+    flashText(result.accepted ? "running " + result.count : "group unavailable");
+    await refreshFolders();
+  } catch (err) {
+    console.error("run group failed:", err);
+    flashText("run failed");
+  }
 }
 
 function basename(path) {
@@ -279,6 +340,21 @@ for (const btn of themeMenu.querySelectorAll("[data-theme-choice]")) {
 }
 
 document.addEventListener("click", () => { themeMenu.hidden = true; closeFolderMenu(); });
+
+// Panel-scoped numeric batch shortcuts. When multiple monitored folders carry
+// the same label, the topmost visible batch row wins.
+document.addEventListener("keydown", async (event) => {
+  const match = event.code.match(/^Digit([1-9])$/);
+  if (!event.ctrlKey || !match) return;
+  const group = Number(match[1]);
+  const folder = currentFolders.find((item) =>
+    (item.groups || []).some((candidate) => candidate.group === group)
+  );
+  if (!folder) return;
+  event.preventDefault();
+  if (event.altKey) await copyGroup(folder.path, group);
+  else await runGroup(folder.path, group);
+});
 
 markTheme(document.documentElement.dataset.theme || "system");
 

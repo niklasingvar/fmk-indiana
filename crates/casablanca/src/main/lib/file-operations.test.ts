@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { VaultConfig } from '@shared/domain'
-import { deleteEntry } from './file-operations'
+import { deleteEntry, revealEntry } from './file-operations'
 
 let vault: VaultConfig
 
@@ -48,5 +48,27 @@ describe('deleteEntry', () => {
     await expect(deleteEntry(vault, '', trash)).rejects.toThrow(/Invalid vault entry path/)
     await expect(deleteEntry(vault, '../outside', trash)).rejects.toThrow(/escapes vault/)
     await expect(deleteEntry(vault, vault.rootPath, trash)).rejects.toThrow(/escapes vault/)
+  })
+})
+
+describe('revealEntry', () => {
+  it('sends a file to the file-manager boundary', async () => {
+    const file = join(vault.rootPath, 'notes.md')
+    await fs.writeFile(file, '# Notes\n')
+    let revealedPath: string | null = null
+
+    await revealEntry(vault, 'notes.md', (path) => {
+      revealedPath = path
+      return true
+    })
+
+    expect(revealedPath).toBe(file)
+  })
+
+  it('rejects the root and paths outside the vault', async () => {
+    const reveal = (): boolean => true
+
+    await expect(revealEntry(vault, '', reveal)).rejects.toThrow(/Invalid vault entry path/)
+    await expect(revealEntry(vault, '../outside', reveal)).rejects.toThrow(/escapes vault/)
   })
 })

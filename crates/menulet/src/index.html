@@ -236,6 +236,34 @@
       cursor: pointer;
     }
     .folder .copy:hover { color: var(--text); }
+    .group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 24px;
+      padding: 3px 10px 3px 24px;
+      color: var(--text-secondary);
+    }
+    .group:hover { background: var(--hover-bg); color: var(--text); }
+    .group .label {
+      min-width: 28px;
+      color: var(--text);
+    }
+    .group .member-count {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .group button {
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font: inherit;
+      cursor: pointer;
+    }
+    .group button:hover { color: var(--text); }
     /*
      * Copied flash
      */

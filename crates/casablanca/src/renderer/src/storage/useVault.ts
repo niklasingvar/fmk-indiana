@@ -182,6 +182,10 @@ export function useVault() {
     [activeNote, draft, persistNote, resetActiveDoc]
   )
 
+  const revealEntry = useCallback(async (rel: string): Promise<void> => {
+    await window.api.entries.reveal(rel)
+  }, [])
+
   // Open the folder picker, register the chosen folder as a project, switch to it.
   const addProject = useCallback(async () => {
     const res = await window.api.projects.add()
@@ -235,6 +239,7 @@ export function useVault() {
     openNote,
     createNote,
     removeEntry,
+    revealEntry,
     closeNote,
     goBack,
     goForward,

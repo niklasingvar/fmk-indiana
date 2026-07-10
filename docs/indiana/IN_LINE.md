@@ -24,6 +24,7 @@ approval: pending
 - Resolved: `::action[happy-otter:done] buy milk` or `::action[happy-otter:failed] buy milk`.
 - `done` / `failed` apply to `::action` / `::todo` — the user tasks tracked to closure ([IN_IDENTITY.md](IN_IDENTITY.md)).
 - `working` is the third status word: an auto-run agent directive whose turn is in flight — `::fix[happy-otter:working] banana`. It rides `::fix` / `::elaborate` / `::prompt` under auto-run, and is minted at dispatch, not scan ([IN_AUTORUN.md](IN_AUTORUN.md), [IN_IDENTITY.md](IN_IDENTITY.md)).
+- A manually run numeric group uses the same claim state while retaining its label: `::fix[happy-otter:working] -1 banana`. The label follows the bracket and is stripped from the compiled message, not from source.
 - `working` / `done` / `failed` are the status words, after a `:` inside the bracket. Absence means open.
 
 ## Discipline

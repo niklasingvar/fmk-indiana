@@ -5,6 +5,8 @@
 //! Built only under `--features test-support` (the mock bin lives behind it).
 #![cfg(feature = "test-support")]
 
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -96,6 +98,18 @@ fn spawn_serve(home: &Path) -> Daemon {
     Daemon(c)
 }
 
+fn request(home: &Path, body: serde_json::Value) -> serde_json::Value {
+    let stream = UnixStream::connect(home.join("indiana.sock")).unwrap();
+    let mut writer = stream.try_clone().unwrap();
+    writer.write_all(body.to_string().as_bytes()).unwrap();
+    writer.write_all(b"\n").unwrap();
+    writer.flush().unwrap();
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).unwrap();
+    serde_json::from_str(line.trim()).unwrap()
+}
+
 fn wait_ready(home: &Path) -> bool {
     let deadline = Instant::now() + Duration::from_secs(10);
     while Instant::now() < deadline {
@@ -114,7 +128,11 @@ fn wait_ready(home: &Path) -> bool {
 }
 
 fn wait_until_file<F: Fn(&str) -> bool>(path: &Path, pred: F) -> bool {
-    wait_until(|| std::fs::read_to_string(path).map(|t| pred(&t)).unwrap_or(false))
+    wait_until(|| {
+        std::fs::read_to_string(path)
+            .map(|t| pred(&t))
+            .unwrap_or(false)
+    })
 }
 
 fn wait_until<F: Fn() -> bool>(pred: F) -> bool {
@@ -169,7 +187,10 @@ fn test_autorun_success_resolves_and_commits() {
         std::fs::read_to_string(home.join("serve.log"))
     );
     let text = std::fs::read_to_string(&doc).unwrap();
-    assert!(!text.contains("::fix"), "marker line should be gone: {text:?}");
+    assert!(
+        !text.contains("::fix"),
+        "marker line should be gone: {text:?}"
+    );
     // Surrounding content is intact — only the marker line was removed.
     assert!(text.contains("intro paragraph"));
     assert!(text.contains("trailer"));
@@ -177,6 +198,48 @@ fn test_autorun_success_resolves_and_commits() {
         !text.contains(":working]"),
         "no in-flight bracket should remain"
     );
+}
+
+// E13: an ACP form question surfaces as a live daemon job, accepts a human
+// answer over the socket, and resumes the same turn.
+#[test]
+fn test_autorun_question_pauses_and_resumes() {
+    let home = unique("home");
+    let repo = git_repo_with("intro\n::fix -a choose spelling\n");
+    write_config(&home, &repo, "question", true);
+    let doc = repo.join("doc.md");
+    let commits_before = git_log_count(&repo);
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let job = loop {
+        let jobs = request(&home, serde_json::json!({ "cmd": "jobs" }));
+        if let Some(job) = jobs["jobs"].as_array().and_then(|jobs| jobs.first()) {
+            if job["state"].as_str() == Some("awaiting_input")
+                && job["question"]["message"].as_str() == Some("Which spelling should I use?")
+            {
+                break job.clone();
+            }
+        }
+        assert!(Instant::now() < deadline, "agent never asked a question");
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    let job_id = job["id"].as_str().expect("awaiting job supplies id");
+
+    let answer = request(
+        &home,
+        serde_json::json!({
+            "cmd": "answerjob",
+            "job_id": job_id,
+            "action": "accept",
+            "answer": "colour",
+        }),
+    );
+    assert_eq!(answer["accepted"], true);
+    assert!(wait_until(|| git_log_count(&repo) > commits_before));
+    assert!(!std::fs::read_to_string(doc).unwrap().contains("::fix"));
 }
 
 // E13: when the agent fails to resolve, the marker is left `:failed`, not
@@ -223,5 +286,141 @@ fn test_autorun_disabled_leaves_marker() {
     assert_eq!(
         text, "::fix -a do nothing yet\n",
         "marker must be untouched when auto-run is off"
+    );
+}
+
+/// Write the repo's per-repo auto-run opt-in (`.indiana/casablanca/settings.json`).
+fn set_repo_autorun(repo: &Path, enabled: bool) {
+    let dir = repo.join(".indiana").join("casablanca");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("settings.json"),
+        serde_json::json!({ "autoRun": enabled }).to_string(),
+    )
+    .unwrap();
+}
+
+// E13: per-repo opt-in dispatches even when the global default is off.
+#[test]
+fn test_autorun_per_repo_enables_over_global_off() {
+    let home = unique("home");
+    let repo = git_repo_with("intro\n::fix -a fix the typo\n");
+    write_config(&home, &repo, "succeed", false); // global off
+    set_repo_autorun(&repo, true); // repo opts in
+    let doc = repo.join("doc.md");
+    let commits_before = git_log_count(&repo);
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+    assert!(
+        wait_until(|| git_log_count(&repo) > commits_before),
+        "per-repo autoRun did not dispatch; doc.md = {:?}",
+        std::fs::read_to_string(&doc)
+    );
+    assert!(!std::fs::read_to_string(&doc).unwrap().contains("::fix"));
+}
+
+// E13: a per-repo opt-OUT overrides a global default of on.
+#[test]
+fn test_autorun_per_repo_disables_over_global_on() {
+    let home = unique("home");
+    let repo = git_repo_with("::fix -a do nothing yet\n");
+    write_config(&home, &repo, "succeed", true); // global on
+    set_repo_autorun(&repo, false); // repo opts out
+    let doc = repo.join("doc.md");
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+    std::thread::sleep(Duration::from_millis(800));
+    assert_eq!(
+        std::fs::read_to_string(&doc).unwrap(),
+        "::fix -a do nothing yet\n",
+        "per-repo autoRun:false must veto the global default"
+    );
+}
+
+#[test]
+fn test_group_summary_copy_and_run_one_turn() {
+    let home = unique("home");
+    let repo = git_repo_with(
+        "::fix -1 first task\n\n::elaborate -1 second task\n\n::fix -2 leave this batch\n",
+    );
+    write_config(&home, &repo, "succeed", false);
+    let doc = repo.join("doc.md");
+    let commits_before = git_log_count(&repo);
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+
+    let status = request(&home, serde_json::json!({ "cmd": "status" }));
+    assert_eq!(status["folders"][0]["groups"][0]["group"], 1);
+    assert_eq!(status["folders"][0]["groups"][0]["count"], 2);
+    assert_eq!(status["folders"][0]["groups"][1]["group"], 2);
+    assert_eq!(status["folders"][0]["groups"][1]["count"], 1);
+
+    let copied = request(
+        &home,
+        serde_json::json!({ "cmd": "copy", "path": repo, "group": 1 }),
+    );
+    let text = copied["text"].as_str().unwrap();
+    assert!(
+        text.contains("first task"),
+        "group copy response was {copied:?}"
+    );
+    assert!(text.contains("second task"));
+    assert_eq!(text.matches("\nFix this.").count(), 1);
+    assert_eq!(text.matches("\nTake action on this").count(), 1);
+
+    let run = request(
+        &home,
+        serde_json::json!({ "cmd": "rungroup", "path": repo, "group": 1 }),
+    );
+    assert_eq!(
+        run["accepted"],
+        true,
+        "run response {run:?}; doc {:?}",
+        std::fs::read_to_string(&doc)
+    );
+    assert_eq!(run["count"], 2);
+    assert!(
+        wait_until(|| git_log_count(&repo) > commits_before),
+        "group agent never committed; doc.md = {:?}",
+        std::fs::read_to_string(&doc)
+    );
+    let text = std::fs::read_to_string(&doc).unwrap();
+    assert!(
+        !text.contains("-1"),
+        "group -1 should be resolved: {text:?}"
+    );
+    assert!(
+        text.contains("::fix -2 leave this batch"),
+        "other groups must remain: {text:?}"
+    );
+}
+
+#[test]
+fn test_group_failure_marks_all_survivors_failed() {
+    let home = unique("home");
+    let repo = git_repo_with("::fix -4 first\n\n::elaborate -4 second\n");
+    write_config(&home, &repo, "fail", false);
+    let doc = repo.join("doc.md");
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+    let run = request(
+        &home,
+        serde_json::json!({ "cmd": "rungroup", "path": repo, "group": 4 }),
+    );
+    assert_eq!(
+        run["accepted"],
+        true,
+        "run response {run:?}; doc {:?}",
+        std::fs::read_to_string(&doc)
+    );
+    assert_eq!(run["count"], 2);
+    assert!(
+        wait_until_file(&doc, |text| text.matches(":failed]").count() == 2),
+        "group survivors were not all marked failed: {:?}",
+        std::fs::read_to_string(&doc)
     );
 }

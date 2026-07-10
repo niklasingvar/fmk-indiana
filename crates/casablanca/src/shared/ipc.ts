@@ -19,6 +19,7 @@ export const IPC = {
   NOTE_WRITE: 'note:write',
   NOTE_CREATE: 'note:create',
   ENTRY_DELETE: 'entry:delete',
+  ENTRY_REVEAL: 'entry:reveal',
 
   TREE_CHANGED: 'tree:changed',
   PREVIEW_CHANGED: 'preview:changed',
@@ -30,7 +31,9 @@ export const IPC = {
 
   ANNOTATION_APPEND: 'annotation:append',
 
-  INDIANA_COPY_ALL: 'indiana:copy-all'
+  INDIANA_COPY_ALL: 'indiana:copy-all',
+  INDIANA_JOBS: 'indiana:jobs',
+  INDIANA_ANSWER_JOB: 'indiana:answer-job'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

@@ -7,7 +7,7 @@ import { ProjectSwitcher } from './ProjectSwitcher'
 type Vault = ReturnType<typeof useVault>
 
 export function FolderPane({ vault }: { vault: Vault }) {
-  const { tree, gitStatus, vaultState, activeNote, openNote, createNote, removeEntry } = vault
+  const { tree, gitStatus, vaultState, activeNote, openNote, createNote, removeEntry, revealEntry } = vault
   const [creatingIn, setCreatingIn] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
 
@@ -30,6 +30,15 @@ export function FolderPane({ vault }: { vault: Vault }) {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       window.alert(`Could not move "${node.name}" to the Trash.\n\n${message}`)
+    }
+  }
+
+  const requestReveal = async (node: FlatTreeNode): Promise<void> => {
+    try {
+      await revealEntry(node.path)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      window.alert(`Could not reveal "${node.name}" in Finder.\n\n${message}`)
     }
   }
 
@@ -74,6 +83,7 @@ export function FolderPane({ vault }: { vault: Vault }) {
             activePath={activeNote?.path ?? null}
             onOpen={openNote}
             onDelete={requestDelete}
+            onReveal={requestReveal}
             vaultKey={vaultState.rootPath}
             gitStatus={gitStatus}
           />

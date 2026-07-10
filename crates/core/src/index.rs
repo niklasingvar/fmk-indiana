@@ -20,6 +20,9 @@ pub struct Located {
     pub raw_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    /// Numeric manual batch label (`-1`, `-2`, …).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -212,6 +215,7 @@ fn locate(path: &Path, line: usize, m: Marker) -> Located {
         kind: m.kind,
         raw_token: m.raw_token,
         message: m.message,
+        group: m.group,
         id: m.id,
         status: m.status,
         column: m.column,
@@ -324,6 +328,16 @@ mod tests {
         assert_eq!(m.id.as_deref(), Some("bear-mouse"));
         assert_eq!(m.status, Some(Status::Done));
         assert_eq!(m.message.as_deref(), Some("ship it"));
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn test_index_carries_numeric_group() {
+        let d = tmp();
+        write(&d, "x.md", "::fix -12 ship it\n");
+        let idx = scan_fixture(&d);
+        assert_eq!(idx.markers[0].group, Some(12));
+        assert_eq!(idx.markers[0].message.as_deref(), Some("ship it"));
         fs::remove_dir_all(&d).ok();
     }
 

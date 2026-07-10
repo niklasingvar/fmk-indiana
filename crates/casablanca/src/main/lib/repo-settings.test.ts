@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest'
-import { parseRepoSettings, repoColorOf } from './repo-settings'
+import { promises as fs } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import {
+  ensureRepoDefaults,
+  parseRepoSettings,
+  readRepoSettings,
+  repoColorOf
+} from './repo-settings'
 
 describe('parseRepoSettings', () => {
   it('reads a JSON object', () => {
@@ -25,5 +33,36 @@ describe('repoColorOf', () => {
     expect(repoColorOf({})).toBeNull()
     expect(repoColorOf({ color: '   ' })).toBeNull()
     expect(repoColorOf({ color: 42 })).toBeNull()
+  })
+})
+
+describe('ensureRepoDefaults', () => {
+  let root: string
+  beforeEach(async () => {
+    root = await fs.mkdtemp(join(tmpdir(), 'cb-repo-'))
+  })
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true })
+  })
+
+  it('defaults autoRun on for a fresh repo', async () => {
+    await ensureRepoDefaults(root)
+    expect((await readRepoSettings(root)).autoRun).toBe(true)
+  })
+
+  it('does not clobber a deliberate autoRun:false', async () => {
+    await fs.mkdir(join(root, '.indiana', 'casablanca'), { recursive: true })
+    await fs.writeFile(join(root, '.indiana', 'casablanca', 'settings.json'), '{"autoRun":false}')
+    await ensureRepoDefaults(root)
+    expect((await readRepoSettings(root)).autoRun).toBe(false)
+  })
+
+  it('preserves other keys when adding the default', async () => {
+    await fs.mkdir(join(root, '.indiana', 'casablanca'), { recursive: true })
+    await fs.writeFile(join(root, '.indiana', 'casablanca', 'settings.json'), '{"color":"1 2 3"}')
+    await ensureRepoDefaults(root)
+    const settings = await readRepoSettings(root)
+    expect(settings.color).toBe('1 2 3')
+    expect(settings.autoRun).toBe(true)
   })
 })

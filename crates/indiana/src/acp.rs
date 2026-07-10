@@ -81,17 +81,30 @@ impl<W: Write> AcpAgent<W> {
     }
 
     /// Drive one full turn. Returns the turn's `stopReason` (e.g. `end_turn`).
-    pub fn run_turn(&mut self, cwd: &Path, prompt: &str) -> io::Result<String> {
+    pub fn run_turn<F>(
+        &mut self,
+        cwd: &Path,
+        prompt: &str,
+        on_elicitation: &mut F,
+    ) -> io::Result<String>
+    where
+        F: FnMut(&Value) -> io::Result<Value>,
+    {
         self.call(
             "initialize",
             json!({
                 "protocolVersion": PROTOCOL_VERSION,
-                "clientCapabilities": { "fs": { "readTextFile": true, "writeTextFile": true } },
+                "clientCapabilities": {
+                    "fs": { "readTextFile": true, "writeTextFile": true },
+                    "elicitation": { "form": {} },
+                },
             }),
+            on_elicitation,
         )?;
         let session = self.call(
             "session/new",
             json!({ "cwd": cwd.display().to_string(), "mcpServers": [] }),
+            on_elicitation,
         )?;
         let session_id = session
             .get("sessionId")
@@ -104,6 +117,7 @@ impl<W: Write> AcpAgent<W> {
                 "sessionId": session_id,
                 "prompt": [ { "type": "text", "text": prompt } ],
             }),
+            on_elicitation,
         )?;
         Ok(result
             .get("stopReason")
@@ -114,7 +128,10 @@ impl<W: Write> AcpAgent<W> {
 
     /// Send a request and pump the connection until its response arrives,
     /// servicing any agent-initiated requests in between.
-    fn call(&mut self, method: &str, params: Value) -> io::Result<Value> {
+    fn call<F>(&mut self, method: &str, params: Value, on_elicitation: &mut F) -> io::Result<Value>
+    where
+        F: FnMut(&Value) -> io::Result<Value>,
+    {
         let id = self.next_id;
         self.next_id += 1;
         self.send(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))?;
@@ -126,7 +143,7 @@ impl<W: Write> AcpAgent<W> {
                 // A request carries an id; a notification (session/update, …)
                 // has none and is logged only.
                 if let Some(req_id) = msg.get("id").cloned() {
-                    self.handle_request(&m, req_id, msg.get("params").cloned())?;
+                    self.handle_request(&m, req_id, msg.get("params").cloned(), on_elicitation)?;
                 }
                 continue;
             }
@@ -143,15 +160,25 @@ impl<W: Write> AcpAgent<W> {
 
     /// Handle an agent→client request. Full autonomy: permission requests are
     /// auto-granted; `fs/*` are served against the working tree.
-    fn handle_request(&mut self, method: &str, id: Value, params: Option<Value>) -> io::Result<()> {
+    fn handle_request<F>(
+        &mut self,
+        method: &str,
+        id: Value,
+        params: Option<Value>,
+        on_elicitation: &mut F,
+    ) -> io::Result<()>
+    where
+        F: FnMut(&Value) -> io::Result<Value>,
+    {
         let params = params.unwrap_or(Value::Null);
         let result = match method {
             "session/request_permission" => grant_permission(&params),
             "fs/read_text_file" => fs_read(&params),
             "fs/write_text_file" => fs_write(&params),
+            "elicitation/create" => on_elicitation(&params),
             other => {
-                // Unsupported capability (terminal/*, elicitation/*): tell the
-                // agent so it falls back to its own tools.
+                // Unsupported capability (terminal/*): tell the agent so it
+                // falls back to its own tools.
                 return self.send(&json!({
                     "jsonrpc": "2.0",
                     "id": id,

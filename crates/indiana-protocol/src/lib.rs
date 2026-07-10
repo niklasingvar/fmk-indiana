@@ -20,8 +20,25 @@ pub enum Request {
     /// Stop monitoring a folder: remove from config, unwatch, rebuild index.
     Remove { path: PathBuf },
     /// Return the compiled bundle for one folder as ready-to-paste text.
-    /// `kind` limits to one marker kind (e.g. "action"); `None` → all kinds.
-    Copy { path: PathBuf, #[serde(default)] kind: Option<String> },
+    /// `kind` and `group` are optional filters.
+    Copy {
+        path: PathBuf,
+        #[serde(default)]
+        kind: Option<String>,
+        #[serde(default)]
+        group: Option<u64>,
+    },
+    /// Dispatch one numeric batch as a single manual ACP turn.
+    RunGroup { path: PathBuf, group: u64 },
+    /// Return live ACP turns so faces can render their state.
+    Jobs,
+    /// Answer the one pending user-input request for an ACP turn.
+    AnswerJob {
+        job_id: String,
+        action: ElicitationAction,
+        #[serde(default)]
+        answer: Option<String>,
+    },
     /// Graceful shutdown: ack, unlink the socket, exit.
     Shutdown,
 }
@@ -49,6 +66,15 @@ pub struct PayloadResponse {
 pub struct FolderInfo {
     pub path: String,
     pub count: usize,
+    /// Numeric batches and their member counts, computed by the daemon.
+    #[serde(default)]
+    pub groups: Vec<GroupInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupInfo {
+    pub group: u64,
+    pub count: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -71,4 +97,105 @@ pub struct RemoveResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CopyResponse {
     pub text: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RunGroupResponse {
+    /// False when the batch was empty or already has a live turn.
+    pub accepted: bool,
+    /// Number of markers claimed for this turn.
+    pub count: usize,
+}
+
+/// The state a live ACP turn exposes to faces. Jobs are daemon memory: a
+/// restart stops their child process, so a face must never treat this as a
+/// durable work record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentJobState {
+    Running,
+    AwaitingInput,
+}
+
+/// A small chat-shaped form: one text answer for the requested schema field.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentQuestion {
+    pub message: String,
+    pub field: String,
+}
+
+/// One live agent turn, owned by the daemon and projected to faces.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentJob {
+    pub id: String,
+    pub root: PathBuf,
+    pub markers: Vec<PathBuf>,
+    pub state: AgentJobState,
+    #[serde(default)]
+    pub question: Option<AgentQuestion>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JobsResponse {
+    pub jobs: Vec<AgentJob>,
+}
+
+/// The three ACP outcomes for a human input request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ElicitationAction {
+    Accept,
+    Decline,
+    Cancel,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AnswerJobResponse {
+    /// False if the turn ended or no longer awaits an answer.
+    pub accepted: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_group_requests_round_trip() {
+        let copy = Request::Copy {
+            path: PathBuf::from("/tmp/repo"),
+            kind: None,
+            group: Some(7),
+        };
+        let json = serde_json::to_string(&copy).unwrap();
+        assert!(json.contains(r#""group":7"#));
+        assert!(matches!(
+            serde_json::from_str::<Request>(&json).unwrap(),
+            Request::Copy { group: Some(7), .. }
+        ));
+
+        let run = Request::RunGroup {
+            path: PathBuf::from("/tmp/repo"),
+            group: 7,
+        };
+        let json = serde_json::to_string(&run).unwrap();
+        assert!(matches!(
+            serde_json::from_str::<Request>(&json).unwrap(),
+            Request::RunGroup { group: 7, .. }
+        ));
+    }
+
+    #[test]
+    fn test_folder_group_counts_round_trip() {
+        let info = FolderInfo {
+            path: "/tmp/repo".into(),
+            count: 4,
+            groups: vec![
+                GroupInfo { group: 1, count: 3 },
+                GroupInfo { group: 2, count: 1 },
+            ],
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        let back: FolderInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.groups[0], GroupInfo { group: 1, count: 3 });
+    }
 }

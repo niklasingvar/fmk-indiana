@@ -5,7 +5,6 @@ use indiana_protocol::*;
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 
-
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -14,9 +13,7 @@ fn indiana_home() -> PathBuf {
     std::env::var("INDIANA_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
-            let mut h = std::env::var("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_default();
+            let mut h = std::env::var("HOME").map(PathBuf::from).unwrap_or_default();
             h.push(".indiana");
             h
         })
@@ -71,14 +68,23 @@ pub fn remove_folder(path: &Path) -> Option<bool> {
         .ok()
 }
 
-pub fn copy_folder(path: &Path, kind: Option<&str>) -> Option<String> {
+pub fn copy_folder(path: &Path, kind: Option<&str>, group: Option<u64>) -> Option<String> {
     let raw = send_recv(&Request::Copy {
         path: path.to_path_buf(),
         kind: kind.map(|k| k.to_string()),
+        group,
     })?;
     serde_json::from_str::<CopyResponse>(&raw)
         .map(|r| r.text)
         .ok()
+}
+
+pub fn run_group(path: &Path, group: u64) -> Option<RunGroupResponse> {
+    let raw = send_recv(&Request::RunGroup {
+        path: path.to_path_buf(),
+        group,
+    })?;
+    serde_json::from_str(&raw).ok()
 }
 
 pub fn shutdown() -> bool {
@@ -112,7 +118,6 @@ pub fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     Err("daemon did not respond within 10s".into())
 }
 
-
 pub mod commands {
     use super::*;
 
@@ -132,9 +137,18 @@ pub mod commands {
     }
 
     #[tauri::command]
-    pub fn copy_folder(path: String, kind: Option<String>) -> Result<String, String> {
-        super::copy_folder(Path::new(&path), kind.as_deref())
+    pub fn copy_folder(
+        path: String,
+        kind: Option<String>,
+        group: Option<u64>,
+    ) -> Result<String, String> {
+        super::copy_folder(Path::new(&path), kind.as_deref(), group)
             .ok_or_else(|| "daemon not running".into())
+    }
+
+    #[tauri::command]
+    pub fn run_group(path: String, group: u64) -> Result<RunGroupResponse, String> {
+        super::run_group(Path::new(&path), group).ok_or_else(|| "daemon not running".into())
     }
 
     #[tauri::command]

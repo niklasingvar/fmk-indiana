@@ -88,10 +88,11 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
   (max 29 words), `domain`, and `dependencies` (ids of existing todos). `indiana
   todo add|list|delete` is the read/write face; `--json` is the agent surface.
 - `.indiana/casablanca/settings.json` — per-repo [Casablanca](../casablanca/CASABLANCA_OVERVIEW.md)
-  settings: a committable JSON bag the editor and the CLI share. Created on first
-  write, not by scaffolding. The editor reads the keys it knows (currently the
-  project `color`, which overrides the editor's global registry) and ignores the
-  rest. `indiana casablanca get|set|settings|path` is the CLI face — a per-repo
+  settings: a committable JSON bag the editor, the daemon, and the CLI share.
+  Created on first write, not by scaffolding. Known keys: `color` (the editor's
+  project color, overrides its global registry) and `autoRun` (per-repo auto-run
+  opt-in the daemon reads, [IN_AUTORUN.md](IN_AUTORUN.md)); unknown keys are
+  ignored. `indiana casablanca get|set|settings|path` is the CLI face — a per-repo
   input store, not derived from source and not part of the marker index.
 
 ## Source of truth

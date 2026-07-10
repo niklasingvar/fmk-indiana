@@ -54,3 +54,17 @@ export async function writeRepoSetting(
   await fs.mkdir(join(rootPath, '.indiana', 'casablanca'), { recursive: true })
   await fs.writeFile(repoSettingsPath(rootPath), JSON.stringify(next, null, 2) + '\n', 'utf8')
 }
+
+/**
+ * Provision the per-repo settings a monitored repo needs, filling only keys the
+ * repo hasn't set — so this is safe to run on every open and never clobbers a
+ * choice you already made (e.g. a deliberate `autoRun: false`).
+ * Currently: default `autoRun` on, so opening a folder in Casablanca makes
+ * `::fix -a` work without extra setup (IN_AUTORUN.md).
+ */
+export async function ensureRepoDefaults(rootPath: string): Promise<void> {
+  const settings = await readRepoSettings(rootPath)
+  if (settings.autoRun === undefined) {
+    await writeRepoSetting(rootPath, 'autoRun', true)
+  }
+}

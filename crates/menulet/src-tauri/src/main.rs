@@ -156,6 +156,7 @@ fn main() {
             socket::commands::add_folder,
             socket::commands::remove_folder,
             socket::commands::copy_folder,
+            socket::commands::run_group,
             socket::commands::shutdown,
             socket::commands::spawn_sidecar,
             socket::commands::refresh_templates,
