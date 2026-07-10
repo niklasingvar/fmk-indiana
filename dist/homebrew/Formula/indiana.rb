@@ -13,6 +13,11 @@ class Indiana < Formula
 
   depends_on arch: :arm64
   depends_on macos: :ventura
+  # Auto-run (IN_AUTORUN.md) dispatches `::fix -a` markers to Claude Code's ACP
+  # adapter, which the daemon launches via `npx -y @zed-industries/claude-code-acp`.
+  # Node provides `npx`; the adapter itself is fetched and cached on first use, so
+  # there is nothing to pin here. Auto-run is off by default (config.auto_run).
+  depends_on "node"
 
   def install
     bin.install "indiana"

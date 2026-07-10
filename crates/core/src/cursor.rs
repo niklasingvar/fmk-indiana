@@ -87,6 +87,7 @@ mod tests {
             message: msg.map(|s| s.to_string()),
             id: None,
             status: None,
+            auto: false,
             scope: Scope {
                 kind: ScopeKind::Inline,
                 content: content.to_string(),
@@ -155,6 +156,7 @@ mod tests {
             scope_kind: ScopeKind::Inline,
             scope_content: "bad code".into(),
             status: None,
+            auto: false,
         };
         assert_eq!(identity(&l), identity_compiled(&cm));
     }

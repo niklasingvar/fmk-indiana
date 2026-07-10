@@ -83,6 +83,100 @@ fn inject_file(path: &Path, target_lines: &BTreeSet<usize>) -> io::Result<WriteR
     Ok(WriteResult::Written)
 }
 
+/// Set the status word on one marker line: mint an id if absent, write the
+/// bracket as `[id:status]`, and strip a leading `-a`/`--auto` flag from the
+/// message. The single write that moves an auto-run marker between states —
+/// `working` on claim, `done`/`failed` on completion (IN_AUTORUN.md). Same
+/// contract as `inject`: byte-preserving elsewhere, atomic, mtime-guarded, and
+/// idempotent (a line already at the target state re-runs byte-identical).
+pub fn set_status(path: &Path, line_no: usize, status: &str) -> io::Result<WriteResult> {
+    debug_assert!(IdGenerator::is_valid_status(status));
+    let before = match fs::metadata(path) {
+        Ok(m) => m.modified().ok(),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(WriteResult::Unchanged),
+        Err(e) => return Err(e),
+    };
+    let bytes = fs::read(path)?;
+    let ranges = line_ranges(&bytes);
+    let mut ids = IdGenerator::new();
+    for (start, end) in &ranges {
+        if let Some((id, true)) = existing_bracket(&bytes[*start..*end]) {
+            ids.register(&id);
+        }
+    }
+    let Some((start, end)) = ranges.get(line_no.saturating_sub(1)).copied() else {
+        return Ok(WriteResult::Unchanged);
+    };
+    let Some(new_line) = status_line(&bytes[start..end], status, &mut ids) else {
+        return Ok(WriteResult::Unchanged); // no marker, or already byte-identical
+    };
+
+    let after = fs::metadata(path)?.modified().ok();
+    if before != after {
+        return Ok(WriteResult::Retry);
+    }
+    let mut out = bytes;
+    out.splice(start..end, new_line);
+    atomic_write(path, &out)?;
+    Ok(WriteResult::Written)
+}
+
+/// Rewrite one line's bracket to `[id:status]` and strip auto flags. Returns
+/// `None` if the line has no marker or the result equals the input (idempotent).
+fn status_line(line: &[u8], status: &str, ids: &mut IdGenerator) -> Option<Vec<u8>> {
+    let text = std::str::from_utf8(line).ok()?;
+    let at = text.find("::")?;
+    let after = &text[at + 2..];
+    let token_len = after
+        .find(|c: char| !c.is_ascii_alphabetic())
+        .unwrap_or(after.len());
+    if token_len == 0 {
+        return None;
+    }
+    let token_end = at + 2 + token_len;
+    let rest = &text[token_end..];
+
+    // Reuse an existing valid/repairable id; otherwise mint one. Capture the
+    // message that follows any existing bracket.
+    let (id, suffix) = match rest
+        .strip_prefix('[')
+        .and_then(|s| s.find(']').map(|c| (s, c)))
+    {
+        Some((stripped, close)) => {
+            let (existing, _st, valid) = parse_bracket(&stripped[..close]);
+            let id = if valid || IdGenerator::is_valid(&existing) {
+                ids.register(&existing);
+                existing
+            } else {
+                ids.next()
+            };
+            (id, &rest[close + 2..])
+        }
+        None => (ids.next(), rest),
+    };
+
+    let message = strip_leading_auto_flags(suffix);
+    let new_line = format!("{}[{id}:{status}]{message}", &text[..token_end]);
+    if new_line.as_bytes() == line {
+        return None;
+    }
+    Some(new_line.into_bytes())
+}
+
+/// Drop leading `-a` / `--auto` tokens (and the whitespace that separated them)
+/// from a marker's message tail, preserving the remaining text and terminator.
+fn strip_leading_auto_flags(s: &str) -> &str {
+    let mut rest = s;
+    loop {
+        let trimmed = rest.trim_start_matches([' ', '\t']);
+        let end = trimmed.find(char::is_whitespace).unwrap_or(trimmed.len());
+        match &trimmed[..end] {
+            "-a" | "--auto" => rest = &trimmed[end..],
+            _ => return rest,
+        }
+    }
+}
+
 fn normalize_line(line: &[u8], ids: &mut IdGenerator) -> Option<Vec<u8>> {
     let text = std::str::from_utf8(line).ok()?;
     let at = text.find("::")?;
@@ -295,6 +389,92 @@ mod tests {
         let result = inject(&[request(&file, 1)], true);
         assert_eq!(result[&file], WriteResult::Unchanged);
         assert_eq!(before, fs::read(&file).unwrap());
+        fs::remove_dir_all(dir).ok();
+    }
+
+    // ── set_status: the auto-run claim / completion write (IN_AUTORUN.md) ──
+
+    #[test]
+    fn test_claim_working_mints_id_and_strips_flag() {
+        let dir = tmp();
+        let file = dir.join("doc.md");
+        fs::write(&file, "some text ::fix -a banana\n").unwrap();
+
+        let result = set_status(&file, 1, "working").unwrap();
+        assert_eq!(result, WriteResult::Written);
+        let text = fs::read_to_string(&file).unwrap();
+        // `-a` gone; id minted; status working; message + spacing preserved.
+        assert!(text.starts_with("some text ::fix["), "got: {text:?}");
+        assert!(text.contains(":working] banana\n"), "got: {text:?}");
+        assert!(!text.contains("-a"), "flag not stripped: {text:?}");
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn test_claim_working_idempotent() {
+        let dir = tmp();
+        let file = dir.join("doc.md");
+        fs::write(&file, "::fix[happy-otter:working] banana\n").unwrap();
+        let before = fs::read(&file).unwrap();
+
+        let result = set_status(&file, 1, "working").unwrap();
+        assert_eq!(result, WriteResult::Unchanged);
+        assert_eq!(before, fs::read(&file).unwrap());
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn test_claim_working_no_message() {
+        let dir = tmp();
+        let file = dir.join("doc.md");
+        fs::write(&file, "::fix -a\n").unwrap();
+
+        set_status(&file, 1, "working").unwrap();
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(text.starts_with("::fix["));
+        assert!(text.ends_with(":working]\n"), "no trailing space: {text:?}");
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn test_working_to_done_transition() {
+        let dir = tmp();
+        let file = dir.join("doc.md");
+        fs::write(&file, "::fix[happy-otter:working] banana\n").unwrap();
+
+        let result = set_status(&file, 1, "done").unwrap();
+        assert_eq!(result, WriteResult::Written);
+        assert_eq!(
+            fs::read_to_string(&file).unwrap(),
+            "::fix[happy-otter:working] banana\n".replace("working", "done")
+        );
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn test_working_to_failed_transition() {
+        let dir = tmp();
+        let file = dir.join("doc.md");
+        fs::write(&file, "line ::elaborate[lurvo-pannik:working] do it\n").unwrap();
+
+        set_status(&file, 1, "failed").unwrap();
+        assert_eq!(
+            fs::read_to_string(&file).unwrap(),
+            "line ::elaborate[lurvo-pannik:failed] do it\n"
+        );
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn test_claim_preserves_other_lines() {
+        let dir = tmp();
+        let file = dir.join("doc.md");
+        fs::write(&file, "keep me\n::fix -a banana\nkeep me too\n").unwrap();
+
+        set_status(&file, 2, "working").unwrap();
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(text.starts_with("keep me\n::fix["));
+        assert!(text.ends_with("] banana\nkeep me too\n"));
         fs::remove_dir_all(dir).ok();
     }
 

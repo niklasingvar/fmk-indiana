@@ -32,6 +32,10 @@ pub struct CompiledMarker {
     pub scope_content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<Status>,
+    /// The `-a` / `--auto` flag was present (IN_AUTORUN.md). The daemon reads
+    /// this to decide dispatch; other faces ignore it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub auto: bool,
 }
 
 /// Options that filter what `compile_with_options` includes.
@@ -93,26 +97,50 @@ pub fn compile_with_options(index: &Index, options: &CompileOptions) -> Compiled
 /// overridable per root.
 const PAYLOAD_PREAMBLE: &str = include_str!("../templates/preamble.md");
 
+/// Coda appended to a dispatched auto-run prompt: remove the marker line and
+/// commit (IN_AUTORUN.md). `{path}`/`{line}`/`{marker}` are filled per marker.
+const AUTORUN_CODA: &str = include_str!("../templates/autorun_coda.md");
+
+/// One marker rendered as `path:line [kind]` + prompt + scope.
+fn marker_block(marker: &CompiledMarker) -> String {
+    format!(
+        "{}:{} [{}]\n{}\n\n{}\n",
+        marker.path.display(),
+        marker.line,
+        long_name(marker.kind),
+        marker.compiled_prompt,
+        marker.scope_content
+    )
+}
+
 pub fn render_text(payload: &CompiledPayload) -> String {
     let markers = payload
         .markers
         .iter()
-        .map(|marker| {
-            format!(
-                "{}:{} [{}]\n{}\n\n{}\n",
-                marker.path.display(),
-                marker.line,
-                long_name(marker.kind),
-                marker.compiled_prompt,
-                marker.scope_content
-            )
-        })
+        .map(marker_block)
         .collect::<Vec<_>>()
         .join("\n---\n");
     if markers.is_empty() {
         return markers;
     }
     format!("{PAYLOAD_PREAMBLE}\n---\n{markers}")
+}
+
+/// The full prompt the daemon dispatches over ACP for one auto-run marker
+/// (IN_AUTORUN.md): the same context-model preamble a paste carries, the marker
+/// block, then the coda telling the agent to delete the marker line and commit.
+pub fn render_dispatch(marker: &CompiledMarker) -> String {
+    let block = marker_block(marker);
+    // Reconstruct the on-disk claimed token so the agent can find the line.
+    let token = match &marker.id {
+        Some(id) => format!("{}[{id}:working]", marker.raw_token),
+        None => marker.raw_token.clone(),
+    };
+    let coda = AUTORUN_CODA
+        .replace("{path}", &marker.path.display().to_string())
+        .replace("{line}", &marker.line.to_string())
+        .replace("{marker}", &token);
+    format!("{PAYLOAD_PREAMBLE}\n---\n{block}\n---\n{coda}")
 }
 
 fn compile_marker(marker: &Located, templates: &HashMap<String, String>) -> CompiledMarker {
@@ -127,7 +155,20 @@ fn compile_marker(marker: &Located, templates: &HashMap<String, String>) -> Comp
         scope_kind: marker.scope.kind.clone(),
         scope_content: marker.scope.content.clone(),
         status: marker.status,
+        auto: marker.auto,
     }
+}
+
+/// Compile a single located marker, picking the owning root's template catalog
+/// when `roots` is given (else embedded). The daemon uses this to build the
+/// prompt it dispatches over ACP (IN_AUTORUN.md), so the wording matches what
+/// `indiana copy` would produce for the same marker.
+pub fn compile_one(marker: &Located, roots: &[PathBuf]) -> CompiledMarker {
+    let embedded = TemplateCatalog::embedded();
+    let catalog = owning_root(&marker.path, roots)
+        .map(|root| TemplateCatalog::for_root(root))
+        .unwrap_or(embedded);
+    compile_marker(marker, &catalog.prompts)
 }
 
 fn prompt(marker: &Located, templates: &HashMap<String, String>) -> String {
@@ -163,7 +204,6 @@ fn owning_root<'a>(path: &Path, roots: &'a [PathBuf]) -> Option<&'a PathBuf> {
         .filter(|root| path.starts_with(root))
         .max_by_key(|root| root.components().count())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -272,6 +312,29 @@ mod tests {
         assert!(rendered.starts_with("INDIANA LOOP"));
         assert!(rendered.contains(".indiana/context-model/CONTEXT-MODEL.md"));
         assert!(rendered.contains(".indiana/chief-of-staff/focus.md"));
+        assert!(rendered.contains("one commit per command"));
+        assert!(rendered.contains("never push"));
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_render_dispatch_has_marker_and_coda() {
+        let (d, idx) = index("buggy ::fix[happy-otter:working] tighten\n");
+        let payload = compile_with_options(&idx, &CompileOptions::default());
+        let rendered = render_dispatch(&payload.markers[0]);
+        assert!(rendered.starts_with("INDIANA LOOP"), "carries the preamble");
+        assert!(
+            rendered.contains("Fix this. tighten"),
+            "carries the compiled prompt"
+        );
+        // Coda names the exact line and reconstructed token to remove.
+        assert!(
+            rendered.contains("::fix[happy-otter:working]"),
+            "names the marker: {rendered}"
+        );
+        assert!(rendered.contains("Commit the change"), "instructs a commit");
+        assert!(!rendered.contains("{path}"), "placeholders filled");
+        assert!(!rendered.contains("{marker}"), "placeholders filled");
         fs::remove_dir_all(d).ok();
     }
 
@@ -436,7 +499,13 @@ mod tests {
         let mut idx = Index::default();
         idx.markers.extend(idx_a.markers);
         idx.markers.extend(idx_b.markers);
-        let payload = compile_with_options(&idx, &CompileOptions { roots: Some(vec![a.clone(), b.clone()]), ..Default::default() });
+        let payload = compile_with_options(
+            &idx,
+            &CompileOptions {
+                roots: Some(vec![a.clone(), b.clone()]),
+                ..Default::default()
+            },
+        );
         let prompts: Vec<String> = payload
             .markers
             .iter()
@@ -458,7 +527,13 @@ mod tests {
             "---\nstatus: draft\npurpose: test\napproval: pending\ncommand: note\ncommand_type: test\n---\n\nRepair this. {message}\n",
         )
         .unwrap();
-        let payload = compile_with_options(&idx, &CompileOptions { roots: Some(vec![d.clone()]), ..Default::default() });
+        let payload = compile_with_options(
+            &idx,
+            &CompileOptions {
+                roots: Some(vec![d.clone()]),
+                ..Default::default()
+            },
+        );
         assert_eq!(payload.markers[0].compiled_prompt, "Fix this. tighten");
         assert_eq!(payload.warnings.len(), 1);
         fs::remove_dir_all(d).ok();

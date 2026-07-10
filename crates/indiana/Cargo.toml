@@ -13,6 +13,17 @@ path = "src/lib.rs"
 name = "indiana"
 path = "src/main.rs"
 
+# Test-only mock ACP agent for the auto-run integration test (IN_AUTORUN.md).
+# Behind a feature so it is never built into a release or shipped.
+[[bin]]
+name = "mock-acp-agent"
+path = "src/bin/mock_acp_agent.rs"
+required-features = ["test-support"]
+
+[features]
+# Enables test-only helper binaries. Off by default.
+test-support = []
+
 [dependencies]
 indiana-core = { path = "../core" }
 clap = { version = "4", features = ["derive"] }

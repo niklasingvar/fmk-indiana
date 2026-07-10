@@ -12,6 +12,8 @@ use crate::markers::{self, Kind, Msg};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
+    /// Auto-run claimed this marker; an agent turn is in flight (IN_AUTORUN.md).
+    Working,
     Done,
     Failed,
 }
@@ -19,6 +21,7 @@ pub enum Status {
 impl Status {
     fn parse(s: &str) -> Option<Status> {
         match s {
+            "working" => Some(Status::Working),
             "done" => Some(Status::Done),
             "failed" => Some(Status::Failed),
             _ => None,
@@ -35,6 +38,10 @@ pub struct Marker {
     pub id: Option<String>,
     pub status: Option<Status>,
     pub column: usize,
+    /// The `-a` / `--auto` flag was present on an auto-runnable kind
+    /// (IN_AUTORUN.md). Only Fix/Elaborate/Prompt ever set this; on other
+    /// kinds a leading `-a` stays in the message, unchanged.
+    pub auto: bool,
 }
 
 /// Outcome of parsing one line.
@@ -54,6 +61,8 @@ enum Fm {
     Open,
     Done,
 }
+
+const FRONTMATTER_MARKER_PREFIX: &str = "# frontmatter.";
 
 /// The one cross-line bit: independent ``` and ~~~ fences, plus leading
 /// YAML frontmatter (IN_SCAN.md code fences). `line_no` is 1-based.
@@ -106,8 +115,15 @@ pub fn parse_line(line: &str, st: &mut FenceState) -> LineResult {
         Fm::Open => {
             if trimmed.trim_end() == "---" {
                 st.fm = Fm::Done;
+                return LineResult::None;
             }
-            return LineResult::None; // delimiter or body — all ignored.
+            // Property comments are the one explicit exception: column-zero
+            // `# frontmatter.<key> ::...` remains valid YAML while every value,
+            // ordinary comment, and indented scalar stays inert.
+            if line.starts_with(FRONTMATTER_MARKER_PREFIX) {
+                return scan_markers(line);
+            }
+            return LineResult::None;
         }
         Fm::Done => {}
     }
@@ -228,6 +244,26 @@ fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
         }
     }
 
+    // Flags: leading `-a` / `--auto` tokens after the bracket, before the
+    // message (IN_AUTORUN.md). Parsed only on auto-runnable kinds so a leading
+    // `-a` in any other kind's message is left untouched. Unknown `-x` stops
+    // the scan and falls into the message.
+    let mut auto = false;
+    if markers::is_auto_runnable(spec.kind) {
+        let mut scan = rest.trim_start();
+        loop {
+            let end = scan.find(char::is_whitespace).unwrap_or(scan.len());
+            match &scan[..end] {
+                "-a" | "--auto" => {
+                    auto = true;
+                    scan = scan[end..].trim_start();
+                }
+                _ => break,
+            }
+        }
+        rest = scan;
+    }
+
     // Message: remainder to end of line, trimmed. Only kinds that take one keep it.
     let msg_text = rest.trim();
     let message = match spec.msg {
@@ -243,6 +279,7 @@ fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
         id,
         status,
         column: at,
+        auto,
     })
 }
 
@@ -299,6 +336,75 @@ mod tests {
         assert_eq!(m.message.as_deref(), Some("buy milk"));
     }
 
+    // --- auto-run flag + working status (IN_AUTORUN.md) ---
+
+    #[test]
+    fn test_auto_flag_short() {
+        let m = marker("::fix -a banana");
+        assert_eq!(m.kind, Kind::Fix);
+        assert!(m.auto);
+        assert_eq!(
+            m.message.as_deref(),
+            Some("banana"),
+            "-a stripped from message"
+        );
+    }
+
+    #[test]
+    fn test_auto_flag_long() {
+        let m = marker("::elaborate --auto expand this");
+        assert!(m.auto);
+        assert_eq!(m.message.as_deref(), Some("expand this"));
+    }
+
+    #[test]
+    fn test_auto_flag_no_message() {
+        let m = marker("::fix -a");
+        assert!(m.auto);
+        assert_eq!(m.message, None);
+    }
+
+    #[test]
+    fn test_auto_flag_on_prompt() {
+        let m = marker("::prompt -a run the thing");
+        assert_eq!(m.kind, Kind::Prompt);
+        assert!(m.auto);
+        assert_eq!(m.message.as_deref(), Some("run the thing"));
+    }
+
+    #[test]
+    fn test_no_auto_flag_default_false() {
+        let m = marker("::fix rename this");
+        assert!(!m.auto);
+        assert_eq!(m.message.as_deref(), Some("rename this"));
+    }
+
+    #[test]
+    fn test_auto_flag_ignored_on_non_directive() {
+        // `-a` on a kind that never auto-runs stays in the message untouched.
+        let m = marker("::note -a is literal here");
+        assert!(!m.auto);
+        assert_eq!(m.message.as_deref(), Some("-a is literal here"));
+    }
+
+    #[test]
+    fn test_unknown_dash_token_stops_flag_scan() {
+        // `-x` is not a known flag → it (and the rest) is the message.
+        let m = marker("::fix -x keep this");
+        assert!(!m.auto);
+        assert_eq!(m.message.as_deref(), Some("-x keep this"));
+    }
+
+    #[test]
+    fn test_auto_flag_with_bracket() {
+        // A claimed line: bracket present, no -a (already consumed). Working parses.
+        let m = marker("::fix[happy-otter:working] banana");
+        assert_eq!(m.status, Some(Status::Working));
+        assert_eq!(m.id.as_deref(), Some("happy-otter"));
+        assert_eq!(m.message.as_deref(), Some("banana"));
+        assert!(!m.auto, "claimed line no longer carries the flag");
+    }
+
     #[test]
     fn test_marker_ambiguous_line() {
         assert_eq!(parse("::h ::l"), LineResult::Ambiguous);
@@ -352,6 +458,23 @@ mod tests {
     #[test]
     fn test_fence_yaml_frontmatter() {
         assert!(parse_all("---\n::h\n---\nreal text\n").is_empty());
+    }
+
+    #[test]
+    fn test_frontmatter_property_comment_marker() {
+        let ms =
+            parse_all("---\nstatus: draft\n# frontmatter.status ::fix change to approved\n---\n");
+        assert_eq!(ms.len(), 1);
+        assert_eq!(ms[0].kind, Kind::Fix);
+        assert_eq!(ms[0].message.as_deref(), Some("change to approved"));
+    }
+
+    #[test]
+    fn test_frontmatter_ordinary_comments_and_values_stay_ignored() {
+        assert!(parse_all(
+            "---\nstatus: draft # ::fix ignored\n# note ::fix ignored\n  # frontmatter.status ::fix ignored\n---\n"
+        )
+        .is_empty());
     }
 
     #[test]

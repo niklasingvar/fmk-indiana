@@ -1,9 +1,12 @@
 //! indiana — one binary, multi-mode (IN_PRD.md): serve | scan | add.
 //! Faces only render; all domain logic lives in indiana_core.
 
+mod acp;
+mod casablanca;
 mod config;
 mod copied;
 mod daemon;
+mod dispatch;
 mod mcp;
 mod paths;
 mod protocol;
@@ -85,6 +88,11 @@ enum Cmd {
         #[command(subcommand)]
         cmd: TodoCmd,
     },
+    /// Read or edit per-repo Casablanca settings (`.indiana/casablanca/settings.json`).
+    Casablanca {
+        #[command(subcommand)]
+        cmd: CasablancaCmd,
+    },
     /// Add default frontmatter to markdown files missing it.
     Frontmatter {
         /// Folder to lint (default: current directory).
@@ -146,6 +154,40 @@ enum TodoCmd {
 }
 
 #[derive(Subcommand)]
+enum CasablancaCmd {
+    /// Print the settings file path.
+    Path {
+        /// Repo root (default: current directory).
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// Print all settings as JSON.
+    Settings {
+        /// Repo root (default: current directory).
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// Print one setting's value. Exits non-zero if the key is unset.
+    Get {
+        /// Repo root (default: current directory).
+        #[arg(long)]
+        root: Option<PathBuf>,
+        /// Setting key.
+        key: String,
+    },
+    /// Set one setting. A value that parses as JSON keeps its type; else it is a string.
+    Set {
+        /// Repo root (default: current directory).
+        #[arg(long)]
+        root: Option<PathBuf>,
+        /// Setting key.
+        key: String,
+        /// Setting value (JSON or plain string).
+        value: String,
+    },
+}
+
+#[derive(Subcommand)]
 enum TemplatesCmd {
     /// Create any missing `.indiana/<command>/prompt.md` files.
     Refresh {
@@ -198,6 +240,7 @@ fn main() -> ExitCode {
             cmd: ServiceCmd::Install,
         } => service_install(),
         Cmd::Todo { cmd } => todo_cmd(cmd),
+        Cmd::Casablanca { cmd } => casablanca_cmd(cmd),
         Cmd::Frontmatter { path, write } => frontmatter_cmd(path, write),
     }
 }
@@ -294,7 +337,10 @@ fn add(path: PathBuf) -> ExitCode {
         }
         let abs = path.canonicalize().unwrap_or_else(|_| path.clone());
         if let Err(e) = init_folder_indiana(&abs) {
-            eprintln!("indiana: warning: could not scaffold templates in {}: {e}", abs.display());
+            eprintln!(
+                "indiana: warning: could not scaffold templates in {}: {e}",
+                abs.display()
+            );
         }
         eprintln!(
             "indiana: monitoring {} (daemon not running; scans on next serve)",
@@ -506,7 +552,10 @@ fn frontmatter_cmd(path: Option<PathBuf>, write: bool) -> ExitCode {
         }
         let leftover = report.missing.len() - report.written.len();
         if leftover == 0 {
-            eprintln!("indiana: added frontmatter to {} file(s)", report.written.len());
+            eprintln!(
+                "indiana: added frontmatter to {} file(s)",
+                report.written.len()
+            );
             ExitCode::SUCCESS
         } else {
             eprintln!("indiana: {} file(s) still missing frontmatter", leftover);
@@ -520,7 +569,10 @@ fn frontmatter_cmd(path: Option<PathBuf>, write: bool) -> ExitCode {
             eprintln!("indiana: all markdown files have frontmatter");
             ExitCode::SUCCESS
         } else {
-            eprintln!("indiana: {} file(s) missing frontmatter", report.missing.len());
+            eprintln!(
+                "indiana: {} file(s) missing frontmatter",
+                report.missing.len()
+            );
             ExitCode::FAILURE
         }
     }
@@ -535,12 +587,56 @@ fn todo_cmd(cmd: TodoCmd) -> ExitCode {
             json,
             todo,
         } => todo_add(root, domain, dependencies, json, todo),
-        TodoCmd::List {
-            root,
-            domain,
-            json,
-        } => todo_list(root, domain, json),
+        TodoCmd::List { root, domain, json } => todo_list(root, domain, json),
         TodoCmd::Delete { root, json, id } => todo_delete(root, json, id),
+    }
+}
+
+fn casablanca_cmd(cmd: CasablancaCmd) -> ExitCode {
+    // `--root` resolution mirrors `todo` (default cwd, canonicalized).
+    match cmd {
+        CasablancaCmd::Path { root } => {
+            println!("{}", casablanca::settings_path(&todo_root(root)).display());
+            ExitCode::SUCCESS
+        }
+        CasablancaCmd::Settings { root } => {
+            let settings = casablanca::load(&todo_root(root));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::Value::Object(settings)).unwrap()
+            );
+            ExitCode::SUCCESS
+        }
+        CasablancaCmd::Get { root, key } => match casablanca::get(&todo_root(root), &key) {
+            Some(value) => {
+                // Print bare string values unquoted; other JSON types as-is.
+                match value {
+                    serde_json::Value::String(s) => println!("{s}"),
+                    other => println!("{other}"),
+                }
+                ExitCode::SUCCESS
+            }
+            None => {
+                eprintln!("indiana: no casablanca setting '{key}'");
+                ExitCode::FAILURE
+            }
+        },
+        CasablancaCmd::Set { root, key, value } => {
+            let r = todo_root(root);
+            match casablanca::set(&r, &key, &value) {
+                Ok(_) => {
+                    eprintln!(
+                        "indiana: set casablanca.{key} in {}",
+                        casablanca::settings_path(&r).display()
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("indiana: cannot write casablanca settings: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
     }
 }
 
@@ -612,10 +708,7 @@ fn todo_delete(root: Option<PathBuf>, json: bool, id: String) -> ExitCode {
     match todos::delete(&r, &id) {
         Ok(()) => {
             if json {
-                println!(
-                    "{}",
-                    serde_json::json!({"id": id, "deleted": true})
-                );
+                println!("{}", serde_json::json!({"id": id, "deleted": true}));
             } else {
                 println!("{}", id);
                 eprintln!("indiana: deleted {}", id);

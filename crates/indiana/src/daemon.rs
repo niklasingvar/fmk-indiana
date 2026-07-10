@@ -5,6 +5,7 @@
 //! rebuild the index immediately.
 
 use crate::config::Config;
+use crate::dispatch::Dispatcher;
 use crate::paths::{indiana_dir, socket_path};
 use crate::protocol::{
     AddResponse, CopyResponse, FolderInfo, PayloadResponse, RemoveResponse, Request, Response,
@@ -106,6 +107,15 @@ pub fn serve(root: Option<PathBuf>) -> io::Result<()> {
     for path in initial.written_paths {
         own_writes.lock().unwrap().record(&path);
     }
+    let dispatcher = Dispatcher::new();
+    // Startup dispatch: pick up any `-a` markers already present, and re-attempt
+    // `:working` markers orphaned by a prior crash (IN_AUTORUN.md).
+    dispatcher.consider(
+        &index.lock().unwrap(),
+        &initial_roots,
+        &Config::load(),
+        &own_writes,
+    );
 
     // Watch the roots; refresh the held index on debounced changes (M5,
     // IN_SCAN.md ~300 ms). The debouncer coalesces bursts into one rebuild and
@@ -122,6 +132,7 @@ pub fn serve(root: Option<PathBuf>) -> io::Result<()> {
         Arc::clone(&roots),
         Arc::clone(&index),
         Arc::clone(&own_writes),
+        dispatcher,
     );
 
     let listener = UnixListener::bind(&sock)?;
@@ -154,6 +165,7 @@ fn spawn_watch_thread(
     roots: Arc<Mutex<Vec<PathBuf>>>,
     index: Arc<Mutex<Index>>,
     own_writes: Arc<Mutex<OwnWriteTracker>>,
+    dispatcher: Dispatcher,
 ) {
     std::thread::spawn(move || {
         // One message per debounced batch — bursts coalesce to one rebuild.
@@ -179,7 +191,11 @@ fn spawn_watch_thread(
                         tracker.record(path);
                     }
                 }
-                *index.lock().unwrap() = fresh.index;
+                *index.lock().unwrap() = fresh.index.clone();
+                // Auto-run: claim and dispatch any `-a` markers this rebuild
+                // surfaced (IN_AUTORUN.md). No-op unless config.auto_run is on;
+                // config is reloaded so the switch takes effect without restart.
+                dispatcher.consider(&fresh.index, &snapshot, &Config::load(), &own_writes);
             }
         }
     });
@@ -283,7 +299,13 @@ fn handle(
             let idx = index.lock().unwrap().clone();
             let snap = roots.lock().unwrap().clone();
             let resp = PayloadResponse {
-                payload: compile_with_options(&idx, &CompileOptions { roots: Some(snap), ..Default::default() }),
+                payload: compile_with_options(
+                    &idx,
+                    &CompileOptions {
+                        roots: Some(snap),
+                        ..Default::default()
+                    },
+                ),
             };
             serde_json::to_string(&resp).map_err(io::Error::other)?
         }

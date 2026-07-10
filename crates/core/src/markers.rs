@@ -148,6 +148,17 @@ pub fn kind_matches_filter(filter: Kind, k: Kind) -> bool {
     filter == k || (is_actionable(filter) && is_actionable(k))
 }
 
+/// May this kind be auto-run by the daemon on the `-a` flag (IN_AUTORUN.md)?
+/// Derived from the TABLE's `command_type` so the rule lives in one place:
+/// directives that act directly (`agent_directive`, `agent_run_directly`) —
+/// i.e. `::fix`, `::elaborate`, `::prompt`. The gated `::delete`
+/// (`agent_gated_directive`) is excluded: auto-run and confirm-first conflict.
+pub fn is_auto_runnable(k: Kind) -> bool {
+    TABLE
+        .iter()
+        .any(|s| s.kind == k && matches!(s.command_type, "agent_directive" | "agent_run_directly"))
+}
+
 /// Human-readable name for a kind, driven by the TABLE.
 pub fn long_name(k: Kind) -> &'static str {
     for s in TABLE {
@@ -196,6 +207,21 @@ mod tests {
             let want = matches!(s.kind, Kind::Action | Kind::Todo);
             assert_eq!(s.tracked, want, "{:?} tracked flag wrong", s.kind);
         }
+    }
+
+    #[test]
+    fn test_auto_runnable_directives_only() {
+        // Fix/Elaborate/Prompt run directly; the gated Delete does not, and no
+        // reaction / user kind does (IN_AUTORUN.md).
+        assert!(is_auto_runnable(Kind::Fix));
+        assert!(is_auto_runnable(Kind::Elaborate));
+        assert!(is_auto_runnable(Kind::Prompt));
+        assert!(!is_auto_runnable(Kind::Delete));
+        assert!(!is_auto_runnable(Kind::Question));
+        assert!(!is_auto_runnable(Kind::Hate));
+        assert!(!is_auto_runnable(Kind::Note));
+        assert!(!is_auto_runnable(Kind::Action));
+        assert!(!is_auto_runnable(Kind::Todo));
     }
 
     #[test]

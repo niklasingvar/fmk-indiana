@@ -63,7 +63,9 @@ impl From<std::io::Error> for TodoError {
 }
 
 fn db_path(root: &Path) -> PathBuf {
-    root.join(".indiana").join("chief-of-staff").join("todos.db")
+    root.join(".indiana")
+        .join("chief-of-staff")
+        .join("todos.db")
 }
 
 /// Open (creating the dir + db if missing) and ensure the schema is present.
@@ -133,7 +135,9 @@ pub fn add(
 
     for dep in &deps {
         let exists: bool = conn
-            .query_row("SELECT 1 FROM todos WHERE id = ?1", params![dep], |_| Ok(true))
+            .query_row("SELECT 1 FROM todos WHERE id = ?1", params![dep], |_| {
+                Ok(true)
+            })
             .optional()?
             .unwrap_or(false);
         if !exists {

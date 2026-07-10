@@ -24,6 +24,10 @@ pub struct Located {
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<Status>,
+    /// The `-a` / `--auto` flag was present (IN_AUTORUN.md). The daemon reads
+    /// this to decide dispatch; faces ignore it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub auto: bool,
     pub scope: Scope,
 }
 
@@ -211,6 +215,7 @@ fn locate(path: &Path, line: usize, m: Marker) -> Located {
         id: m.id,
         status: m.status,
         column: m.column,
+        auto: m.auto,
         scope: Scope {
             kind: scope::ScopeKind::NextRow,
             content: String::new(),
@@ -371,6 +376,24 @@ mod tests {
         assert_eq!(idx.markers[0].scope.content, "Fix this");
         assert_eq!(idx.markers[1].scope.content, "next line");
         assert_eq!(idx.markers[2].scope.content, "## Head\nbody");
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn test_frontmatter_property_comment_scope_and_identity() {
+        let d = tmp();
+        write(
+            &d,
+            "x.md",
+            "---\nstatus: draft\n# frontmatter.status ::todo approve it\n---\n\nBody.\n",
+        );
+        let idx = scan_fixture(&d);
+        assert_eq!(idx.markers.len(), 1);
+        assert_eq!(idx.markers[0].scope.content, "# frontmatter.status");
+        assert!(idx.markers[0].id.is_some());
+        assert!(fs::read_to_string(d.join("x.md"))
+            .unwrap()
+            .contains("# frontmatter.status ::todo["));
         fs::remove_dir_all(&d).ok();
     }
 }

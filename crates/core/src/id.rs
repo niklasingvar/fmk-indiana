@@ -97,9 +97,10 @@ impl IdGenerator {
         }
     }
 
-    /// Validate a status word. Only `done` and `failed` are valid.
+    /// Validate a status word. `working` (auto-run in flight, IN_AUTORUN.md),
+    /// `done`, and `failed` are valid.
     pub fn is_valid_status(status: &str) -> bool {
-        status == "done" || status == "failed"
+        status == "working" || status == "done" || status == "failed"
     }
 
     /// Parse a bracket string `id` or `id:status`, returning (id, status).
