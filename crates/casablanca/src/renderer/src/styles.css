@@ -16,6 +16,11 @@
   --git-modified: 158 124 16;
   --git-new: 74 138 68;
   --git-deleted: 191 82 60;
+  --marker-bg: 254 243 199;
+  --marker-border: 245 158 11;
+  --marker-text: 146 64 14;
+  /* Per-project identity color; set at runtime from the active project. */
+  --project-color: 66 110 245;
   color-scheme: light;
 }
 
@@ -32,6 +37,10 @@
   --git-modified: 205 174 66;
   --git-new: 108 190 100;
   --git-deleted: 235 120 100;
+  --marker-bg: 78 54 14;
+  --marker-border: 217 154 46;
+  --marker-text: 255 224 138;
+  --project-color: 96 132 250;
   color-scheme: dark;
 }
 

@@ -97,10 +97,6 @@ export async function createNote(vault: VaultConfig, dirRel: string, name: strin
   return writeNote(vault, fileRel, `# ${stripMd(name)}\n`)
 }
 
-export async function deleteNote(vault: VaultConfig, rel: string): Promise<void> {
-  await fs.unlink(join(vault.rootPath, rel))
-}
-
 export function toRelative(vault: VaultConfig, abs: string): string {
   return toPosix(relative(vault.rootPath, abs))
 }

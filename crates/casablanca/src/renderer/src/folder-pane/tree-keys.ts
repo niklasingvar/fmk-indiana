@@ -10,20 +10,29 @@ export type TreeAction =
   | { kind: 'focus'; index: number }
   | { kind: 'open'; path: string }
   | { kind: 'toggle'; path: string; expand: boolean }
+  | { kind: 'delete'; path: string }
   | { kind: 'none' }
 
 const NAV_KEYS = new Set(['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Enter', 'Home', 'End'])
+const DELETE_KEYS = new Set(['Backspace', 'Delete'])
 
 export function treeKeyAction(
   key: string,
   nodes: readonly FlatTreeNode[],
   focusedIndex: number | null
 ): TreeAction {
-  if (nodes.length === 0 || !NAV_KEYS.has(key)) return { kind: 'none' }
+  if (nodes.length === 0) return { kind: 'none' }
   if (focusedIndex === null || focusedIndex < 0 || focusedIndex >= nodes.length) {
+    if (DELETE_KEYS.has(key)) return { kind: 'none' }
+    if (!NAV_KEYS.has(key)) return { kind: 'none' }
     return { kind: 'focus', index: 0 }
   }
   const node = nodes[focusedIndex]
+
+  if (DELETE_KEYS.has(key)) {
+    return node.path === '' ? { kind: 'none' } : { kind: 'delete', path: node.path }
+  }
+  if (!NAV_KEYS.has(key)) return { kind: 'none' }
 
   switch (key) {
     case 'ArrowDown':

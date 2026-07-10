@@ -61,6 +61,13 @@ describe('treeKeyAction', () => {
     expect(treeKeyAction('Enter', open, 1)).toEqual({ kind: 'toggle', path: 'docs', expand: false })
     expect(treeKeyAction('Enter', open, 4)).toEqual({ kind: 'open', path: 'zebra.md' })
   })
+
+  it('deletes focused entries but never the synthetic root', () => {
+    expect(treeKeyAction('Delete', open, 1)).toEqual({ kind: 'delete', path: 'docs' })
+    expect(treeKeyAction('Backspace', open, 4)).toEqual({ kind: 'delete', path: 'zebra.md' })
+    expect(treeKeyAction('Delete', open, 0)).toEqual({ kind: 'none' })
+    expect(treeKeyAction('Delete', open, null)).toEqual({ kind: 'none' })
+  })
 })
 
 describe('typeAheadIndex', () => {

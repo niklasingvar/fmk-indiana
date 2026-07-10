@@ -82,13 +82,33 @@ export interface VaultConfig {
   rootPath: string
 }
 
+/**
+ * A known project in the registry, projected for the renderer. `color` is an
+ * "r g b" triple (see `projects.ts`); `name` is the folder's last segment.
+ */
+export interface Project {
+  rootPath: string
+  name: string
+  color: string
+  active: boolean
+}
+
 /** Simplified git working-tree state, used to tint tree rows. */
 export type GitFileStatus = 'modified' | 'new' | 'deleted'
 
 /** Vault-relative path → status; folders carry their children's aggregate. */
 export type GitStatusMap = Record<string, GitFileStatus>
 
+/** One commit touching a file, for the per-note history panel. */
+export interface GitLogEntry {
+  hash: string
+  /** Commit time in epoch milliseconds. */
+  timestamp: number
+  /** Commit subject — by loop convention `<command> | <target> — outcome`. */
+  subject: string
+}
+
 export type VaultState =
   | { status: 'unset' }
-  | { status: 'ready'; rootPath: string }
+  | { status: 'ready'; rootPath: string; color: string }
   | { status: 'error'; message: string }

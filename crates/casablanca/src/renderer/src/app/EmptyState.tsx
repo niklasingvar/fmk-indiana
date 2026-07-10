@@ -10,7 +10,7 @@ export function EmptyState({ onChoose }: { onChoose: () => void }) {
         onClick={onChoose}
         className="mt-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90"
       >
-        Choose a vault folder
+        Open a project folder
       </button>
     </div>
   )

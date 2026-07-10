@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.17.6",
+    "@lexical/clipboard": "^0.22.0",
     "@lexical/code": "^0.22.0",
     "@lexical/link": "^0.22.0",
     "@lexical/list": "^0.22.0",
@@ -31,7 +32,8 @@
     "chokidar": "^4.0.1",
     "lexical": "^0.22.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@lexical/headless": "^0.22.0",
@@ -61,7 +63,12 @@
     ],
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
       "identity": null,
       "category": "public.app-category.productivity"

@@ -16,6 +16,7 @@ import { CodeNode, CodeHighlightNode } from '@lexical/code'
 import { TableCellNode, TableNode, TableRowNode } from '@lexical/table'
 
 import { MarkdownPlugin, MARKDOWN_TRANSFORMERS } from './plugins/MarkdownPlugin'
+import { MarkerHighlightPlugin } from './plugins/MarkerHighlightPlugin'
 import { MentionLinkPlugin } from './plugins/MentionLinkPlugin'
 
 interface Props {
@@ -131,6 +132,7 @@ export function LexicalEditor({ markdown, onChange, onOpenLink, notePath, filePa
       )}
       <HistoryPlugin />
       <AutoFocusPlugin />
+      <MarkerHighlightPlugin />
       <MarkdownPlugin markdown={markdown} onChange={onChange} transformers={MARKDOWN_TRANSFORMERS} />
     </LexicalComposer>
   )

@@ -16,7 +16,8 @@ export default {
         'git-modified': 'rgb(var(--git-modified) / <alpha-value>)',
         'git-new': 'rgb(var(--git-new) / <alpha-value>)',
         'git-deleted': 'rgb(var(--git-deleted) / <alpha-value>)',
-        accent: 'rgb(var(--accent) / <alpha-value>)'
+        accent: 'rgb(var(--accent) / <alpha-value>)',
+        project: 'rgb(var(--project-color) / <alpha-value>)'
       }
     }
   },

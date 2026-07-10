@@ -6,6 +6,7 @@ import { readTree } from './lib/vault'
 import { gitStatus } from './lib/git'
 import { registerVaultProtocol, registerVaultSchemeAsPrivileged } from './preview/protocol'
 import { IPC } from '@shared/ipc'
+import type { VaultConfig } from '@shared/domain'
 
 let mainWindow: BrowserWindow | null = null
 let activeWatcher: ReturnType<typeof watchVault> | null = null
@@ -55,7 +56,14 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(async () => {
   mainWindow = createWindow()
-  const { vault, getVault } = await registerIpc(mainWindow)
+
+  // Re-point the watcher when the active project changes (or tear it down).
+  const retargetWatcher = (vault: VaultConfig | null): void => {
+    void activeWatcher?.close()
+    activeWatcher = vault ? watchVault(vault, () => mainWindow) : null
+  }
+
+  const { vault, getVault } = await registerIpc(mainWindow, { retargetWatcher })
   registerVaultProtocol(getVault)
 
   if (vault) {

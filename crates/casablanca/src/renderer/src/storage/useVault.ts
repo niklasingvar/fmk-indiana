@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { GitStatusMap, Note, NoteDocument, TreeNode, VaultState } from '@shared/domain'
+import type { GitStatusMap, Note, NoteDocument, Project, TreeNode, VaultState } from '@shared/domain'
 import { isHtmlPath } from '@shared/annotation-line'
 import { parseNoteDocument, serializeNoteDocument } from '@shared/note-serialization'
 
@@ -16,16 +16,24 @@ const AUTOSAVE_MS = 500
  */
 export function useVault() {
   const [vaultState, setVaultState] = useState<VaultState>({ status: 'unset' })
+  const [projects, setProjects] = useState<Project[]>([])
   const [tree, setTree] = useState<TreeNode | null>(null)
   const [gitStatus, setGitStatus] = useState<GitStatusMap>({})
   const [activeNote, setActiveNote] = useState<Note | null>(null)
   const [draft, setDraft] = useState<NoteDocument | null>(null)
   const [saving, setSaving] = useState(false)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savePromise = useRef<Promise<void> | null>(null)
 
-  // Load persisted vault on mount.
+  const refreshProjects = useCallback(async () => {
+    setProjects(await window.api.projects.list())
+  }, [])
+
+  // Load persisted vault + project list on mount.
   useEffect(() => {
     void window.api.vault.get().then((s) => setVaultState(s))
-  }, [])
+    void refreshProjects()
+  }, [refreshProjects])
 
   // Subscribe to tree changes (covers both initial load and external edits).
   useEffect(() => {
@@ -41,6 +49,11 @@ export function useVault() {
     return window.api.git.onChanged(setGitStatus)
   }, [vaultState])
 
+  const persistNote = useCallback(async (path: string, content: string): Promise<void> => {
+    const saved = await window.api.notes.write(path, content)
+    setActiveNote((prev) => (prev ? { ...prev, content: saved.content, updatedAt: saved.updatedAt } : prev))
+  }, [])
+
   // Debounced autosave: when the serialized draft diverges from the saved
   // note, persist.
   useEffect(() => {
@@ -48,20 +61,25 @@ export function useVault() {
     const serialized = serializeNoteDocument(draft)
     if (serialized === activeNote.content) return
     setSaving(true)
-    const id = setTimeout(async () => {
-      const saved = await window.api.notes.write(activeNote.path, serialized)
-      // Preserve the user's cursor by keeping draft authoritative unless the
-      // external content changed something we don't have locally.
-      setActiveNote((prev) => (prev ? { ...prev, content: saved.content, updatedAt: saved.updatedAt } : prev))
-      setSaving(false)
+    const id = setTimeout(() => {
+      saveTimer.current = null
+      let request: Promise<void>
+      request = persistNote(activeNote.path, serialized)
+        .catch((err: unknown) => {
+          console.error('Autosave failed', err)
+        })
+        .finally(() => {
+          if (savePromise.current === request) savePromise.current = null
+          setSaving(false)
+        })
+      savePromise.current = request
     }, AUTOSAVE_MS)
-    return () => clearTimeout(id)
-  }, [draft, activeNote])
-
-  const chooseVault = useCallback(async () => {
-    const res = await window.api.vault.choose()
-    if (res) setVaultState(res)
-  }, [])
+    saveTimer.current = id
+    return () => {
+      clearTimeout(id)
+      if (saveTimer.current === id) saveTimer.current = null
+    }
+  }, [draft, activeNote, persistNote])
 
   const loadNote = useCallback(async (rel: string) => {
     // HTML documents render in the preview, not Lexical: no content read,
@@ -128,22 +146,95 @@ export function useVault() {
     setDraft(null)
   }, [])
 
+  // Clear the open note + history — paths are per-project, so a switch resets them.
+  const resetActiveDoc = useCallback(() => {
+    setActiveNote(null)
+    setDraft(null)
+    nav.current = { stack: [], cursor: -1 }
+    setNavTick((t) => t + 1)
+  }, [])
+
+  const removeEntry = useCallback(
+    async (rel: string): Promise<void> => {
+      const removesActive =
+        activeNote !== null &&
+        (activeNote.path === rel || activeNote.path.startsWith(`${rel}/`))
+
+      if (removesActive) {
+        if (saveTimer.current) {
+          clearTimeout(saveTimer.current)
+          saveTimer.current = null
+        }
+        if (savePromise.current) await savePromise.current
+        if (activeNote && draft && !isHtmlPath(activeNote.path)) {
+          setSaving(true)
+          try {
+            await persistNote(activeNote.path, serializeNoteDocument(draft))
+          } finally {
+            setSaving(false)
+          }
+        }
+      }
+
+      await window.api.entries.remove(rel)
+      if (removesActive) resetActiveDoc()
+    },
+    [activeNote, draft, persistNote, resetActiveDoc]
+  )
+
+  // Open the folder picker, register the chosen folder as a project, switch to it.
+  const addProject = useCallback(async () => {
+    const res = await window.api.projects.add()
+    if (!res) return
+    setVaultState(res)
+    resetActiveDoc()
+    await refreshProjects()
+  }, [resetActiveDoc, refreshProjects])
+
+  const switchProject = useCallback(
+    async (rootPath: string) => {
+      const res = await window.api.projects.switch(rootPath)
+      setVaultState(res)
+      resetActiveDoc()
+      await refreshProjects()
+    },
+    [resetActiveDoc, refreshProjects]
+  )
+
+  const setProjectColor = useCallback(async (rootPath: string, color: string) => {
+    const list = await window.api.projects.setColor(rootPath, color)
+    setProjects(list)
+    const active = list.find((p) => p.active)
+    if (active) {
+      setVaultState((s) => (s.status === 'ready' ? { ...s, color: active.color } : s))
+    }
+  }, [])
+
   // The editor's only write path: replace the body, keep frontmatter verbatim.
   const setDraftBody = useCallback((body: string) => {
     setDraft((prev) => (prev ? { ...prev, body } : prev))
   }, [])
 
+  const setDraftFrontmatter = useCallback((frontmatter: string) => {
+    setDraft((prev) => (prev ? { ...prev, frontmatter } : prev))
+  }, [])
+
   return {
     vaultState,
+    projects,
     tree,
     gitStatus,
     activeNote,
     draft,
     saving,
     setDraftBody,
-    chooseVault,
+    setDraftFrontmatter,
+    addProject,
+    switchProject,
+    setProjectColor,
     openNote,
     createNote,
+    removeEntry,
     closeNote,
     goBack,
     goForward,

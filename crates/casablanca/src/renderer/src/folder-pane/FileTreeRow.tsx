@@ -31,12 +31,14 @@ export const FileTreeRow = memo(function FileTreeRow({
   node,
   isFocused,
   status,
-  onClick
+  onClick,
+  onContextMenu
 }: {
   node: FlatTreeNode
   isFocused: boolean
   status?: GitFileStatus
   onClick: (node: FlatTreeNode) => void
+  onContextMenu: (event: React.MouseEvent<HTMLDivElement>) => void
 }) {
   const indent = node.depth * INDENT_STEP + INDENT_BASE
   const isFolder = node.type === 'folder'
@@ -50,6 +52,7 @@ export const FileTreeRow = memo(function FileTreeRow({
       aria-expanded={isFolder ? node.isExpanded : undefined}
       aria-selected={node.isActive}
       onClick={() => onClick(node)}
+      onContextMenu={onContextMenu}
       className={`relative flex h-[26px] w-full cursor-pointer items-center rounded pr-2 text-[13px] transition-colors ${
         node.isActive
           ? 'bg-pane-active ring-1 ring-inset ring-accent'

@@ -1,33 +1,66 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
 import { promises as fs } from 'node:fs'
 import { IPC } from '@shared/ipc'
-import type { AnnotationRequest, VaultConfig } from '@shared/domain'
-import { getVaultConfig, setVaultConfig } from './lib/config'
+import type { AnnotationRequest, VaultConfig, VaultState } from '@shared/domain'
+import {
+  getActiveProject,
+  listProjects,
+  addProject,
+  setActiveProject,
+  setProjectColor,
+  removeProject
+} from './lib/config'
+import type { ProjectRecord } from '@shared/projects'
 import { copyAllMarkers } from './lib/indiana'
 import { appendAnnotation } from './lib/annotations'
-import { gitStatus } from './lib/git'
-import { readTree, readNote, writeNote, createNote, deleteNote, toRelative } from './lib/vault'
+import { ensureRepo, gitDiffCommit, gitDiffHead, gitLog, gitStatus } from './lib/git'
+import { deleteEntry } from './lib/file-operations'
+import { readTree, readNote, writeNote, createNote, toRelative } from './lib/vault'
 
 type Sender = Pick<BrowserWindow, 'webContents'>
 
 export interface IpcRegistration {
   /** Vault at startup, for the initial watcher/tree push. */
   vault: VaultConfig | null
-  /** Live accessor — reflects vault switches after VAULT_CHOOSE/SET. */
+  /** Live accessor — reflects project switches. Read by the vault:// protocol. */
   getVault: () => VaultConfig | null
+}
+
+export interface IpcDeps {
+  /** Point the file watcher at a new root (or tear it down when null). */
+  retargetWatcher: (vault: VaultConfig | null) => void
 }
 
 /**
  * Register all main-process IPC handlers. The contract lives in @shared/ipc
- * and the preload bridge mirrors it. Each handler validates that a vault is
- * selected before touching the filesystem.
+ * and the preload bridge mirrors it. Each handler validates that a project is
+ * active before touching the filesystem.
  */
-export async function registerIpc(sender: Sender): Promise<IpcRegistration> {
-  let vault = await getVaultConfig()
+export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcRegistration> {
+  let active = await getActiveProject()
+  let vault: VaultConfig | null = active ? { rootPath: active.rootPath } : null
+  if (vault) await ensureRepo(vault)
 
   const requireVault = (): VaultConfig => {
-    if (!vault) throw new Error('No vault selected')
+    if (!vault) throw new Error('No project selected')
     return vault
+  }
+
+  const readyState = (a: ProjectRecord): VaultState => ({
+    status: 'ready',
+    rootPath: a.rootPath,
+    color: a.color
+  })
+
+  /** Adopt a new active project: update state, re-target the watcher, push a refresh. */
+  const adopt = async (a: ProjectRecord | null): Promise<VaultState> => {
+    active = a
+    vault = a ? { rootPath: a.rootPath } : null
+    // Every project is git-backed: init + snapshot when no repo exists yet.
+    if (vault) await ensureRepo(vault)
+    deps.retargetWatcher(vault)
+    await refresh()
+    return a ? readyState(a) : { status: 'unset' }
   }
 
   const refresh = async (): Promise<void> => {
@@ -48,31 +81,37 @@ export async function registerIpc(sender: Sender): Promise<IpcRegistration> {
     })
   }
 
-  // --- vault lifecycle --------------------------------------------------
+  // --- project lifecycle ------------------------------------------------
 
-  handle(IPC.VAULT_GET, async () =>
-    vault ? { status: 'ready', rootPath: vault.rootPath } : { status: 'unset' }
-  )
+  handle(IPC.VAULT_GET, async () => (active ? readyState(active) : { status: 'unset' }))
 
-  handle(IPC.VAULT_CHOOSE, async () => {
+  handle(IPC.PROJECTS_LIST, async () => listProjects())
+
+  // Pick a folder, register it, and switch to it. Null when the user cancels.
+  handle(IPC.PROJECTS_ADD, async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory', 'createDirectory']
     })
     if (result.canceled || result.filePaths.length === 0) return null
     const rootPath = result.filePaths[0]
     await fs.mkdir(rootPath, { recursive: true })
-    vault = { rootPath }
-    await setVaultConfig(vault)
-    await refresh()
-    return { status: 'ready', rootPath } as const
+    return adopt(await addProject(rootPath))
   })
 
-  handle(IPC.VAULT_SET, async (rootPath: unknown) => {
-    vault = { rootPath: String(rootPath) }
-    await setVaultConfig(vault)
-    await refresh()
-    return { status: 'ready', rootPath: vault.rootPath } as const
+  handle(IPC.PROJECTS_SWITCH, async (rootPath: unknown) =>
+    adopt(await setActiveProject(String(rootPath)))
+  )
+
+  // Recolor a project; return the fresh list so the renderer can repaint.
+  handle(IPC.PROJECTS_SET_COLOR, async (rootPath: unknown, color: unknown) => {
+    await setProjectColor(String(rootPath), String(color))
+    if (active && active.rootPath === String(rootPath)) active = { ...active, color: String(color) }
+    return listProjects()
   })
+
+  handle(IPC.PROJECTS_REMOVE, async (rootPath: unknown) =>
+    adopt(await removeProject(String(rootPath)))
+  )
 
   // --- tree + notes -----------------------------------------------------
 
@@ -94,10 +133,20 @@ export async function registerIpc(sender: Sender): Promise<IpcRegistration> {
     return note
   })
 
-  handle(IPC.NOTE_DELETE, async (rel: unknown) => {
-    await deleteNote(requireVault(), String(rel))
+  handle(IPC.ENTRY_DELETE, async (rel: unknown) => {
+    await deleteEntry(requireVault(), String(rel), (absolutePath) => shell.trashItem(absolutePath))
     await refresh()
   })
+
+  // --- git history --------------------------------------------------------
+
+  handle(IPC.GIT_LOG, async (rel: unknown) => gitLog(requireVault(), String(rel)))
+
+  handle(IPC.GIT_DIFF_COMMIT, async (rel: unknown, hash: unknown) =>
+    gitDiffCommit(requireVault(), String(rel), String(hash))
+  )
+
+  handle(IPC.GIT_DIFF_HEAD, async (rel: unknown) => gitDiffHead(requireVault(), String(rel)))
 
   // --- annotations --------------------------------------------------------
 

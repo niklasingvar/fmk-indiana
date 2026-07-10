@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePorcelain } from './git'
+import { parseLog, parsePorcelain } from './git'
 
 describe('parsePorcelain', () => {
   it('maps untracked, modified, staged, and deleted files', () => {
@@ -28,5 +28,30 @@ describe('parsePorcelain', () => {
 
   it('returns an empty map for empty output', () => {
     expect(parsePorcelain('')).toEqual({})
+  })
+})
+
+describe('parseLog', () => {
+  it('parses tab-separated hash, epoch seconds, and subject', () => {
+    const entries = parseLog(
+      ['abc123\t1751900000\tfix | notes/todo.md — tightened the intro', ''].join('\n')
+    )
+    expect(entries).toEqual([
+      {
+        hash: 'abc123',
+        timestamp: 1751900000000,
+        subject: 'fix | notes/todo.md — tightened the intro'
+      }
+    ])
+  })
+
+  it('keeps tabs inside the subject and skips malformed lines', () => {
+    const entries = parseLog(['abc\t1\tweird\tsubject', 'not-a-log-line', ''].join('\n'))
+    expect(entries).toHaveLength(1)
+    expect(entries[0].subject).toBe('weird\tsubject')
+  })
+
+  it('returns empty for empty output', () => {
+    expect(parseLog('')).toEqual([])
   })
 })

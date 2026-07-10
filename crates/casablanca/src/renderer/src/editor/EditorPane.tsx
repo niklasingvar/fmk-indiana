@@ -4,8 +4,10 @@ import { isExternalLink, resolveVaultLink } from '@shared/resolve-link'
 import type { TreeNode } from '@shared/domain'
 import type { useVault } from '../storage/useVault'
 import { initTheme, setTheme, type Theme } from '../app/theme'
+import { HistoryPanel } from '../history/HistoryPanel'
 import { HtmlPreview } from '../preview/HtmlPreview'
 import { LexicalEditor } from './Editor'
+import { FrontmatterPanel } from './FrontmatterPanel'
 
 type Vault = ReturnType<typeof useVault>
 
@@ -76,9 +78,26 @@ function ThemeToggle() {
 }
 
 export function EditorPane({ vault }: { vault: Vault }) {
-  const { activeNote, draft, setDraftBody, saving, openNote, goBack, goForward, canBack, canForward, tree } =
-    vault
+  const {
+    activeNote,
+    draft,
+    setDraftBody,
+    setDraftFrontmatter,
+    saving,
+    openNote,
+    goBack,
+    goForward,
+    canBack,
+    canForward,
+    tree
+  } = vault
   const isHtml = activeNote !== null && isHtmlPath(activeNote.path)
+  const hasFrontmatter = draft?.frontmatter !== null && draft?.frontmatter !== undefined
+  const [inspector, setInspector] = useState<'properties' | 'history' | null>(null)
+
+  useEffect(() => {
+    setInspector(hasFrontmatter && !isHtml ? 'properties' : null)
+  }, [activeNote?.path, hasFrontmatter, isHtml])
 
   // Every file in the vault, for the @-mention suggestion list.
   const filePaths = useMemo(() => {
@@ -148,6 +167,28 @@ export function EditorPane({ vault }: { vault: Vault }) {
         </span>
         <span className="flex items-center gap-3">
           {activeNote && !isHtml && <span>{saving ? 'Saving…' : 'Saved'}</span>}
+          {activeNote && !isHtml && hasFrontmatter && (
+            <button
+              onClick={() => setInspector((open) => (open === 'properties' ? null : 'properties'))}
+              title={inspector === 'properties' ? 'Hide properties' : 'Show properties'}
+              className={`rounded border border-pane-border px-2 py-0.5 text-xs hover:bg-pane-hover ${
+                inspector === 'properties' ? 'bg-pane-active' : ''
+              }`}
+            >
+              Properties
+            </button>
+          )}
+          {activeNote && !isHtml && (
+            <button
+              onClick={() => setInspector((open) => (open === 'history' ? null : 'history'))}
+              title={inspector === 'history' ? 'Hide history panel' : 'Show history panel'}
+              className={`rounded border border-pane-border px-2 py-0.5 text-xs hover:bg-pane-hover ${
+                inspector === 'history' ? 'bg-pane-active' : ''
+              }`}
+            >
+              History
+            </button>
+          )}
           <CopyAllButton />
           <ThemeToggle />
         </span>
@@ -157,17 +198,32 @@ export function EditorPane({ vault }: { vault: Vault }) {
           <HtmlPreview key={activeNote.path} relPath={activeNote.path} />
         </div>
       ) : activeNote && draft ? (
-        <div className="flex-1 overflow-auto">
-          <div className="mx-auto max-w-3xl px-8 py-8">
-            <LexicalEditor
-              key={activeNote.path}
-              markdown={draft.body}
-              onChange={setDraftBody}
-              onOpenLink={openLink}
-              notePath={activeNote.path}
-              filePaths={filePaths}
-            />
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex-1 overflow-auto">
+            <div className="mx-auto max-w-3xl px-8 py-8">
+              <LexicalEditor
+                key={activeNote.path}
+                markdown={draft.body}
+                onChange={setDraftBody}
+                onOpenLink={openLink}
+                notePath={activeNote.path}
+                filePaths={filePaths}
+              />
+            </div>
           </div>
+          {inspector !== null && (
+            <aside className="w-96 shrink-0 overflow-hidden border-l border-pane-border">
+              {inspector === 'properties' && draft.frontmatter !== null ? (
+                <FrontmatterPanel
+                  key={activeNote.path}
+                  frontmatter={draft.frontmatter}
+                  onChange={setDraftFrontmatter}
+                />
+              ) : (
+                <HistoryPanel key={activeNote.path} notePath={activeNote.path} />
+              )}
+            </aside>
+          )}
         </div>
       ) : (
         <div className="flex flex-1 items-center justify-center text-text-muted">

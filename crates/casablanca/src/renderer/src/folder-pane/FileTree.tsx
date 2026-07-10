@@ -16,17 +16,24 @@ export function FileTree({
   tree,
   activePath,
   onOpen,
+  onDelete,
   vaultKey,
   gitStatus
 }: {
   tree: TreeNode
   activePath: string | null
   onOpen: (rel: string) => void
+  onDelete: (node: FlatTreeNode) => void
   vaultKey: string
   gitStatus: GitStatusMap
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed(vaultKey))
   const [focused, setFocused] = useState<number | null>(null)
+  const [contextMenu, setContextMenu] = useState<{
+    node: FlatTreeNode
+    x: number
+    y: number
+  } | null>(null)
   const rowRefs = useRef(new Map<number, HTMLDivElement>())
   const typeAhead = useRef({ query: '', timer: null as ReturnType<typeof setTimeout> | null })
 
@@ -36,6 +43,22 @@ export function FileTree({
   )
 
   useEffect(() => saveCollapsed(vaultKey, collapsed), [vaultKey, collapsed])
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = (): void => setContextMenu(null)
+    const closeOnEscape = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('mousedown', close)
+    window.addEventListener('blur', close)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('blur', close)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [contextMenu])
 
   // Reveal the active file: expand the root and its ancestors when it changes.
   useEffect(() => {
@@ -91,8 +114,12 @@ export function FileTree({
       if (action.kind === 'focus') focusRow(action.index)
       else if (action.kind === 'toggle') setExpanded(action.path, action.expand)
       else if (action.kind === 'open') onOpen(action.path)
+      else if (action.kind === 'delete') {
+        const node = nodes.find((candidate) => candidate.path === action.path)
+        if (node) onDelete(node)
+      }
     },
-    [nodes, focused, focusRow, onOpen, setExpanded]
+    [nodes, focused, focusRow, onDelete, onOpen, setExpanded]
   )
 
   return (
@@ -116,9 +143,40 @@ export function FileTree({
             isFocused={focused === node.index}
             status={node.path === '' ? undefined : gitStatus[node.path]}
             onClick={clickRow}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              setFocused(node.index)
+              if (node.path !== '') setContextMenu({ node, x: e.clientX, y: e.clientY })
+            }}
           />
         </div>
       ))}
+      {contextMenu && (
+        <div
+          role="menu"
+          className="fixed z-50 min-w-36 rounded border border-pane-border bg-pane p-1 text-xs shadow-lg"
+          style={{
+            left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 152)),
+            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 42))
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <button
+            autoFocus
+            role="menuitem"
+            className="w-full rounded px-2 py-1.5 text-left text-git-deleted hover:bg-pane-hover"
+            onClick={() => {
+              const node = contextMenu.node
+              setContextMenu(null)
+              onDelete(node)
+            }}
+          >
+            Move to Trash
+          </button>
+        </div>
+      )}
     </div>
   )
 }

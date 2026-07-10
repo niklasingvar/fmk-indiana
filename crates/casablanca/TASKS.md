@@ -27,17 +27,16 @@ presentation components.**
       **vault** = filesystem projection in main, **note authoring** = editor in renderer,
       **shell** = layout/orchestration)
 
-## 1. Frontmatter surfaced as a code snippet at the bottom
+## 1. Frontmatter surfaced in the right inspector
 
-- [ ] Render a `FrontmatterPanel` component below the editor in `EditorPane`
-  - [ ] Display the raw YAML in a monospace code block styled like the editor's code blocks
-  - [ ] Hide the panel entirely when the note has no frontmatter
-  - [ ] Label it clearly (e.g. a small "Properties" / "frontmatter" header) so it reads as
-        metadata, not document content
-- [ ] Make the snippet editable as plain text (textarea styled as code), writing back into
-      the draft `NoteDocument` so autosave persists it
-  - [ ] Validate only the fence structure, not YAML semantics — the domain treats
-        frontmatter as opaque
+- [x] Render `FrontmatterPanel` in the editor's right inspector, sharing the rail with History
+  - [x] Hide Properties when the note has no frontmatter
+  - [x] Project top-level scalar YAML into editable property rows with add/remove controls
+  - [x] Fall back to a monospace raw-YAML editor for nested or malformed content
+- [x] Write property and raw edits back into `NoteDocument` through the existing autosave path
+- [x] Attach Indiana commands to properties as explicit `# frontmatter.<key> ::...` comments
+  - [x] Reuse the HTML annotation composer's chips, autocomplete, and keyboard interaction
+  - [x] Keep ordinary frontmatter inert; only the explicit column-zero comment shape is scanned
 - [ ] Verify externally-edited frontmatter (file watcher) round-trips without loss
 
 ## 2. Formatted markdown: tables + link handling
@@ -89,12 +88,14 @@ presentation components.**
 - [ ] Keyboard navigation: up/down to move, left/right to collapse/expand, enter to open
 
 ### File operations
-- [ ] Context menu (rename, delete, new note here, new folder, reveal in Finder) using
-      `@floating-ui/react`
+- [x] Delete files and folders from the tree with confirmation, path validation, and
+      OS Trash (`shell.trashItem`) rather than permanent delete. The generic `entry:delete`
+      boundary lives in main; the renderer clears an affected open note before the
+      operation can recreate it through autosave.
+- [ ] Expand the entry context menu with rename, new note here, new folder, and reveal in
+      Finder using `@floating-ui/react`
 - [ ] Inline rename (auto-select name without extension, Enter/Escape), backed by a new
-      `notes.rename` IPC handler in the vault domain
-- [ ] Delete with confirmation, moving to OS trash (`shell.trashItem`) rather than
-      permanent delete
+      `entries.rename` IPC handler in the vault domain
 - [ ] Drag-and-drop move between folders (drop-target highlight; vault domain exposes a
       `move(fromRel, toRel)` operation that validates paths stay inside the root)
 
@@ -128,4 +129,4 @@ presentation components.**
 2. Track 4 (Indiana integration) — marker safety + Copy all is the product's reason to exist
 3. Track 1 (frontmatter panel) — quick win once the domain split exists
 4. Track 2 (tables + links) — self-contained in the editor context
-5. Track 3 (file tree) — largest track; visual polish first, then operations
+5. Track 3 (file tree) — largest track; visual polish first, then entry operations

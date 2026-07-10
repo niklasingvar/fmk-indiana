@@ -7,18 +7,26 @@
 
 export const IPC = {
   VAULT_GET: 'vault:get',
-  VAULT_CHOOSE: 'vault:choose',
-  VAULT_SET: 'vault:set',
+
+  PROJECTS_LIST: 'projects:list',
+  PROJECTS_ADD: 'projects:add',
+  PROJECTS_SWITCH: 'projects:switch',
+  PROJECTS_SET_COLOR: 'projects:set-color',
+  PROJECTS_REMOVE: 'projects:remove',
 
   TREE_READ: 'tree:read',
   NOTE_READ: 'note:read',
   NOTE_WRITE: 'note:write',
   NOTE_CREATE: 'note:create',
-  NOTE_DELETE: 'note:delete',
+  ENTRY_DELETE: 'entry:delete',
 
   TREE_CHANGED: 'tree:changed',
   PREVIEW_CHANGED: 'preview:changed',
   GIT_CHANGED: 'git:changed',
+
+  GIT_LOG: 'git:log',
+  GIT_DIFF_COMMIT: 'git:diff-commit',
+  GIT_DIFF_HEAD: 'git:diff-head',
 
   ANNOTATION_APPEND: 'annotation:append',
 

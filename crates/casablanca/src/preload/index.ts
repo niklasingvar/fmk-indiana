@@ -4,8 +4,10 @@ import type {
   AnnotationRequest,
   AnnotationResult,
   CopyAllResult,
+  GitLogEntry,
   GitStatusMap,
   Note,
+  Project,
   TreeNode,
   VaultState
 } from '@shared/domain'
@@ -16,11 +18,18 @@ import type {
  */
 const api = {
   vault: {
-    get: (): Promise<VaultState> => ipcRenderer.invoke(IPC.VAULT_GET),
-    choose: (): Promise<{ status: 'ready'; rootPath: string } | null> =>
-      ipcRenderer.invoke(IPC.VAULT_CHOOSE),
-    set: (rootPath: string): Promise<{ status: 'ready'; rootPath: string }> =>
-      ipcRenderer.invoke(IPC.VAULT_SET, rootPath)
+    get: (): Promise<VaultState> => ipcRenderer.invoke(IPC.VAULT_GET)
+  },
+  projects: {
+    list: (): Promise<Project[]> => ipcRenderer.invoke(IPC.PROJECTS_LIST),
+    /** Opens a folder picker; null when cancelled. */
+    add: (): Promise<VaultState | null> => ipcRenderer.invoke(IPC.PROJECTS_ADD),
+    switch: (rootPath: string): Promise<VaultState> =>
+      ipcRenderer.invoke(IPC.PROJECTS_SWITCH, rootPath),
+    setColor: (rootPath: string, color: string): Promise<Project[]> =>
+      ipcRenderer.invoke(IPC.PROJECTS_SET_COLOR, rootPath, color),
+    remove: (rootPath: string): Promise<VaultState> =>
+      ipcRenderer.invoke(IPC.PROJECTS_REMOVE, rootPath)
   },
   tree: {
     read: (): Promise<TreeNode> => ipcRenderer.invoke(IPC.TREE_READ),
@@ -36,7 +45,9 @@ const api = {
       ipcRenderer.invoke(IPC.NOTE_WRITE, rel, content),
     create: (dirRel: string, name: string): Promise<Note> =>
       ipcRenderer.invoke(IPC.NOTE_CREATE, dirRel, name),
-    remove: (rel: string): Promise<void> => ipcRenderer.invoke(IPC.NOTE_DELETE, rel)
+  },
+  entries: {
+    remove: (rel: string): Promise<void> => ipcRenderer.invoke(IPC.ENTRY_DELETE, rel)
   },
   annotations: {
     append: (req: AnnotationRequest): Promise<AnnotationResult> =>
@@ -54,7 +65,14 @@ const api = {
       const listener = (_e: unknown, map: GitStatusMap): void => cb(map)
       ipcRenderer.on(IPC.GIT_CHANGED, listener)
       return () => ipcRenderer.removeListener(IPC.GIT_CHANGED, listener)
-    }
+    },
+    /** Commits that touched a note, newest first. */
+    log: (rel: string): Promise<GitLogEntry[]> => ipcRenderer.invoke(IPC.GIT_LOG, rel),
+    /** Unified diff of what one commit did to the note. */
+    diffCommit: (rel: string, hash: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.GIT_DIFF_COMMIT, rel, hash),
+    /** Unified diff of the note's uncommitted changes ('' when clean). */
+    diffHead: (rel: string): Promise<string> => ipcRenderer.invoke(IPC.GIT_DIFF_HEAD, rel)
   },
   indiana: {
     copyAll: (): Promise<CopyAllResult> => ipcRenderer.invoke(IPC.INDIANA_COPY_ALL)
