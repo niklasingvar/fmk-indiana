@@ -11,6 +11,7 @@ pub mod index;
 pub mod markers;
 pub mod parser;
 pub mod scope;
+pub mod system_prompt;
 pub mod templates;
 pub mod walk;
 pub mod write;

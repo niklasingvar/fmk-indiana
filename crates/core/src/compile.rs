@@ -5,6 +5,7 @@ use crate::index::{Index, Located};
 use crate::markers::{kind_matches_filter, long_name, Kind};
 use crate::parser::Status;
 use crate::scope::ScopeKind;
+use crate::system_prompt::SystemPrompt;
 use crate::templates::TemplateCatalog;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -99,12 +100,6 @@ pub fn compile_with_options(index: &Index, options: &CompileOptions) -> Compiled
     CompiledPayload { markers, warnings }
 }
 
-/// Loop preamble prepended to every non-empty rendered payload. Directs the
-/// agent into `.indiana/context-model/` (read protocol) and instructs the
-/// write-back (log entry + chief-of-staff focus.md). Embedded only — not
-/// overridable per root.
-const PAYLOAD_PREAMBLE: &str = include_str!("../templates/preamble.md");
-
 /// Coda appended to a dispatched auto-run prompt: remove the marker line and
 /// commit (IN_AUTORUN.md). `{path}`/`{line}`/`{marker}` are filled per marker.
 const AUTORUN_CODA: &str = include_str!("../templates/autorun_coda.md");
@@ -122,7 +117,16 @@ fn marker_block(marker: &CompiledMarker) -> String {
     )
 }
 
-pub fn render_text(payload: &CompiledPayload) -> String {
+/// Resolve the system prompt for a copy/dispatch against `roots`.
+/// One root → that root's instance; otherwise embedded (multi-root paste).
+pub fn system_prompt_for_roots(roots: &[PathBuf]) -> SystemPrompt {
+    match roots {
+        [root] => SystemPrompt::for_root(root),
+        _ => SystemPrompt::embedded(),
+    }
+}
+
+pub fn render_text(payload: &CompiledPayload, system_prompt: &SystemPrompt) -> String {
     let markers = payload
         .markers
         .iter()
@@ -132,13 +136,13 @@ pub fn render_text(payload: &CompiledPayload) -> String {
     if markers.is_empty() {
         return markers;
     }
-    format!("{PAYLOAD_PREAMBLE}\n---\n{markers}")
+    format!("{}\n---\n{markers}", system_prompt.body)
 }
 
 /// The full prompt the daemon dispatches over ACP for one auto-run marker
-/// (IN_AUTORUN.md): the same context-model preamble a paste carries, the marker
+/// (IN_AUTORUN.md): the same system prompt a paste carries, the marker
 /// block, then the coda telling the agent to delete the marker line and commit.
-pub fn render_dispatch(marker: &CompiledMarker) -> String {
+pub fn render_dispatch(marker: &CompiledMarker, system_prompt: &SystemPrompt) -> String {
     let block = marker_block(marker);
     // Reconstruct the on-disk claimed token so the agent can find the line.
     let token = match &marker.id {
@@ -149,12 +153,16 @@ pub fn render_dispatch(marker: &CompiledMarker) -> String {
         .replace("{path}", &marker.path.display().to_string())
         .replace("{line}", &marker.line.to_string())
         .replace("{marker}", &token);
-    format!("{PAYLOAD_PREAMBLE}\n---\n{block}\n---\n{coda}")
+    format!("{}\n---\n{block}\n---\n{coda}", system_prompt.body)
 }
 
 /// One ACP prompt for every marker in a numeric batch. The daemon claims all
 /// members before compiling, so each target has an id and `:working` status.
-pub fn render_group_dispatch(payload: &CompiledPayload, group: u64) -> String {
+pub fn render_group_dispatch(
+    payload: &CompiledPayload,
+    group: u64,
+    system_prompt: &SystemPrompt,
+) -> String {
     let markers = payload
         .markers
         .iter()
@@ -184,7 +192,7 @@ pub fn render_group_dispatch(payload: &CompiledPayload, group: u64) -> String {
         .replace("{group}", &group.to_string())
         .replace("{count}", &payload.markers.len().to_string())
         .replace("{targets}", &targets);
-    format!("{PAYLOAD_PREAMBLE}\n---\n{markers}\n---\n{coda}")
+    format!("{}\n---\n{markers}\n---\n{coda}", system_prompt.body)
 }
 
 fn compile_marker(marker: &Located, templates: &HashMap<String, String>) -> CompiledMarker {
@@ -351,10 +359,15 @@ mod tests {
     }
 
     #[test]
-    fn test_render_text_prepends_loop_preamble() {
+    fn test_render_text_prepends_system_prompt() {
         let (d, idx) = index("buggy ::fix it\n");
-        let rendered = render_text(&compile_with_options(&idx, &CompileOptions::default()));
-        assert!(rendered.starts_with("INDIANA LOOP"));
+        let sp = SystemPrompt::embedded();
+        let rendered = render_text(
+            &compile_with_options(&idx, &CompileOptions::default()),
+            &sp,
+        );
+        assert!(rendered.starts_with("INDIANA LOOP v"));
+        assert!(rendered.contains("CONTENT OVER CHAT"));
         assert!(rendered.contains(".indiana/context-model/CONTEXT-MODEL.md"));
         assert!(rendered.contains(".indiana/chief-of-staff/focus.md"));
         assert!(rendered.contains("one commit per command"));
@@ -363,11 +376,16 @@ mod tests {
     }
 
     #[test]
-    fn test_render_dispatch_has_marker_and_coda() {
+    fn test_render_dispatch_carries_system_prompt() {
         let (d, idx) = index("buggy ::fix[happy-otter:working] tighten\n");
         let payload = compile_with_options(&idx, &CompileOptions::default());
-        let rendered = render_dispatch(&payload.markers[0]);
-        assert!(rendered.starts_with("INDIANA LOOP"), "carries the preamble");
+        let sp = SystemPrompt::for_root(&d);
+        let rendered = render_dispatch(&payload.markers[0], &sp);
+        assert!(
+            rendered.starts_with("INDIANA LOOP v"),
+            "carries the system prompt"
+        );
+        assert!(rendered.contains("CONTENT OVER CHAT"), "names fundamentals");
         assert!(
             rendered.contains("Fix this. tighten"),
             "carries the compiled prompt"
@@ -384,18 +402,21 @@ mod tests {
     }
 
     #[test]
-    fn test_render_text_empty_payload_has_no_preamble() {
+    fn test_render_text_empty_payload_has_no_system_prompt() {
         let payload = CompiledPayload {
             markers: Vec::new(),
             warnings: Vec::new(),
         };
-        assert_eq!(render_text(&payload), "");
+        assert_eq!(render_text(&payload, &SystemPrompt::embedded()), "");
     }
 
     #[test]
     fn test_copy_all_commands() {
         let (d, idx) = index("one ::h\ntwo ::fix it\nthree ::question why\n");
-        let rendered = render_text(&compile_with_options(&idx, &CompileOptions::default()));
+        let rendered = render_text(
+            &compile_with_options(&idx, &CompileOptions::default()),
+            &SystemPrompt::embedded(),
+        );
         assert!(rendered.contains("hate"));
         assert!(rendered.contains("Fix this. it"));
         assert!(rendered.contains("The user asks: why. Answer it."));
@@ -619,7 +640,8 @@ mod tests {
                 ..Default::default()
             },
         );
-        let rendered = render_group_dispatch(&payload, 3);
+        let rendered = render_group_dispatch(&payload, 3, &SystemPrompt::embedded());
+        assert!(rendered.starts_with("INDIANA LOOP v"));
         assert!(rendered.contains("all 2 markers in group -3"));
         assert!(rendered.contains("::fix[happy-otter:working]"));
         assert!(rendered.contains("::elaborate[calm-tiger:working]"));

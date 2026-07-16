@@ -6,12 +6,14 @@
 //! and `.indiana/chief-of-staff/` (project management: actions, notes, focus).
 //!
 //! `crates/core/templates/` is the single authoring source for everything a
-//! monitored root starts with: full `prompt.md` files under `indianas/` and
-//! meta folder seeds. Files are embedded at compile time and written verbatim
-//! — edit them to change what users receive. This repository's own `.indiana/`
-//! is a dogfood instance, not a source; it may diverge freely.
+//! monitored root starts with: full `prompt.md` files under `indianas/`, the
+//! versioned `system_prompt.md`, and meta folder seeds. Files are embedded at
+//! compile time and written verbatim — edit them to change what users receive.
+//! This repository's own `.indiana/` is a dogfood instance, not a source; it
+//! may diverge freely.
 
 use crate::markers::TABLE;
+use crate::system_prompt::{system_prompt_path, SystemPrompt};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::io;
@@ -91,8 +93,22 @@ pub fn init_folder_indiana(root: &Path) -> io::Result<()> {
         ));
     }
     write_command_templates(root, false)?;
+    scaffold_system_prompt(root)?;
     scaffold_meta(root)?;
     Ok(())
+}
+
+/// Scaffold `.indiana/SYSTEM_PROMPT.md` from the embedded authoring source.
+/// Existing files are left byte-identical (refresh adds missing only).
+fn scaffold_system_prompt(root: &Path) -> io::Result<()> {
+    let path = system_prompt_path(root);
+    if path.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, SystemPrompt::embedded_raw())
 }
 
 /// Overwrite every `.indiana/indianas/<command>/prompt.md` with the embedded
@@ -324,6 +340,29 @@ mod tests {
         assert_eq!(
             fs::read_to_string(d.join(".indiana/chief-of-staff/focus.md")).unwrap(),
             "# Focus\n"
+        );
+        let system_prompt = d.join(".indiana/SYSTEM_PROMPT.md");
+        assert!(system_prompt.exists());
+        assert_eq!(
+            fs::read_to_string(&system_prompt).unwrap(),
+            SystemPrompt::embedded_raw()
+        );
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_init_folder_indiana_does_not_overwrite_system_prompt() {
+        let d = tmp();
+        let path = d.join(".indiana/SYSTEM_PROMPT.md");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "custom system prompt\n").unwrap();
+        init_folder_indiana(&d).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "custom system prompt\n");
+        replace_folder_indiana(&d).unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "custom system prompt\n",
+            "replace stays scoped to indianas/"
         );
         fs::remove_dir_all(d).ok();
     }
