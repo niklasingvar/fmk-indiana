@@ -91,9 +91,12 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
   settings: a committable JSON bag the editor, the daemon, and the CLI share.
   Created on first write, not by scaffolding. Known keys: `color` (the editor's
   project color, overrides its global registry) and `autoRun` (per-repo auto-run
-  opt-in the daemon reads, [IN_AUTORUN.md](IN_AUTORUN.md)); unknown keys are
-  ignored. `indiana casablanca get|set|settings|path` is the CLI face — a per-repo
-  input store, not derived from source and not part of the marker index.
+  opt-in the daemon reads) and `model` (optional ACP model value selected before
+  the turn, [IN_AUTORUN.md](IN_AUTORUN.md)) and `maxRowsPerFile` (the elephant
+  ceiling, [FUNDAMENTALS.md](../../FUNDAMENTALS.md); declared, no reader yet);
+  unknown keys are ignored. `indiana
+  casablanca get|set|settings|path` is the CLI face — a per-repo input store, not
+  derived from source and not part of the marker index.
 
 ## Source of truth
 
