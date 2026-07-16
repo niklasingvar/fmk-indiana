@@ -18,4 +18,4 @@ approval: pending
 
 ## Incorporation
 - This repo: dogfood — `::` markers in our own docs, compiled by `indiana copy`/MCP ([docs/PURPOSE.md](../docs/PURPOSE.md)).
-- System prompt: the loop preamble (`crates/core/templates/preamble.md`) instructs every agent to act on markers in place, not to open a dialogue.
+- System prompt: `crates/core/templates/system_prompt.md` (instance: `.indiana/SYSTEM_PROMPT.md`) instructs every agent to act on markers in place, not to open a dialogue.

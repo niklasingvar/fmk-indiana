@@ -43,6 +43,7 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
 
 ```
 <root>/.indiana/
+  SYSTEM_PROMPT.md
   indianas/
     fix/prompt.md
     question/prompt.md
@@ -63,13 +64,20 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
     learnings/INBOX.md
   chief-of-staff/
     README.md
-    actions.md
+    tasks.md
+    log.md
     notes.md
     focus.md
-    todos.db
   casablanca/
     settings.json
 ```
+- `.indiana/SYSTEM_PROMPT.md` — versioned system prompt prepended to every
+  agent-facing payload (`indiana copy`, daemon copy, auto-run / group dispatch).
+  Authoring source: `crates/core/templates/system_prompt.md`. Scaffolded on
+  add/refresh; existing files are left byte-identical. Valid instance wins over
+  embedded; invalid falls back with a warning. If the instance `version` is
+  behind the embedded version, a warning tells the operator to delete the file
+  and refresh — never auto-overwrite. `templates replace` does not touch it.
 - Command templates live under `.indiana/indianas/`, one folder per long marker name:
   - `.indiana/indianas/fix/prompt.md`
   - `.indiana/indianas/question/prompt.md`
@@ -79,14 +87,13 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
   Scaffolded with seed files: the schema (`CONTEXT-MODEL.md`), the journal
   (`index.md`, `log.md`), `purpose/PURPOSE.md`, and `learnings/INBOX.md`.
   The tree grows from there per the schema's own rules.
-- `.indiana/chief-of-staff/` — project management: `README.md`, `actions.md`,
-  `notes.md`, `focus.md`, each seeded with a one-line header.
-- `.indiana/chief-of-staff/todos.db` — the Chief of Staff todo list (SQLite). Created
-  on first `indiana todo` command, not by `add`/`refresh` scaffolding. See
-  [IN_PRINCIPLES.md](IN_PRINCIPLES.md) Chief of Staff carve-out: it is authoritative
-  state separate from `::todo` markers. Fields: `id` (Indiana-style), `todo`
-  (max 29 words), `domain`, and `dependencies` (ids of existing todos). `indiana
-  todo add|list|delete` is the read/write face; `--json` is the agent surface.
+- `.indiana/chief-of-staff/` — focus management: `README.md`, `notes.md`,
+  `focus.md` (one-line seeds) plus the task tracker `tasks.md` and action log
+  `log.md` ([COS_PRD.md](../chief-of-staff/COS_PRD.md)). tasks.md and log.md are
+  scaffolded as skeletons and also self-seed on first machine write, so capture
+  works in roots scaffolded before they existed. `indiana task add|list|done`
+  and `indiana log` are the CLI face; `--json` is the agent surface. (A stale
+  `todos.db` from the retired `indiana todo` stub is inert; delete freely.)
 - `.indiana/casablanca/settings.json` — per-repo [Casablanca](../casablanca/CASABLANCA_OVERVIEW.md)
   settings: a committable JSON bag the editor, the daemon, and the CLI share.
   Created on first write, not by scaffolding. Known keys: `color` (the editor's
@@ -104,8 +111,10 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
 the on-disk `.indiana/` is real, editable content — not derived cache:
 - Everything comes from `crates/core/templates/`, the single authoring source:
   command templates (`indianas/<command>/prompt.md`, full files written
-  verbatim) and meta folder seeds (`context-model/`, `chief-of-staff/`). Edit a
-  file there to change what new monitored roots start with.
+  verbatim), the versioned system prompt (`system_prompt.md` →
+  `.indiana/SYSTEM_PROMPT.md`), and meta folder seeds (`context-model/`,
+  `chief-of-staff/`). Edit a file there to change what new monitored roots
+  start with.
 - A root's existing file always wins; delete it and `indiana templates refresh`
   to re-seed. Existing files on disk are left byte-identical.
 - The `test_embedded_templates_match_marker_table` test fails if a template's

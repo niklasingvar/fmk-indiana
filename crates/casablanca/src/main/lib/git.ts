@@ -3,7 +3,7 @@
  * diffs for the per-note history panel — with one deliberate exception:
  * `ensureRepo` runs `git init` plus an initial snapshot commit so every
  * project has a baseline to diff against. Ongoing commits are the coding
- * agent's job (instructed by the Indiana loop preamble), never Casablanca's.
+ * agent's job (instructed by the Indiana system prompt), never Casablanca's.
  */
 
 import { execFile } from 'node:child_process'

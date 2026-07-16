@@ -14,25 +14,25 @@ fmk-indiana is simultaneously a thing being built, a thing being specified, a th
 
 | Concern | Question it answers | Place |
 |---|---|---|
-| build docs | how do we build this? | `ALLCAPS.md` at root and `docs/` root, `rules/` |
+| build docs | how do we build this? | `ALLCAPS.md` at root, `fundamentals/`, and `docs/` root, `rules/` |
 | product specs | what is this? | `docs/<product>/`, code in `crates/` conforms |
 | templates | what does every user receive? | `crates/core/templates/` |
 | instances | the tool in use | `.indiana/` in monitored repos |
 
 ### Build docs
 - Guide Niklas + agents toward building the right thing.
-- `VISION.md` (destination), `docs/PURPOSE.md` (wedge), `docs/GOAL.md`, `ACTION_PLAN.md`, `MENTAL_MODEL.md`, `CLAUDE.md`, `docs/AGENT_*.md`, `TODO.md`, `rules/`.
-- Never shipped, never read by Indiana at runtime.
+- `VISION.md` (destination), `FUNDAMENTALS.md` + `fundamentals/` (beliefs index and one file per fundamental), `docs/PURPOSE.md` (wedge), `docs/GOAL.md`, `ACTION_PLAN.md`, `MENTAL_MODEL.md`, `CLAUDE.md`, `docs/AGENT_*.md`, `TODO.md`, `rules/`.
+- Never shipped, never read by Indiana at runtime. The compressed fundamentals that *do* ship live in the system-prompt template, not here.
 
 ### Product specs
 - Define each product: scope, invariants, behavior. Spec wins or spec changes ([IN_PRINCIPLES.md](docs/indiana/IN_PRINCIPLES.md)).
 - `docs/ARCHITECTURE.md` (system), `docs/indiana/IN_*.md`, `docs/menulet/MENULET_*.md`, `docs/casablanca/CASABLANCA_*.md`, `docs/context-model/CM_*.md`, `docs/chief-of-staff/COS_*.md`.
 
 ### Templates
-- The single authoring source for everything a monitored root starts with: `crates/core/templates/` — full `indianas/<command>/prompt.md` files (written verbatim) plus meta seeds for `context-model/` and `chief-of-staff/`.
+- The single authoring source for everything a monitored root starts with: `crates/core/templates/` — full `indianas/<command>/prompt.md` files (written verbatim), the versioned `system_prompt.md`, plus meta seeds for `context-model/` and `chief-of-staff/`.
 - Embedded into the binary at compile time; lives inside `crates/core/` because a packaged crate build carries only the crate dir.
 - Not documentation. Specs describe the fix command; the template file *is* the fix command. Changing a word here changes what users receive.
-- Guard: `test_embedded_templates_match_marker_table` pins each template's frontmatter to its marker TABLE row.
+- Guard: `test_embedded_templates_match_marker_table` pins each template's frontmatter to its marker TABLE row; `test_system_prompt_names_fundamentals` pins the system prompt.
 
 ### Instances
 - A monitored repo's `.indiana/` after `indiana add`: templates materialized, then diverging — tuned prompts, growing context-model, live todos.
@@ -57,6 +57,7 @@ fmk-indiana is simultaneously a thing being built, a thing being specified, a th
 | the editor | casablanca | `CASABLANCA_` | nimbus, visualviewer |
 | per-repo memory | context-model | `CM_` | Boxydoc, meta model |
 | human/agent focus layer | chief-of-staff | `COS_` | montmartre |
+| agent-facing loop instructions | system prompt | — | preamble |
 
 - Build doc: `ALLCAPS.md` at repo root or `docs/` root. No prefix.
 - Spec: `docs/<canonical>/<PREFIX>_TOPIC.md`. Folder name = canonical name, nothing appended (`docs/indiana/`, not `docs/indiana-engine/`).

@@ -18,5 +18,5 @@ approval: pending
 
 ## Incorporation
 - This repo: MCP and ACP are faces over the same compiled payload as `indiana copy` ([docs/indiana/IN_PRINCIPLES.md](../docs/indiana/IN_PRINCIPLES.md)).
-- System prompt: the loop preamble is plain text that works pasted into any agent — it assumes no harness.
+- System prompt: the system prompt is plain text that works pasted into any agent — it assumes no harness.
 - settings.json: `model` selects an ACP model for a turn; it never selects a bundled agent.

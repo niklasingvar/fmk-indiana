@@ -18,5 +18,5 @@ approval: pending
 
 ## Incorporation
 - This repo: `.indiana/` is a dogfood instance like any monitored repo ([MENTAL_MODEL.md](../MENTAL_MODEL.md)).
-- System prompt: the loop preamble addresses everything relative to the repo root — the folder is the whole world it names.
+- System prompt: the system prompt addresses everything relative to the repo root — the folder is the whole world it names.
 - settings.json: lives inside the folder (`.indiana/casablanca/settings.json`) — configuration travels with the mission.

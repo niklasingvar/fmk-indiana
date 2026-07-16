@@ -62,6 +62,6 @@ approval: pending
 *How the fundamentals reach beyond this file.*
 
 - This repo: [CLAUDE.md](CLAUDE.md) puts this index first in the floor plan; each fundamental's file names its enforcement point.
-- Future AI (system prompt): the embedded templates in `crates/core/templates/` — the loop preamble and the context-model seed — carry the fundamentals into every monitored repo; every agent loop reads them before acting.
+- Future AI (system prompt): `crates/core/templates/system_prompt.md` is the authoring source; every monitored root gets `.indiana/SYSTEM_PROMPT.md`. `indiana copy`, daemon copy, and auto-run / group dispatch all prepend the same resolved system prompt (version stamped `INDIANA LOOP vN`). Instance may override; outdated `version` warns — never auto-overwrite ([IN_FOLDER.md](docs/indiana/IN_FOLDER.md)).
 - Parameters: fundamentals name tunable ceilings; values live in `.indiana/casablanca/settings.json` per repo (today: `maxRowsPerFile`).
 - Rule of thumb: a fundamental that reaches neither a template, a lint check, nor a settings key is decoration — wire it or cut it.

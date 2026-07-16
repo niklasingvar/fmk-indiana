@@ -73,7 +73,7 @@ function EntryRow({
 
 /**
  * Read-only git history for the active note: the commits that touched it
- * (one per Indiana loop task, by the preamble's commit convention) plus a
+ * (one per Indiana loop task, by the system prompt's commit convention) plus a
  * "Current changes" entry for the uncommitted working-tree diff. Selecting
  * an entry shows a unified source diff. Casablanca never writes history
  * here — committing is the coding agent's job.

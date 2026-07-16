@@ -18,4 +18,4 @@ approval: pending
 
 ## Incorporation
 - This repo: the graph rules in [docs/context-model/CONTEXT-MODEL.md](../docs/context-model/CONTEXT-MODEL.md) §5.
-- System prompt: the loop preamble routes reads by index and upstream ids — agents follow declared edges, never scan.
+- System prompt: the system prompt routes reads by index and upstream ids — agents follow declared edges, never scan.

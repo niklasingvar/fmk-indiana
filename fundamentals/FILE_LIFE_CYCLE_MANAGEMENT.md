@@ -18,4 +18,4 @@ approval: pending
 
 ## Incorporation
 - This repo: the state machine in [docs/context-model/CONTEXT-MODEL.md](../docs/context-model/CONTEXT-MODEL.md) §4; `status` frontmatter on every build doc.
-- System prompt: the loop preamble's "treat `active` files as truth" line is this fundamental, verbatim.
+- System prompt: the system prompt's "treat `active` files as truth" line is this fundamental, verbatim.

@@ -18,4 +18,4 @@ approval: pending
 
 ## Incorporation
 - This repo: the promotion pipeline in [docs/context-model/CONTEXT-MODEL.md](../docs/context-model/CONTEXT-MODEL.md) §7.
-- System prompt: consolidation and lint prompts drive promotion; the write-back protocol in the loop preamble feeds the inbox it promotes from.
+- System prompt: consolidation and lint prompts drive promotion; the write-back protocol in the system prompt feeds the inbox it promotes from.

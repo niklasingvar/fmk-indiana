@@ -53,7 +53,7 @@ Glue so all faces coexist on one machine, every day.
 - [x] Define the read/write contract: schema authored in `files/CONTEXT-MODEL.md`, shipped as the seed `CONTEXT-MODEL.md`; [CM_PRD.md](docs/context-model/CM_PRD.md) points at it.
 - [x] Ship seed files in `crates/core/templates/context-model/` (schema, index, log, purpose, learnings INBOX) instead of a bare `.gitkeep`.
 - [ ] Decide seed frontmatter: the chief-of-staff seeds ship without it and the linter flags them; adding it changes shipped bytes (and the byte-exact scaffold test). (Context-model seeds ship with schema frontmatter.)
-- [x] Wire the templates: `render_text` prepends a loop preamble (read protocol + log/focus.md write-back); `::hate`/`::love`/`::note` instruct the INBOX write-back; `::todo` lands in `.indiana/chief-of-staff/focus.md`.
+- [x] Wire the templates: `render_text` / auto-run dispatch prepend a versioned system prompt (fundamentals + read protocol + log/focus.md write-back); `::hate`/`::love`/`::note` instruct the INBOX write-back; `::todo` lands in `.indiana/chief-of-staff/focus.md`.
 - Exit: give feedback once in a fixture repo; the next compiled payload carries the learned rule.
 
 ## Phase 6 — Presentations as a feature
@@ -61,9 +61,10 @@ Glue so all faces coexist on one machine, every day.
 - Rendered deck view from template-first, content/design-separated files ([VISION.md](VISION.md) presentation flow); annotation boxes emit ordinary `::` markers into source.
 - Exit: review one real deck end to end without opening a code editor.
 
-## Phase 7 — Chief of Staff vision, then design
-- Settle [COS_VISION.md](docs/chief-of-staff/COS_VISION.md): what a ticket is, queue semantics, what "focus" means operationally.
-- Only then write COS_PRD and build the human/agent queues; menulet gains the focus view after that.
+## Phase 7 — Chief of Staff vision, then design (first slice shipped)
+- [x] Queue semantics settled: `::todo`/`::task` → Agent, `::action` → Human ([COS_VISION.md](docs/chief-of-staff/COS_VISION.md)).
+- [x] First slice built per [COS_PRD.md](docs/chief-of-staff/COS_PRD.md): tasks.md + log.md, marker capture/reconcile, `indiana task`/`indiana log`, Casablanca tasks panel; `todos.db` retired.
+- Remaining: what "focus" means operationally; dispatch-from-tracker; menulet gains the focus view.
 - Exit: "what should I be doing right now?" answered by one glance at the menulet.
 
 ## Phase 8 — Auto-run (in progress)
@@ -79,7 +80,7 @@ Glue so all faces coexist on one machine, every day.
 - `question_empty` variant (`crates/core/templates/indianas/question/prompt_empty.md`) is embedded-only — not scaffolded into instances and not overridable per root. Decide whether variants should be.
 - Human-edit version handling on rendered views.
 - Global/cross-project context-model.
-- `::todo` markers vs `todos.db`: import, sync, or unrelated.
+- ~~`::todo` markers vs `todos.db`~~ resolved 2026-07: markers are the capture surface, the chief-of-staff tracker (`tasks.md`) is the store, `todos.db` retired ([COS_PRD.md](docs/chief-of-staff/COS_PRD.md)).
 
 ## Ordering rationale
 - 0 before all: every later phase writes docs; writing onto a misaligned base compounds drift.

@@ -18,4 +18,4 @@ approval: pending
 
 ## Incorporation
 - This repo: every loop appends to `.indiana/context-model/log.md`; diagnostics land in `learnings/INBOX.md` ([docs/context-model/CONTEXT-MODEL.md](../docs/context-model/CONTEXT-MODEL.md) §7).
-- System prompt: the loop preamble's write-back instruction makes every future AI a maintainer of the tree, not just an editor of the artifact.
+- System prompt: the system prompt's write-back instruction makes every future AI a maintainer of the tree, not just an editor of the artifact.
