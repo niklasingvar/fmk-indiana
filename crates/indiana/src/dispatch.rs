@@ -12,6 +12,7 @@ use indiana_core::compile::{
     compile_one, compile_with_options, render_dispatch, render_group_dispatch, CompileOptions,
 };
 use indiana_core::index::Index;
+use indiana_core::system_prompt::SystemPrompt;
 use indiana_core::markers;
 use indiana_core::parser::Status;
 use indiana_core::write::{self, OwnWriteTracker, WriteResult};
@@ -295,7 +296,8 @@ impl Dispatcher {
                 ..Default::default()
             },
         );
-        let prompt = render_group_dispatch(&payload, group);
+        let system_prompt = SystemPrompt::for_root(root);
+        let prompt = render_group_dispatch(&payload, group, &system_prompt);
         let ids: HashSet<String> = claimed
             .markers
             .iter()
@@ -382,12 +384,13 @@ impl Dispatcher {
             inflight.insert(id.clone());
         }
 
-        let prompt = render_dispatch(&compile_one(&marker, roots));
         let root = owning_root(path, roots).unwrap_or_else(|| {
             path.parent()
                 .unwrap_or_else(|| Path::new("."))
                 .to_path_buf()
         });
+        let system_prompt = SystemPrompt::for_root(&root);
+        let prompt = render_dispatch(&compile_one(&marker, roots), &system_prompt);
         let agent = config.agent.clone();
         let inflight = Arc::clone(&self.inflight);
         let own_writes = Arc::clone(own_writes);

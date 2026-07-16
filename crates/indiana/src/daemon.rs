@@ -11,7 +11,9 @@ use crate::protocol::{
     AddResponse, AnswerJobResponse, CopyResponse, FolderInfo, GroupInfo, JobsResponse,
     PayloadResponse, RemoveResponse, Request, Response, RunGroupResponse, StatusResponse,
 };
-use indiana_core::compile::{compile_with_options, render_text, CompileOptions, CompiledPayload};
+use indiana_core::compile::{
+    compile_with_options, render_text, system_prompt_for_roots, CompileOptions, CompiledPayload,
+};
 use indiana_core::index::{Index, ScanReport};
 use indiana_core::markers::parse_kind;
 use indiana_core::templates::init_folder_indiana;
@@ -392,10 +394,11 @@ fn handle(
                 let opts = CompileOptions {
                     kind: kind_filter,
                     group,
-                    roots: Some(vec![abs]),
+                    roots: Some(vec![abs.clone()]),
                     ..Default::default()
                 };
-                render_text(&compile_with_options(&sub, &opts))
+                let system_prompt = system_prompt_for_roots(std::slice::from_ref(&abs));
+                render_text(&compile_with_options(&sub, &opts), &system_prompt)
             };
             serde_json::to_string(&CopyResponse { text }).map_err(io::Error::other)?
         }

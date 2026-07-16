@@ -15,7 +15,9 @@ mod todos;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use config::Config;
-use indiana_core::compile::{compile_with_options, render_text, CompileOptions};
+use indiana_core::compile::{
+    compile_with_options, render_text, system_prompt_for_roots, CompileOptions,
+};
 use indiana_core::frontmatter;
 use indiana_core::index::Index;
 use indiana_core::markers::{long_name, parse_kind};
@@ -500,7 +502,12 @@ fn copy(path: Option<PathBuf>, kind: Option<String>, latest: bool) -> ExitCode {
     for w in &payload.warnings {
         eprintln!("warning: {w}");
     }
-    let rendered = render_text(&payload);
+    let roots_for_prompt = opts.roots.clone().unwrap_or_default();
+    let system_prompt = system_prompt_for_roots(&roots_for_prompt);
+    for w in &system_prompt.warnings {
+        eprintln!("warning: {w}");
+    }
+    let rendered = render_text(&payload, &system_prompt);
     match arboard::Clipboard::new().and_then(|mut c| c.set_text(rendered.clone())) {
         Ok(()) => eprintln!("indiana: copied {} marker(s)", payload.markers.len()),
         Err(e) => eprintln!("indiana: clipboard unavailable: {e}"),
