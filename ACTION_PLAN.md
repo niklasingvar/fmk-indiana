@@ -61,10 +61,9 @@ Glue so all faces coexist on one machine, every day.
 - Rendered deck view from template-first, content/design-separated files ([VISION.md](VISION.md) presentation flow); annotation boxes emit ordinary `::` markers into source.
 - Exit: review one real deck end to end without opening a code editor.
 
-## Phase 7 — Chief of Staff vision, then design (first slice shipped)
-- [x] Queue semantics settled: `::todo`/`::task` → Agent, `::action` → Human ([COS_VISION.md](docs/chief-of-staff/COS_VISION.md)).
-- [x] First slice built per [COS_PRD.md](docs/chief-of-staff/COS_PRD.md): tasks.md + log.md, marker capture/reconcile, `indiana task`/`indiana log`, Casablanca tasks panel; `todos.db` retired.
-- Remaining: what "focus" means operationally; dispatch-from-tracker; menulet gains the focus view.
+## Phase 7 — Chief of Staff vision, then design
+- Settle [COS_VISION.md](docs/chief-of-staff/COS_VISION.md): what a ticket is, queue semantics, what "focus" means operationally.
+- Only then write COS_PRD and build the human/agent queues; menulet gains the focus view after that.
 - Exit: "what should I be doing right now?" answered by one glance at the menulet.
 
 ## Phase 8 — Auto-run (in progress)
@@ -80,7 +79,7 @@ Glue so all faces coexist on one machine, every day.
 - `question_empty` variant (`crates/core/templates/indianas/question/prompt_empty.md`) is embedded-only — not scaffolded into instances and not overridable per root. Decide whether variants should be.
 - Human-edit version handling on rendered views.
 - Global/cross-project context-model.
-- ~~`::todo` markers vs `todos.db`~~ resolved 2026-07: markers are the capture surface, the chief-of-staff tracker (`tasks.md`) is the store, `todos.db` retired ([COS_PRD.md](docs/chief-of-staff/COS_PRD.md)).
+- `::todo` markers vs `todos.db`: import, sync, or unrelated.
 
 ## Ordering rationale
 - 0 before all: every later phase writes docs; writing onto a misaligned base compounds drift.
