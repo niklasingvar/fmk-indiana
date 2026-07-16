@@ -15,6 +15,8 @@ approval: approved
 - Keep intent and specs current as direction shifts.
 - Use brief docs with precise words.
 - Prefer bulleted lists over prose.
+- Structure carries the meaning: frontmatter states the contract, headings state the claim, bullets state the facts.
+- Body text should almost never need human reading; a human scans headings and bullets ([MARKDOWN_AS_CODE](../fundamentals/MARKDOWN_AS_CODE.md)).
 - Every markdown file must have YAML frontmatter: `status`, `purpose`, `approval`.
 - Do not use bold in markdown.
 
