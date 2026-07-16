@@ -4,20 +4,22 @@ purpose: The destination — what the whole system becomes. The shipped wedge is
 approval: pending
 ---
 
-# AI-Native Workspace with Learning Loops and an Opinionated, LLM-Friendly Architecture
+# AI-Native Workspace with domain specific langauge, Learning Loops and an Opinionated Context Engineering
 
 *The components (codenames live only here — paths and specs use the canonical names, see [MENTAL_MODEL.md](MENTAL_MODEL.md)):*
-- **Indiana** · headless command engine and CLI
-- **Casablanca** · the editor — rich markdown editing, with visual/presentation support as features (retired alias: nimbus)
-- **Chief of Staff** · human/agent focus management — ADHD style (retired alias: montmartre)
-- **Context-model** · per-repo memory (retired aliases: Boxydoc, meta model)
-- **Menulet** · menu-bar surface (retired alias: Bangalore)
+- **Indiana** · headless sniffer and command engine (with CLI)
+- **Casablanca** · the editor — rich markdown editing, with visual/presentation support as features
+- **Chief of Staff** · human/agent focus management — ADHD style
+- **Context-model** · per-repo memory
+- **Menulet** · menu-bar surface (retired alias: Bangalore) <- TO BE DELETED >
 
 ## The Wedge and the Destination
 
 This document is the destination. The product that ships today — fmk-indiana, the `::` marker review loop for coding-agent output ([docs/PURPOSE.md](docs/PURPOSE.md)) — is the wedge: the narrowest slice of this vision that is already useful alone. The two are one system at different zoom levels: the wedge proves the loop on markdown and code; the destination extends the same loop to every artifact a human makes with AI.
 
 Rule: anything in the repo not aligned with this file is a conflict. A conflict is either fixed toward the vision or explicitly parked in [ACTION_PLAN.md](ACTION_PLAN.md) — never silently accepted.
+
+The distilled form of this narrative — beliefs, structural laws, loop practices, one tier each — is [FUNDAMENTALS.md](FUNDAMENTALS.md). This file explains; that file declares.
 
 ---
 

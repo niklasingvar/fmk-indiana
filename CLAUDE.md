@@ -7,6 +7,8 @@ approval: approved
 # CLAUDE.md - floor plan
 
 ## Start here
+- [FUNDAMENTALS.md](FUNDAMENTALS.md) - beliefs, structural laws, loop practices, one tier each
+- [VISION.md](VISION.md) - the destination; FUNDAMENTALS.md is its distilled form
 - [MENTAL_MODEL.md](MENTAL_MODEL.md) - the four concerns and naming convention
 - [docs/PURPOSE.md](docs/PURPOSE.md) - why this exists
 - [docs/GOAL.md](docs/GOAL.md) - what success looks like
