@@ -10,7 +10,11 @@ approval: pending
 
 SINGLE SOURCE OF TRUTH
 
-ELEPHANT PRINCIPLE (small files, chop the problem into pieces)
+*Every fact has exactly one home; everywhere else it is a link, never a copy.*
+
+ELEPHANT PRINCIPLE
+
+*Eat it one bite at a time: small files, small problems, small loops.*
 
 # App Fundamentals
 
@@ -18,9 +22,23 @@ ELEPHANT PRINCIPLE (small files, chop the problem into pieces)
 
 CONTENT OVER CHAT
 
+*The artifact is the interface; feedback lives in the file, not in a conversation.*
+
 FOLDER IS THE UNIT OF WORK
 
+*A folder is a mission: artifact, context, and configuration travel together.*
+
 KNOWLEDGE COMPOUNDS THROUGH LOOPS
+
+*The loops are the memory; feedback given once is never given twice.*
+
+DOMAIN ARCHITECTURE > TECH
+
+*The tree is shaped by what the project is about, never by the technology it happens to use.*
+
+HARNESS AGNOSTIC
+
+*Never run an own agent or own the token bill; any harness connects to the folder.*
 
 # Principles
 
@@ -28,9 +46,15 @@ KNOWLEDGE COMPOUNDS THROUGH LOOPS
 
 CONE-SHAPED TREE ARCHITECTURE
 
+*Space: knowledge flows up a stability gradient, compressing at every step — wide base, narrow top.*
+
 FILE LIFE CYCLE MANAGEMENT
 
+*Time: draft → active → deprecated → archived; active is trusted at query time, nothing is deleted.*
+
 FULL DEPENDENCY MANAGEMENT
+
+*Relations: normative upstream edges point only toward more stable layers — acyclic by construction.*
 
 # Execution
 
@@ -38,8 +62,16 @@ FULL DEPENDENCY MANAGEMENT
 
 FRONTMATTER ON EVERY FILE
 
+*The contract carrier: identity, layer, status, owner, upstream. No frontmatter, no trust.*
+
 DOCUMENT WHY, NOT WHAT
+
+*Write what the diff cannot say; never mirror what a grep already knows.*
 
 PROMOTE, NEVER FORK
 
+*Knowledge moves up the cone; the source becomes a link, never a duplicate.*
+
 MARKDOWN AS CODE — ONE LINE = ONE THING
+
+*Files are parseable and lintable; a line that needs two sentences is two lines.*
