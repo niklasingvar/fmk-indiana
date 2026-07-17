@@ -17,16 +17,20 @@ const execFileAsync = promisify(execFile)
 /**
  * Where the `indiana` binary lives. A GUI app's PATH is launchd's default,
  * not the user's shell PATH (docs/DISTRO.md — same lesson as the menulet),
- * so we check the standard install locations explicitly.
+ * so we check the standard install locations explicitly. The dev launcher
+ * provides its repo binary through INDIANA_BIN.
  */
-const BINARY_CANDIDATES = [
+const STANDARD_BINARY_CANDIDATES = [
   join(homedir(), '.local', 'bin', 'indiana'),
   '/opt/homebrew/bin/indiana',
   '/usr/local/bin/indiana'
 ]
 
 export function resolveIndianaBinary(): string | null {
-  return BINARY_CANDIDATES.find((p) => existsSync(p)) ?? null
+  const candidates = process.env.INDIANA_BIN
+    ? [process.env.INDIANA_BIN, ...STANDARD_BINARY_CANDIDATES]
+    : STANDARD_BINARY_CANDIDATES
+  return candidates.find((p) => existsSync(p)) ?? null
 }
 
 const DAEMON_REQUEST_TIMEOUT_MS = 2_000

@@ -9,6 +9,39 @@ approval: pending
 
 > Tag lines with `::` markers while reviewing agent output; Indiana monitors the repo, compiles each marker into a prompt, and exposes the bundle to agents via MCP or to humans via copy. Why and where this goes: [docs/PURPOSE.md](docs/PURPOSE.md).
 
+## Start the Electron editor
+
+### From source
+
+Requires Rust, Node.js, and npm. From the repository root:
+
+```sh
+make casablanca
+```
+
+This builds the local Indiana binary, installs Casablanca's npm dependencies, and
+launches the Electron development app with that binary. No separate Indiana
+install is needed. Work in the separate Casablanca window; `http://localhost:5173`
+is only the renderer dev server and cannot use the Electron preload bridge. Stop
+the app with Ctrl-C in the terminal.
+
+`make casablanca` makes the local binary available for editor actions such as
+Copy all. For live monitoring and agent jobs, start the daemon in another terminal:
+
+```sh
+make serve
+```
+
+On first launch, select a folder to open as a project.
+
+### Installed app
+
+After installing the Casablanca cask, open it from Finder or run:
+
+```sh
+open -a Casablanca
+```
+
 ## Install
 
 ### Homebrew (recommended)
@@ -48,7 +81,7 @@ cp target/release/indiana ~/.local/bin/indiana
 ```
 Add `~/.local/bin` to your `PATH` if it isn't already.
 
-## Test locally
+## Test the CLI locally
 
 ### Quick dev test (no install)
 

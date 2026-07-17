@@ -61,9 +61,9 @@ sidecar-copy: build
 menulet: sidecar-copy
 	$(NVM_INIT) cd crates/menulet && npm install && npm run dev
 
-# Launch the Casablanca editor in dev mode (electron-vite dev).
-casablanca:
-	$(NVM_INIT) cd crates/casablanca && npm install && npm run dev
+# Build Indiana, then launch Casablanca with the repo binary for dev integration.
+casablanca: build
+	$(NVM_INIT) cd crates/casablanca && npm install && INDIANA_BIN="$(abspath $(BIN))" npm run dev
 .PHONY: release
 release: build
 	tar -czf indiana-aarch64-apple-darwin.tar.gz -C target/release indiana
