@@ -15,6 +15,8 @@ import {
   TextNode
 } from 'lexical'
 
+import { openJobFollow } from '../../app/agents/job-events'
+
 /**
  * Presentation-only marker styling. Indiana remains responsible for parsing
  * and compiling these commands; this plugin only makes their visible suffix
@@ -23,11 +25,26 @@ import {
 export const INDIANA_MARKER_STYLE =
   'background-color: rgb(var(--marker-bg)); color: rgb(var(--marker-text)); text-decoration: underline; text-decoration-color: rgb(var(--marker-border)); text-decoration-thickness: 2px; text-underline-offset: 2px;'
 
+/**
+ * The `[id:working]` bracket of a claimed marker. The extra custom property
+ * is a CSS-selectable sentinel: styles.css attaches an animated ::after ring
+ * to `span[style*="--marker-working"]`, so the spinner is pure presentation —
+ * no extra document text, byte-identical markdown export, and the bracket
+ * stays ordinarily editable.
+ */
+export const INDIANA_MARKER_WORKING_STYLE = `${INDIANA_MARKER_STYLE} --marker-working: 1;`
+
 const MARKER_PATTERN =
-  /::(?:question|q|\?|hate|h|love|l|keep|k|fix|f|elaborate|e|note|n|action|a|todo|td|delete|d|prompt|p)(?:\[[^\]\n]*\])?(?:\s+[^\n]*)?$/i
+  /::(?:question|q|\?|hate|h|love|l|keep|k|fix|f|elaborate|e|note|n|action|a|todo|td|task|delete|d|prompt|p)(?:\[[^\]\n]*\])?(?:\s+[^\n]*)?$/i
+
+const WORKING_BRACKET = /\[([a-z0-9-]+):working\]/i
 
 function markerStart(text: string): number | null {
   return text.match(MARKER_PATTERN)?.index ?? null
+}
+
+function isMarkerStyle(style: string): boolean {
+  return style === INDIANA_MARKER_STYLE || style === INDIANA_MARKER_WORKING_STYLE
 }
 
 const MARKER_STYLE_PROPERTIES = [
@@ -36,7 +53,8 @@ const MARKER_STYLE_PROPERTIES = [
   'text-decoration',
   'text-decoration-color',
   'text-decoration-thickness',
-  'text-underline-offset'
+  'text-underline-offset',
+  '--marker-working'
 ] as const
 
 function stripMarkerStyleFromHtml(html: string): string {
@@ -60,7 +78,7 @@ function stripMarkerStyleFromLexicalJson(serialized: string): string {
     const payload: unknown = JSON.parse(serialized)
     const visit = (value: unknown): void => {
       if (!isRecord(value)) return
-      if (value.style === INDIANA_MARKER_STYLE) value.style = ''
+      if (typeof value.style === 'string' && isMarkerStyle(value.style)) value.style = ''
       for (const key of ['children', 'nodes']) {
         const children = value[key]
         if (Array.isArray(children)) children.forEach(visit)
@@ -126,13 +144,15 @@ function contiguousTextSiblings(node: TextNode): TextNode[] {
 }
 
 function clearMarkerStyle(node: TextNode): void {
-  if (node.getStyle() === INDIANA_MARKER_STYLE) node.setStyle('')
+  if (isMarkerStyle(node.getStyle())) node.setStyle('')
 }
 
 /**
  * Apply or remove our style without changing the text or its markdown export.
  * Lexical may split a command while it is being typed, so the scan covers
- * contiguous text siblings rather than only the dirty node.
+ * contiguous text siblings rather than only the dirty node. A claimed
+ * marker's `[id:working]` bracket becomes its own styled span (the working
+ * variant) so the CSS spinner attaches to exactly that range.
  */
 export function highlightMarker(node: TextNode): void {
   const parent = node.getParent()
@@ -146,22 +166,52 @@ export function highlightMarker(node: TextNode): void {
     return
   }
 
+  const working = text.slice(start).match(WORKING_BRACKET)
+  const workingFrom = working ? start + (working.index ?? 0) : -1
+  const workingTo = working ? workingFrom + working[0].length : -1
+
+  const styleFor = (offset: number): string => {
+    if (offset < start) return ''
+    if (working && offset >= workingFrom && offset < workingTo) return INDIANA_MARKER_WORKING_STYLE
+    return INDIANA_MARKER_STYLE
+  }
+
   let offset = 0
-  for (const child of group) {
+  for (const child of [...group]) {
     const length = child.getTextContentSize()
     const childEnd = offset + length
-    if (childEnd <= start) {
-      clearMarkerStyle(child)
-    } else if (offset < start) {
-      const originalStyle = child.getStyle()
-      const [, markerNode] = child.splitText(start - offset)
-      if (originalStyle === INDIANA_MARKER_STYLE) child.setStyle('')
-      markerNode.setStyle(INDIANA_MARKER_STYLE)
-    } else if (child.getStyle() !== INDIANA_MARKER_STYLE) {
-      child.setStyle(INDIANA_MARKER_STYLE)
+    const cuts = [start, workingFrom, workingTo]
+      .filter((cut) => cut > offset && cut < childEnd)
+      .map((cut) => cut - offset)
+    const pieces = cuts.length > 0 ? child.splitText(...cuts) : [child]
+    let pieceStart = offset
+    for (const piece of pieces) {
+      const style = styleFor(pieceStart)
+      if (style === '') clearMarkerStyle(piece)
+      else if (piece.getStyle() !== style) piece.setStyle(style)
+      pieceStart += piece.getTextContentSize()
     }
     offset = childEnd
   }
+}
+
+/**
+ * Clicks on the working span's CSS ::after ring (rendered past the text's
+ * right edge) open the job follow view; clicks on the text itself keep
+ * normal caret behavior.
+ */
+function onWorkingSpinnerClick(event: MouseEvent): void {
+  const target = event.target as HTMLElement | null
+  const span = target?.closest?.('span[style*="--marker-working"]') as HTMLElement | null
+  if (!span) return
+  const match = (span.textContent ?? '').match(/\[([a-z0-9-]+):working\]/i)
+  if (!match) return
+  const range = document.createRange()
+  range.selectNodeContents(span)
+  if (event.clientX <= range.getBoundingClientRect().right) return
+  event.preventDefault()
+  event.stopPropagation()
+  openJobFollow(match[1])
 }
 
 export function MarkerHighlightPlugin() {
@@ -170,9 +220,14 @@ export function MarkerHighlightPlugin() {
   useEffect(() => {
     const unregisterTransform = editor.registerNodeTransform(TextNode, highlightMarker)
     const unregisterCopy = editor.registerCommand(COPY_COMMAND, copyWithoutMarkerStyles, COMMAND_PRIORITY_HIGH)
+    const unregisterClick = editor.registerRootListener((root, prevRoot) => {
+      prevRoot?.removeEventListener('click', onWorkingSpinnerClick)
+      root?.addEventListener('click', onWorkingSpinnerClick)
+    })
     return () => {
       unregisterTransform()
       unregisterCopy()
+      unregisterClick()
     }
   }, [editor])
 

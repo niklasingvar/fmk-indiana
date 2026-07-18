@@ -22,6 +22,7 @@ export const IPC = {
   ENTRY_REVEAL: 'entry:reveal',
 
   TREE_CHANGED: 'tree:changed',
+  NOTE_CHANGED: 'note:changed',
   PREVIEW_CHANGED: 'preview:changed',
   GIT_CHANGED: 'git:changed',
 
@@ -33,7 +34,11 @@ export const IPC = {
 
   INDIANA_COPY_ALL: 'indiana:copy-all',
   INDIANA_JOBS: 'indiana:jobs',
-  INDIANA_ANSWER_JOB: 'indiana:answer-job'
+  INDIANA_ANSWER_JOB: 'indiana:answer-job',
+  INDIANA_JOB_TRANSCRIPT: 'indiana:job-transcript',
+
+  COS_TASKS: 'cos:tasks',
+  COS_LOG: 'cos:log'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

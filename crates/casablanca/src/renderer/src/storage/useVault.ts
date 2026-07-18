@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitStatusMap, Note, NoteDocument, Project, TreeNode, VaultState } from '@shared/domain'
 import { isHtmlPath } from '@shared/annotation-line'
+import { applyMarkerClaims, diffMarkerClaims, type MarkerClaimPatch } from '@shared/marker-claim'
 import { parseNoteDocument, serializeNoteDocument } from '@shared/note-serialization'
 
 const AUTOSAVE_MS = 500
@@ -22,8 +23,23 @@ export function useVault() {
   const [activeNote, setActiveNote] = useState<Note | null>(null)
   const [draft, setDraft] = useState<NoteDocument | null>(null)
   const [saving, setSaving] = useState(false)
+  // Bumped when an external edit is adopted into the open note, so the editor
+  // remounts on fresh content (its Lexical state is seeded once per key).
+  const [noteVersion, setNoteVersion] = useState(0)
+  // The daemon's marker-claim edit, published for the editor to splice in
+  // place (no remount, works on dirty buffers). `id` retriggers the effect
+  // when successive claims produce identical patch lists.
+  const [markerPatch, setMarkerPatch] = useState<{
+    id: number
+    patches: MarkerClaimPatch[]
+  } | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savePromise = useRef<Promise<void> | null>(null)
+  // Live mirrors for the note:changed subscription (one stable listener).
+  const activeNoteRef = useRef<Note | null>(null)
+  const draftRef = useRef<NoteDocument | null>(null)
+  activeNoteRef.current = activeNote
+  draftRef.current = draft
 
   const refreshProjects = useCallback(async () => {
     setProjects(await window.api.projects.list())
@@ -47,6 +63,60 @@ export function useVault() {
   useEffect(() => {
     if (vaultState.status !== 'ready') return
     return window.api.git.onChanged(setGitStatus)
+  }, [vaultState])
+
+  // Adopt external on-disk edits to the OPEN note — the Indiana daemon's
+  // marker claims (`::fix -a …` → `::fix[id:working] -a …`) and the agent's
+  // fixes. Without this the buffer goes stale: the user never sees the loop
+  // run, and worse, autosaving the stale buffer wipes the claim and the same
+  // marker is dispatched again (duplicate agent turns and commits).
+  useEffect(() => {
+    if (vaultState.status !== 'ready') return
+    return window.api.notes.onChanged((rel) => {
+      const note = activeNoteRef.current
+      if (!note || note.path !== rel) return
+      void window.api.notes.read(rel).then((fresh) => {
+        const current = activeNoteRef.current
+        if (!current || current.path !== rel) return
+        // Our own autosave echo — already baselined by persistNote.
+        if (fresh.content === current.content) return
+        const liveDraft = draftRef.current
+        const serialized = liveDraft ? serializeNoteDocument(liveDraft) : null
+        // Disk caught up to the live draft (own write racing keystrokes):
+        // re-baseline only, keep the editor untouched.
+        if (serialized !== null && serialized === fresh.content) {
+          setActiveNote(fresh)
+          return
+        }
+        // The daemon's marker claim (`::fix -a …` → `::fix[id:working] -a …`,
+        // or a later `:failed` flip): splice it into the live editor instead
+        // of remounting — cursor, undo, and unsaved edits elsewhere survive.
+        // Runs on dirty buffers too; that is the point: the claim must land
+        // before the next autosave so it is never clobbered (double dispatch).
+        const oldDoc = parseNoteDocument(current.content)
+        const freshDoc = parseNoteDocument(fresh.content)
+        if (oldDoc.frontmatter === freshDoc.frontmatter) {
+          const patches = diffMarkerClaims(oldDoc.body, freshDoc.body)
+          if (patches) {
+            setActiveNote(fresh)
+            setDraft(liveDraft ? { ...liveDraft, body: applyMarkerClaims(liveDraft.body, patches) } : freshDoc)
+            setMarkerPatch((prev) => ({ id: (prev?.id ?? 0) + 1, patches }))
+            return
+          }
+        }
+        // Clean buffer → adopt the external edit wholesale.
+        if (serialized === null || serialized === current.content) {
+          setActiveNote(fresh)
+          setDraft(parseNoteDocument(fresh.content))
+          setNoteVersion((v) => v + 1)
+          return
+        }
+        // Dirty buffer + diverged disk: adopting would drop keystrokes,
+        // saving would clobber the agent. Keep the user's text; the next
+        // autosave wins. Follow-up: three-way merge (shared/diff).
+        console.warn('[vault] external change to a dirty note left on disk:', rel)
+      })
+    })
   }, [vaultState])
 
   const persistNote = useCallback(async (path: string, content: string): Promise<void> => {
@@ -230,6 +300,8 @@ export function useVault() {
     gitStatus,
     activeNote,
     draft,
+    noteVersion,
+    markerPatch,
     saving,
     setDraftBody,
     setDraftFrontmatter,

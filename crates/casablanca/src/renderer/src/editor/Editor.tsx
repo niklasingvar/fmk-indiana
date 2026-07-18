@@ -16,6 +16,8 @@ import { CodeNode, CodeHighlightNode } from '@lexical/code'
 import { TableCellNode, TableNode, TableRowNode } from '@lexical/table'
 
 import { MarkdownPlugin, MARKDOWN_TRANSFORMERS } from './plugins/MarkdownPlugin'
+import { MarkerAppendPlugin } from './plugins/MarkerAppendPlugin'
+import { MarkerClaimPlugin, type MarkerClaimSignal } from './plugins/MarkerClaimPlugin'
 import { MarkerHighlightPlugin } from './plugins/MarkerHighlightPlugin'
 import { MentionLinkPlugin } from './plugins/MentionLinkPlugin'
 
@@ -28,6 +30,8 @@ interface Props {
   notePath?: string
   /** All file paths in the vault, for the @ suggestion list. */
   filePaths?: string[]
+  /** The daemon's latest marker-claim edit, spliced in without a remount. */
+  claimPatch?: MarkerClaimSignal | null
 }
 
 /**
@@ -79,7 +83,7 @@ function LinkOpenPlugin({ onOpenLink }: { onOpenLink: (href: string) => void }) 
   return null
 }
 
-export function LexicalEditor({ markdown, onChange, onOpenLink, notePath, filePaths }: Props) {
+export function LexicalEditor({ markdown, onChange, onOpenLink, notePath, filePaths, claimPatch }: Props) {
   const config = {
     namespace: 'casablanca-editor',
     nodes: [
@@ -133,6 +137,8 @@ export function LexicalEditor({ markdown, onChange, onOpenLink, notePath, filePa
       <HistoryPlugin />
       <AutoFocusPlugin />
       <MarkerHighlightPlugin />
+      <MarkerAppendPlugin />
+      <MarkerClaimPlugin patch={claimPatch ?? null} />
       <MarkdownPlugin markdown={markdown} onChange={onChange} transformers={MARKDOWN_TRANSFORMERS} />
     </LexicalComposer>
   )

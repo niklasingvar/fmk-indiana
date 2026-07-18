@@ -8,7 +8,13 @@ import type {
   AgentJobsResult,
   AnswerAgentJobResult,
   CopyAllResult,
+  CosLogEntry,
+  CosLogResult,
+  CosTask,
+  CosTasksResult,
   ElicitationAction,
+  JobTranscriptResult,
+  TranscriptEvent,
   VaultConfig
 } from '@shared/domain'
 
@@ -80,6 +86,24 @@ export async function agentJobs(): Promise<AgentJobsResult> {
   }
 }
 
+/**
+ * Fetch a live turn's transcript from `sinceSeq` on. A gone job or offline
+ * daemon both come back as `found: false` — the follow view treats either as
+ * "turn ended".
+ */
+export async function jobTranscript(jobId: string, sinceSeq: number): Promise<JobTranscriptResult> {
+  try {
+    const response = await daemonRequest<{
+      found: boolean
+      events: TranscriptEvent[]
+      next_seq: number
+    }>({ cmd: 'jobtranscript', job_id: jobId, since_seq: sinceSeq })
+    return { found: response.found, events: response.events, nextSeq: response.next_seq }
+  } catch {
+    return { found: false, events: [], nextSeq: sinceSeq }
+  }
+}
+
 /** Forward one human choice to the ACP turn that asked for it. */
 export function answerAgentJob(
   jobId: string,
@@ -111,6 +135,47 @@ export async function ensureMonitored(rootPath: string): Promise<void> {
   } catch (err) {
     const e = err as { stderr?: string; message?: string }
     console.warn('[indiana] add failed:', e.stderr?.trim() || e.message || String(err))
+  }
+}
+
+/**
+ * Read the Chief of Staff tracker through `indiana task list --json` — the
+ * line grammar exists in exactly one language (core computes, faces render).
+ * A missing binary or a failed run degrades to an unavailable panel, never an
+ * error dialog.
+ */
+export async function listTasks(vault: VaultConfig): Promise<CosTasksResult> {
+  const bin = resolveIndianaBinary()
+  if (!bin) return { available: false, tasks: [] }
+  try {
+    const { stdout } = await execFileAsync(
+      bin,
+      ['task', 'list', '--root', vault.rootPath, '--state', 'all', '--json'],
+      { timeout: 10_000 }
+    )
+    return { available: true, tasks: JSON.parse(stdout) as CosTask[] }
+  } catch (err) {
+    const e = err as { stderr?: string; message?: string }
+    console.warn('[indiana] task list failed:', e.stderr?.trim() || e.message || String(err))
+    return { available: false, tasks: [] }
+  }
+}
+
+/** Tail the Chief of Staff action log through `indiana log -n <n> --json`. */
+export async function tailLog(vault: VaultConfig, lines: number): Promise<CosLogResult> {
+  const bin = resolveIndianaBinary()
+  if (!bin) return { available: false, entries: [] }
+  try {
+    const { stdout } = await execFileAsync(
+      bin,
+      ['log', '--root', vault.rootPath, '-n', String(lines), '--json'],
+      { timeout: 10_000 }
+    )
+    return { available: true, entries: JSON.parse(stdout) as CosLogEntry[] }
+  } catch (err) {
+    const e = err as { stderr?: string; message?: string }
+    console.warn('[indiana] log failed:', e.stderr?.trim() || e.message || String(err))
+    return { available: false, entries: [] }
   }
 }
 

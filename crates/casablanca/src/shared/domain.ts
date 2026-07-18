@@ -73,6 +73,66 @@ export interface AnswerAgentJobResult {
   accepted: boolean
 }
 
+/** What one transcript entry represents in the job follow view. */
+export type TranscriptEventKind = 'agent' | 'thought' | 'tool' | 'question' | 'answer'
+
+/** One entry of a live turn's transcript; `seq` is monotonic per job. */
+export interface TranscriptEvent {
+  seq: number
+  kind: TranscriptEventKind
+  text: string
+}
+
+/**
+ * A page of transcript events from `since_seq` on. `found: false` means the
+ * job is gone (turn ended) — transcripts are daemon memory, like jobs.
+ */
+export interface JobTranscriptResult {
+  found: boolean
+  events: TranscriptEvent[]
+  nextSeq: number
+}
+
+/** Chief of Staff queues (COS_PRD.md): agent tasks drain autonomously. */
+export type CosQueue = 'agent' | 'human'
+
+export type CosTaskState = 'open' | 'working' | 'done' | 'failed'
+
+/** Where a captured task's marker lived at capture time — a jump hint. */
+export interface CosTaskOrigin {
+  path: string
+  line: number
+}
+
+/** One line of `.indiana/chief-of-staff/tasks.md`, parsed by the Indiana CLI. */
+export interface CosTask {
+  id: string
+  text: string
+  queue: CosQueue
+  state: CosTaskState
+  origin?: CosTaskOrigin
+  created?: string
+}
+
+/** `available: false` = indiana binary missing; the panel shows a hint. */
+export interface CosTasksResult {
+  available: boolean
+  tasks: CosTask[]
+}
+
+/** One line of `.indiana/chief-of-staff/log.md` — the action log. */
+export interface CosLogEntry {
+  ts: string
+  event: string
+  id: string
+  detail: string
+}
+
+export interface CosLogResult {
+  available: boolean
+  entries: CosLogEntry[]
+}
+
 /** Marker kinds offered by the HTML-preview annotation bubble. */
 export type AnnotationKind =
   | 'question'

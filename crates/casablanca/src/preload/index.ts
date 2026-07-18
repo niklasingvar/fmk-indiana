@@ -6,8 +6,11 @@ import type {
   AgentJobsResult,
   AnswerAgentJobResult,
   CopyAllResult,
+  CosLogResult,
+  CosTasksResult,
   ElicitationAction,
   GitLogEntry,
+  JobTranscriptResult,
   GitStatusMap,
   Note,
   Project,
@@ -48,6 +51,12 @@ const api = {
       ipcRenderer.invoke(IPC.NOTE_WRITE, rel, content),
     create: (dirRel: string, name: string): Promise<Note> =>
       ipcRenderer.invoke(IPC.NOTE_CREATE, dirRel, name),
+    /** External on-disk change to a markdown note (agent edit, daemon claim). */
+    onChanged: (cb: (relPath: string) => void): (() => void) => {
+      const listener = (_e: unknown, relPath: string): void => cb(relPath)
+      ipcRenderer.on(IPC.NOTE_CHANGED, listener)
+      return () => ipcRenderer.removeListener(IPC.NOTE_CHANGED, listener)
+    }
   },
   entries: {
     remove: (rel: string): Promise<void> => ipcRenderer.invoke(IPC.ENTRY_DELETE, rel),
@@ -86,7 +95,16 @@ const api = {
       action: ElicitationAction,
       answer?: string
     ): Promise<AnswerAgentJobResult> =>
-      ipcRenderer.invoke(IPC.INDIANA_ANSWER_JOB, jobId, action, answer)
+      ipcRenderer.invoke(IPC.INDIANA_ANSWER_JOB, jobId, action, answer),
+    /** A live turn's transcript from `sinceSeq` on; found:false = turn ended. */
+    transcript: (jobId: string, sinceSeq: number): Promise<JobTranscriptResult> =>
+      ipcRenderer.invoke(IPC.INDIANA_JOB_TRANSCRIPT, jobId, sinceSeq)
+  },
+  cos: {
+    /** Chief of Staff tracker rows, all states (COS_PRD.md). */
+    tasks: (): Promise<CosTasksResult> => ipcRenderer.invoke(IPC.COS_TASKS),
+    /** Tail of the action log, oldest first. */
+    log: (lines?: number): Promise<CosLogResult> => ipcRenderer.invoke(IPC.COS_LOG, lines)
   }
 }
 

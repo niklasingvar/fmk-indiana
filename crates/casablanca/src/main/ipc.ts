@@ -11,7 +11,15 @@ import {
   removeProject
 } from './lib/config'
 import type { ProjectRecord } from '@shared/projects'
-import { agentJobs, answerAgentJob, copyAllMarkers, ensureMonitored } from './lib/indiana'
+import {
+  agentJobs,
+  answerAgentJob,
+  copyAllMarkers,
+  ensureMonitored,
+  jobTranscript,
+  listTasks,
+  tailLog
+} from './lib/indiana'
 import { ensureRepoDefaults } from './lib/repo-settings'
 import { appendAnnotation } from './lib/annotations'
 import { ensureRepo, gitDiffCommit, gitDiffHead, gitLog, gitStatus } from './lib/git'
@@ -182,6 +190,19 @@ export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcReg
       typeof answer === 'string' ? answer : undefined
     )
   )
+  handle(IPC.INDIANA_JOB_TRANSCRIPT, async (jobId: unknown, sinceSeq: unknown) =>
+    jobTranscript(String(jobId), Number(sinceSeq) || 0)
+  )
+
+  // --- chief of staff -------------------------------------------------------
+
+  handle(IPC.COS_TASKS, async () => listTasks(requireVault()))
+  handle(IPC.COS_LOG, async (lines: unknown) => tailLog(requireVault(), Number(lines) || 15))
+
+  // The tasks panel appends markers through the live editor (one writer per
+  // open note — see renderer/src/editor/MarkerAppendPlugin), so there is
+  // deliberately no disk-level marker-append channel: it would race the
+  // dirty buffer and lose the marker to the next autosave.
 
   // Utility: convert an absolute path to a vault-relative one.
   handle('vault:rel', async (abs: unknown) => toRelative(requireVault(), String(abs)))

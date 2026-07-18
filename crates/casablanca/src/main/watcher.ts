@@ -41,6 +41,23 @@ export function watchVault(vault: VaultConfig, getWindow: () => BrowserWindow | 
     )
   }
 
+  // Markdown counterpart of pushPreview: lets an open note adopt external
+  // edits — the Indiana daemon's marker claims and the agent's fixes — so the
+  // buffer never goes stale and autosave never resurrects a resolved marker.
+  const noteTimers = new Map<string, NodeJS.Timeout>()
+  const pushNote = (rel: string): void => {
+    const posix = rel.split(sep).join('/')
+    const pending = noteTimers.get(posix)
+    if (pending) clearTimeout(pending)
+    noteTimers.set(
+      posix,
+      setTimeout(() => {
+        noteTimers.delete(posix)
+        getWindow()?.webContents.send(IPC.NOTE_CHANGED, posix)
+      }, 150)
+    )
+  }
+
   return chokidar
     .watch(['**/*.md', '**/*.mdx', '**/*.html', '**/*.htm'], {
       cwd: vault.rootPath,
@@ -51,6 +68,9 @@ export function watchVault(vault: VaultConfig, getWindow: () => BrowserWindow | 
     })
     .on('all', (event, path) => {
       push()
-      if ((event === 'add' || event === 'change') && /\.html?$/i.test(path)) pushPreview(path)
+      if (event === 'add' || event === 'change') {
+        if (/\.html?$/i.test(path)) pushPreview(path)
+        if (/\.mdx?$/i.test(path)) pushNote(path)
+      }
     })
 }

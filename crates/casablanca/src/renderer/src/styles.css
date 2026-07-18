@@ -92,3 +92,31 @@ body {
 .casablanca-table-cell-header {
   @apply bg-pane-hover font-semibold;
 }
+
+/*
+ * Inline spinner on a claimed marker's `[id:working]` bracket. The span is
+ * plain document text carrying the `--marker-working` sentinel custom
+ * property (MarkerHighlightPlugin); the ring itself is a pure-CSS ::after,
+ * so markdown export stays byte-identical and the bracket stays editable.
+ * Clicking the ring opens the job follow popover (hit-tested past the
+ * text's right edge in the plugin's click handler).
+ */
+.casablanca-editor span[style*='--marker-working']::after {
+  content: '';
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-left: 0.35em;
+  vertical-align: -0.05em;
+  border: 2px solid rgb(var(--marker-border));
+  border-top-color: transparent;
+  border-radius: 9999px;
+  animation: marker-working-spin 0.8s linear infinite;
+  cursor: pointer;
+}
+
+@keyframes marker-working-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
