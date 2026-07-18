@@ -29,14 +29,15 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 - Auto-reveal active file's ancestors — `renderer/src/folder-pane/FileTree.tsx`, `shared/flatten-tree.ts`
 - Active-row highlight + roving keyboard focus — `renderer/src/folder-pane/FileTree.tsx`, `renderer/src/folder-pane/FileTreeRow.tsx`
 - Keyboard navigation (arrows, Home, End, Enter) + type-ahead name search — `renderer/src/folder-pane/FileTree.tsx`, `renderer/src/folder-pane/tree-keys.ts`
+- Collapse-all control — `renderer/src/folder-pane/FileTree.tsx`
 - Scroll focused row into view — `renderer/src/folder-pane/FileTree.tsx`
 - Chevron + open/closed folder icons + per-file-type icons — `renderer/src/folder-pane/FileTreeRow.tsx`
 - Depth indent + vertical guides + name alignment under folders — `renderer/src/folder-pane/FileTreeRow.tsx`
-- Hide `.md` in labels, keep sidecars full — `renderer/src/folder-pane/FileTreeRow.tsx`
+- Full file names, including extensions — `renderer/src/folder-pane/FileTreeRow.tsx`
 - ARIA tree semantics (role=tree, aria-level/expanded/selected) — `renderer/src/folder-pane/FileTree.tsx`, `renderer/src/folder-pane/FileTreeRow.tsx`
-- New note at vault root with inline name input — `renderer/src/folder-pane/FolderPane.tsx`
+- New note at vault root or a selected folder with inline name input — `renderer/src/folder-pane/FolderPane.tsx`, `renderer/src/folder-pane/FileTree.tsx`
 - Delete visible files and folders with confirmation, path validation, and OS Trash — `renderer/src/folder-pane/FileTree.tsx`, `renderer/src/folder-pane/FolderPane.tsx`, `main/lib/file-operations.ts`
-- Right-click tree entries to reveal them in Finder — `renderer/src/folder-pane/FileTree.tsx`, `main/lib/file-operations.ts`
+- Right-click tree entries to create a note, reveal them in Finder, or move them to Trash — `renderer/src/folder-pane/FileTree.tsx`, `main/lib/file-operations.ts`
 - Empty-tree state — `renderer/src/folder-pane/FolderPane.tsx`
 - Git status tinting on rows with folder aggregation — `renderer/src/folder-pane/FileTreeRow.tsx`, `main/lib/git.ts`
 
@@ -94,6 +95,6 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 ## Known gaps (not yet wired — listed for honesty, not as features)
 - Inline Excalidraw canvas — `renderer/src/editor/plugins/ExcalidrawPlugin.tsx` is a dead stub (`NOT WIRED YET`).
 - Auto-linking typed URLs; interactive GFM task lists.
-- Inline rename, context menu, drag-and-drop move, per-folder create.
+- Inline rename, drag-and-drop move, create-folder.
 - Git blame; three-way merge for a dirty buffer + diverged disk (today: warn, autosave wins).
 - `vault:set`, `vault:rel` — main-process handlers exist, but nothing in the renderer UI calls them, so users cannot reach them.
