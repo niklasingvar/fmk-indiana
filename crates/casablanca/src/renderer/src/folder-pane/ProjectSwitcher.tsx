@@ -31,10 +31,10 @@ export function ProjectSwitcher({ vault }: { vault: Vault }) {
       <button
         onClick={() => setOpen((o) => !o)}
         title="Switch project"
-        className="flex w-full min-w-0 items-center gap-2 rounded px-1.5 py-1 hover:bg-pane-hover"
+        className="flex w-full min-w-0 items-center gap-1.5 rounded px-1 py-0.5 hover:bg-pane-hover"
       >
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-project" />
-        <span className="truncate text-sm font-semibold text-text-strong">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-project" />
+        <span className="truncate text-[13px] font-semibold text-text-strong">
           {active?.name ?? 'No project'}
         </span>
         <span className="ml-auto text-text-muted">▾</span>

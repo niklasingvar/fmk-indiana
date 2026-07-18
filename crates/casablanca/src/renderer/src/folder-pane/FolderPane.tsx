@@ -18,6 +18,11 @@ export function FolderPane({ vault }: { vault: Vault }) {
     setCreatingIn(null)
   }
 
+  const requestCreate = (dirRel: string): void => {
+    setCreatingIn(dirRel)
+    setNewName('')
+  }
+
   const requestDelete = async (node: FlatTreeNode): Promise<void> => {
     const prompt =
       node.type === 'folder'
@@ -44,23 +49,20 @@ export function FolderPane({ vault }: { vault: Vault }) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-1 border-b border-pane-border px-2 py-1.5">
+      <header className="flex items-center gap-0.5 border-b border-pane-border px-1 py-1">
         <ProjectSwitcher vault={vault} />
         <button
           title="New note in project root"
-          onClick={() => {
-            setCreatingIn('')
-            setNewName('')
-          }}
-          className="shrink-0 rounded px-1.5 py-1 text-text-muted hover:bg-pane-hover hover:text-text-strong"
+          onClick={() => requestCreate('')}
+          className="shrink-0 rounded px-1 py-0.5 text-sm text-text-muted hover:bg-pane-hover hover:text-text-strong"
         >
           +
         </button>
       </header>
 
-      <div className="flex-1 overflow-auto px-2 py-1 text-sm">
+      <div className="flex-1 overflow-auto px-1 py-1">
         {creatingIn !== null && (
-          <div className="px-2 py-1">
+          <div className="px-1 py-0.5">
             <input
               autoFocus
               value={newName}
@@ -70,8 +72,8 @@ export function FolderPane({ vault }: { vault: Vault }) {
                 if (e.key === 'Escape') setCreatingIn(null)
               }}
               onBlur={() => creatingIn !== null && void submitNew(creatingIn)}
-              placeholder="note name"
-              className="w-full rounded border border-pane-border bg-pane-active px-2 py-1 text-sm outline-none focus:border-accent"
+              placeholder={creatingIn ? `New note in ${creatingIn}` : 'New note'}
+              className="w-full rounded border border-pane-border bg-pane-active px-1.5 py-0.5 text-xs outline-none focus:border-accent"
             />
           </div>
         )}
@@ -82,6 +84,7 @@ export function FolderPane({ vault }: { vault: Vault }) {
             tree={tree}
             activePath={activeNote?.path ?? null}
             onOpen={openNote}
+            onCreate={requestCreate}
             onDelete={requestDelete}
             onReveal={requestReveal}
             vaultKey={vaultState.rootPath}

@@ -16,6 +16,7 @@ export function FileTree({
   tree,
   activePath,
   onOpen,
+  onCreate,
   onDelete,
   onReveal,
   vaultKey,
@@ -24,6 +25,7 @@ export function FileTree({
   tree: TreeNode
   activePath: string | null
   onOpen: (rel: string) => void
+  onCreate: (dirRel: string) => void
   onDelete: (node: FlatTreeNode) => void
   onReveal: (node: FlatTreeNode) => void
   vaultKey: string
@@ -83,6 +85,10 @@ export function FileTree({
     })
   }, [])
 
+  const collapseAll = useCallback(() => {
+    setCollapsed(new Set(folderPaths(tree)))
+  }, [tree])
+
   const focusRow = useCallback((index: number) => {
     setFocused(index)
     rowRefs.current.get(index)?.scrollIntoView({ block: 'nearest' })
@@ -125,41 +131,53 @@ export function FileTree({
   )
 
   return (
-    <div
-      role="tree"
-      aria-label="Files"
-      tabIndex={0}
-      onKeyDown={onKeyDown}
-      className="outline-none"
-    >
-      {nodes.map((node) => (
-        <div
-          key={node.path}
-          ref={(el) => {
-            if (el) rowRefs.current.set(node.index, el)
-            else rowRefs.current.delete(node.index)
-          }}
+    <div>
+      <div className="flex justify-end px-1 pb-0.5">
+        <button
+          title="Collapse all folders"
+          aria-label="Collapse all folders"
+          onClick={collapseAll}
+          className="rounded px-1 py-0.5 text-[11px] text-text-muted hover:bg-pane-hover hover:text-text-strong"
         >
-          <FileTreeRow
-            node={node}
-            isFocused={focused === node.index}
-            status={node.path === '' ? undefined : gitStatus[node.path]}
-            onClick={clickRow}
-            onContextMenu={(e) => {
-              e.preventDefault()
-              setFocused(node.index)
-              if (node.path !== '') setContextMenu({ node, x: e.clientX, y: e.clientY })
+          Collapse all
+        </button>
+      </div>
+      <div
+        role="tree"
+        aria-label="Files"
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        className="outline-none"
+      >
+        {nodes.map((node) => (
+          <div
+            key={node.path}
+            ref={(el) => {
+              if (el) rowRefs.current.set(node.index, el)
+              else rowRefs.current.delete(node.index)
             }}
-          />
-        </div>
-      ))}
+          >
+            <FileTreeRow
+              node={node}
+              isFocused={focused === node.index}
+              status={node.path === '' ? undefined : gitStatus[node.path]}
+              onClick={clickRow}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setFocused(node.index)
+                setContextMenu({ node, x: e.clientX, y: e.clientY })
+              }}
+            />
+          </div>
+        ))}
+      </div>
       {contextMenu && (
         <div
           role="menu"
           className="fixed z-50 min-w-36 rounded border border-pane-border bg-pane p-1 text-xs shadow-lg"
           style={{
             left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 152)),
-            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 76))
+            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 112))
           }}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
@@ -172,26 +190,54 @@ export function FileTree({
             onClick={() => {
               const node = contextMenu.node
               setContextMenu(null)
-              onReveal(node)
+              onCreate(node.type === 'folder' ? node.path : (node.parentPath ?? ''))
             }}
           >
-            Reveal in Finder
+            New note
           </button>
-          <button
-            role="menuitem"
-            className="w-full rounded px-2 py-1.5 text-left text-git-deleted hover:bg-pane-hover"
-            onClick={() => {
-              const node = contextMenu.node
-              setContextMenu(null)
-              onDelete(node)
-            }}
-          >
-            Move to Trash
-          </button>
+          {contextMenu.node.path !== '' && (
+            <>
+              <button
+                role="menuitem"
+                className="w-full rounded px-2 py-1.5 text-left hover:bg-pane-hover"
+                onClick={() => {
+                  const node = contextMenu.node
+                  setContextMenu(null)
+                  onReveal(node)
+                }}
+              >
+                Reveal in Finder
+              </button>
+              <button
+                role="menuitem"
+                className="w-full rounded px-2 py-1.5 text-left text-git-deleted hover:bg-pane-hover"
+                onClick={() => {
+                  const node = contextMenu.node
+                  setContextMenu(null)
+                  onDelete(node)
+                }}
+              >
+                Move to Trash
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
   )
+}
+
+function folderPaths(root: TreeNode): string[] {
+  const paths: string[] = []
+  const visit = (node: TreeNode): void => {
+    for (const child of node.children ?? []) {
+      if (child.type !== 'folder') continue
+      paths.push(child.path)
+      visit(child)
+    }
+  }
+  visit(root)
+  return paths
 }
 
 function storageKey(vaultKey: string): string {

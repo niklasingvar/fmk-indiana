@@ -61,7 +61,7 @@ export function Shell({ vault }: { vault: Vault }) {
         onTogglePanel={togglePanel}
       />
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="w-72 shrink-0 border-r border-pane-border bg-pane">
+        <aside className="w-60 shrink-0 border-r border-pane-border bg-pane">
           <FolderPane vault={vault} />
         </aside>
         <main className="flex-1 overflow-hidden">

@@ -3,8 +3,8 @@ import type { GitFileStatus } from '@shared/domain'
 import type { FlatTreeNode } from '@shared/flatten-tree'
 
 /** Base indent (px) applied to every row, growing by depth. */
-const INDENT_STEP = 16
-const INDENT_BASE = 8
+const INDENT_STEP = 14
+const INDENT_BASE = 6
 
 export type FileKind = 'markdown' | 'html' | 'sidecar' | 'other'
 
@@ -53,7 +53,7 @@ export const FileTreeRow = memo(function FileTreeRow({
       aria-selected={node.isActive}
       onClick={() => onClick(node)}
       onContextMenu={onContextMenu}
-      className={`relative flex h-[26px] w-full cursor-pointer items-center rounded pr-2 text-[13px] transition-colors ${
+      className={`relative flex h-[22px] w-full cursor-pointer items-center rounded pr-1 text-[12px] transition-colors ${
         node.isActive
           ? 'bg-pane-active ring-1 ring-inset ring-accent'
           : 'hover:bg-pane-hover'
@@ -69,7 +69,7 @@ export const FileTreeRow = memo(function FileTreeRow({
         />
       ))}
       <span
-        className={`flex min-w-0 items-center gap-1.5 ${
+        className={`flex min-w-0 items-center gap-1 ${
           tint || (isRoot ? 'font-medium text-text-strong' : 'text-text-body')
         }`}
       >
@@ -84,20 +84,13 @@ export const FileTreeRow = memo(function FileTreeRow({
             {/* Spacer aligns file names under folder names (chevron width). */}
             <span className="w-4 shrink-0" />
             <FileIcon kind={fileKind(node.name)} />
-            <span className="truncate">{displayName(node.name)}</span>
+            <span className="truncate">{node.name}</span>
           </>
         )}
       </span>
     </div>
   )
 })
-
-function displayName(name: string): string {
-  // Keep the .md visible on annotation sidecars ("page.html.md") so they
-  // stay distinguishable from the document they annotate ("page.html").
-  if (/\.html?\.md$/i.test(name)) return name
-  return name.replace(/\.md$/i, '')
-}
 
 function Chevron({ open }: { open: boolean }) {
   return (
