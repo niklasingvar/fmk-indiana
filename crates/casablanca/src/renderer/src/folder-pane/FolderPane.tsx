@@ -56,9 +56,17 @@ export function FolderPane({ vault }: { vault: Vault }) {
           title="Collapse all folders"
           aria-label="Collapse all folders"
           onClick={() => treeRef.current?.collapseAll()}
-          className="shrink-0 rounded px-1 py-0.5 text-[11px] text-text-muted hover:bg-pane-hover hover:text-text-strong"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-muted hover:bg-pane-hover hover:text-text-strong"
         >
-          Collapse all
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path
+              d="M4 12l4-4 4 4M4 8l4-4 4 4"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
         <button
           title="New note in project root"
