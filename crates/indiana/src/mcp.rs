@@ -151,7 +151,7 @@ fn marker_grammar() -> String {
         .map(|spec| {
             format!(
                 "::{} ({:?}) shorts={:?} tracked={} command_type={}",
-                spec.long, spec.kind, spec.shorts, spec.tracked, spec.command_type
+                spec.long, spec.kind, spec.shorts, spec.tracked(), spec.command_type
             )
         })
         .collect::<Vec<_>>()

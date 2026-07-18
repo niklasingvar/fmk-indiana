@@ -2,7 +2,7 @@
 //! `<root>/.indiana/casablanca/settings.json`, shared by the editor and this
 //! CLI (CASABLANCA_OVERVIEW.md). Repo-local user input, committable, not derived
 //! from source and not part of the marker index — a separate store, like the
-//! Chief of Staff todos db. Free-form so a new setting is a write, not a schema
+//! Chief of Staff tracker. Free-form so a new setting is a write, not a schema
 //! change in two languages; the editor reads the keys it knows and ignores the
 //! rest.
 

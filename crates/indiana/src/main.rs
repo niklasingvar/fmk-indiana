@@ -11,17 +11,18 @@ mod mcp;
 mod paths;
 mod protocol;
 mod service;
-mod todos;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use config::Config;
 use indiana_core::compile::{
     compile_with_options, render_text, system_prompt_for_roots, CompileOptions,
 };
+use indiana_core::cos;
 use indiana_core::frontmatter;
 use indiana_core::index::Index;
-use indiana_core::markers::{long_name, parse_kind};
+use indiana_core::markers::{long_name, parse_kind, Queue};
 use indiana_core::templates::{init_folder_indiana, replace_folder_indiana};
+use indiana_core::write::WriteResult;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -85,10 +86,22 @@ enum Cmd {
         #[command(subcommand)]
         cmd: ServiceCmd,
     },
-    /// Manage the Chief of Staff todo list (SQLite, repo-local `.indiana/chief-of-staff/todos.db`).
-    Todo {
+    /// Manage the Chief of Staff task tracker (`.indiana/chief-of-staff/tasks.md`).
+    Task {
         #[command(subcommand)]
-        cmd: TodoCmd,
+        cmd: TaskCmd,
+    },
+    /// Tail the Chief of Staff action log (`.indiana/chief-of-staff/log.md`).
+    Log {
+        /// Repo root (default: current directory).
+        #[arg(long)]
+        root: Option<PathBuf>,
+        /// Number of entries to show, newest last.
+        #[arg(short = 'n', default_value_t = 20)]
+        lines: usize,
+        /// Emit JSON for agents.
+        #[arg(long)]
+        json: bool,
     },
     /// Read or edit per-repo Casablanca settings (`.indiana/casablanca/settings.json`).
     Casablanca {
@@ -112,45 +125,45 @@ enum ServiceCmd {
 }
 
 #[derive(Subcommand)]
-enum TodoCmd {
-    /// Add a todo (max 29 words). Prints the new id; `--json` prints the full row.
+enum TaskCmd {
+    /// Add a task by hand. Prints the new id; `--json` prints the full row.
     Add {
         /// Repo root (default: current directory).
         #[arg(long)]
         root: Option<PathBuf>,
-        /// Domain the todo belongs to.
-        #[arg(long)]
-        domain: String,
-        /// Id of an existing todo this one depends on. Repeatable.
-        #[arg(long = "dependency", value_name = "ID")]
-        dependencies: Vec<String>,
+        /// Queue for the task (a typed add is operator intent, so human).
+        #[arg(long, default_value = "human")]
+        queue: String,
         /// Emit JSON for agents.
         #[arg(long)]
         json: bool,
-        /// The todo text (max 29 words).
-        todo: String,
+        /// The task text.
+        text: String,
     },
-    /// List todos, grouped by domain.
+    /// List tasks (default: open and working only).
     List {
         /// Repo root (default: current directory).
         #[arg(long)]
         root: Option<PathBuf>,
-        /// Only list todos in this domain.
+        /// Only this queue (agent | human).
         #[arg(long)]
-        domain: Option<String>,
+        queue: Option<String>,
+        /// Only this state (open | working | done | failed | all).
+        #[arg(long)]
+        state: Option<String>,
         /// Emit JSON for agents.
         #[arg(long)]
         json: bool,
     },
-    /// Delete a todo by id. Cascade-removes dependency edges to and from it.
-    Delete {
+    /// Mark a task done by id.
+    Done {
         /// Repo root (default: current directory).
         #[arg(long)]
         root: Option<PathBuf>,
         /// Emit JSON for agents.
         #[arg(long)]
         json: bool,
-        /// Id of the todo to delete.
+        /// Id of the task to mark done.
         id: String,
     },
 }
@@ -241,7 +254,8 @@ fn main() -> ExitCode {
         Cmd::Service {
             cmd: ServiceCmd::Install,
         } => service_install(),
-        Cmd::Todo { cmd } => todo_cmd(cmd),
+        Cmd::Task { cmd } => task_cmd(cmd),
+        Cmd::Log { root, lines, json } => log_cmd(root, lines, json),
         Cmd::Casablanca { cmd } => casablanca_cmd(cmd),
         Cmd::Frontmatter { path, write } => frontmatter_cmd(path, write),
     }
@@ -251,7 +265,12 @@ fn scan(path: Option<PathBuf>, json: bool, read_only: bool) -> ExitCode {
     // Explicit path → standalone. No path → daemon view, else cwd standalone.
     let idx = match &path {
         Some(p) if read_only => Index::build_read_only(p),
-        Some(p) => Index::build(p),
+        // An explicit scan is a deliberate act on that root: inject ids AND
+        // capture tasks (COS_PRD.md). Implicit cwd/copy scans only inject.
+        Some(p) => {
+            Index::build_with_options(p, indiana_core::index::ScanOptions::write_ids().with_capture())
+                .index
+        }
         None if read_only => Index::build_read_only(&PathBuf::from(".")),
         None => daemon::client_scan().unwrap_or_else(|| Index::build(&PathBuf::from("."))),
     };
@@ -585,36 +604,40 @@ fn frontmatter_cmd(path: Option<PathBuf>, write: bool) -> ExitCode {
     }
 }
 
-fn todo_cmd(cmd: TodoCmd) -> ExitCode {
+fn task_cmd(cmd: TaskCmd) -> ExitCode {
     match cmd {
-        TodoCmd::Add {
+        TaskCmd::Add {
             root,
-            domain,
-            dependencies,
+            queue,
             json,
-            todo,
-        } => todo_add(root, domain, dependencies, json, todo),
-        TodoCmd::List { root, domain, json } => todo_list(root, domain, json),
-        TodoCmd::Delete { root, json, id } => todo_delete(root, json, id),
+            text,
+        } => task_add(root, queue, json, text),
+        TaskCmd::List {
+            root,
+            queue,
+            state,
+            json,
+        } => task_list(root, queue, state, json),
+        TaskCmd::Done { root, json, id } => task_done(root, json, id),
     }
 }
 
 fn casablanca_cmd(cmd: CasablancaCmd) -> ExitCode {
-    // `--root` resolution mirrors `todo` (default cwd, canonicalized).
+    // `--root` resolution mirrors `task` (default cwd, canonicalized).
     match cmd {
         CasablancaCmd::Path { root } => {
-            println!("{}", casablanca::settings_path(&todo_root(root)).display());
+            println!("{}", casablanca::settings_path(&resolve_root(root)).display());
             ExitCode::SUCCESS
         }
         CasablancaCmd::Settings { root } => {
-            let settings = casablanca::load(&todo_root(root));
+            let settings = casablanca::load(&resolve_root(root));
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::Value::Object(settings)).unwrap()
             );
             ExitCode::SUCCESS
         }
-        CasablancaCmd::Get { root, key } => match casablanca::get(&todo_root(root), &key) {
+        CasablancaCmd::Get { root, key } => match casablanca::get(&resolve_root(root), &key) {
             Some(value) => {
                 // Print bare string values unquoted; other JSON types as-is.
                 match value {
@@ -629,7 +652,7 @@ fn casablanca_cmd(cmd: CasablancaCmd) -> ExitCode {
             }
         },
         CasablancaCmd::Set { root, key, value } => {
-            let r = todo_root(root);
+            let r = resolve_root(root);
             match casablanca::set(&r, &key, &value) {
                 Ok(_) => {
                     eprintln!(
@@ -648,83 +671,171 @@ fn casablanca_cmd(cmd: CasablancaCmd) -> ExitCode {
 }
 
 /// Resolve `--root` to an absolute path, defaulting to the current directory.
-fn todo_root(root: Option<PathBuf>) -> PathBuf {
+fn resolve_root(root: Option<PathBuf>) -> PathBuf {
     let p = root.unwrap_or_else(|| PathBuf::from("."));
     p.canonicalize().unwrap_or(p)
 }
 
-fn todo_add(
+fn parse_queue(token: &str) -> Option<Queue> {
+    match token {
+        "agent" => Some(Queue::Agent),
+        "human" => Some(Queue::Human),
+        _ => None,
+    }
+}
+
+fn task_add(root: Option<PathBuf>, queue: String, json: bool, text: String) -> ExitCode {
+    let r = resolve_root(root);
+    let Some(queue) = parse_queue(&queue) else {
+        eprintln!("indiana: --queue must be agent or human");
+        return ExitCode::FAILURE;
+    };
+    if text.trim().is_empty() {
+        eprintln!("indiana: task text is empty");
+        return ExitCode::FAILURE;
+    }
+    // Register existing ids so a minted one can't collide.
+    let mut ids = indiana_core::id::IdGenerator::new();
+    for t in cos::load_tasks(&r) {
+        ids.register(&t.id);
+    }
+    let task = cos::Task {
+        id: ids.next(),
+        text: text.trim().to_string(),
+        queue,
+        state: cos::TaskState::Open,
+        origin: None,
+        created: Some(cos::today()),
+    };
+    // Only a confirmed write is success: an append can only be Written or
+    // Retry (the insert always changes the file), and reporting a Retry as
+    // success would print an id that is in neither the tracker nor the log.
+    match cos::append_task(&r, &task) {
+        Ok(WriteResult::Written) => {
+            let _ = cos::append_log(&r, "task-add", &task.id, "via cli");
+            if json {
+                println!("{}", serde_json::to_string_pretty(&task).unwrap());
+            } else {
+                println!("{}", task.id);
+                eprintln!("indiana: added {} to the {queue:?} queue", task.id);
+            }
+            ExitCode::SUCCESS
+        }
+        Ok(_) => {
+            eprintln!("indiana: tracker is busy — try again");
+            ExitCode::FAILURE
+        }
+        Err(e) => {
+            eprintln!("indiana: cannot write tracker: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn task_list(
     root: Option<PathBuf>,
-    domain: String,
-    dependencies: Vec<String>,
+    queue: Option<String>,
+    state: Option<String>,
     json: bool,
-    todo: String,
 ) -> ExitCode {
-    let r = todo_root(root);
-    match todos::add(&r, &todo, &domain, &dependencies) {
-        Ok(t) => {
+    let r = resolve_root(root);
+    let queue = match queue.as_deref() {
+        None => None,
+        Some(q) => match parse_queue(q) {
+            Some(q) => Some(q),
+            None => {
+                eprintln!("indiana: --queue must be agent or human");
+                return ExitCode::FAILURE;
+            }
+        },
+    };
+    // Default view is the live queues: open + working.
+    let state_ok: Box<dyn Fn(cos::TaskState) -> bool> = match state.as_deref() {
+        None => Box::new(|s| matches!(s, cos::TaskState::Open | cos::TaskState::Working)),
+        Some("all") => Box::new(|_| true),
+        Some("open") => Box::new(|s| s == cos::TaskState::Open),
+        Some("working") => Box::new(|s| s == cos::TaskState::Working),
+        Some("done") => Box::new(|s| s == cos::TaskState::Done),
+        Some("failed") => Box::new(|s| s == cos::TaskState::Failed),
+        Some(other) => {
+            eprintln!("indiana: unknown --state '{other}' (open|working|done|failed|all)");
+            return ExitCode::FAILURE;
+        }
+    };
+    let tasks: Vec<cos::Task> = cos::load_tasks(&r)
+        .into_iter()
+        .filter(|t| queue.map_or(true, |q| t.queue == q) && state_ok(t.state))
+        .collect();
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&tasks).unwrap());
+    } else if tasks.is_empty() {
+        eprintln!("indiana: no tasks");
+    } else {
+        let mut current: Option<Queue> = None;
+        for t in &tasks {
+            if current != Some(t.queue) {
+                println!("{:?}", t.queue);
+                current = Some(t.queue);
+            }
+            let origin = t
+                .origin
+                .as_ref()
+                .map(|o| format!("  ({}:{})", o.path, o.line))
+                .unwrap_or_default();
+            println!("  [{}] {}  {}{origin}", t.state.glyph(), t.id, t.text);
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+fn task_done(root: Option<PathBuf>, json: bool, id: String) -> ExitCode {
+    let r = resolve_root(root);
+    // One write decides everything: Written = done, Unchanged = no such task
+    // (set_task_state no-ops on a missing id), Retry = lost the race twice.
+    match cos::set_task_state(&r, &id, cos::TaskState::Done) {
+        Ok(WriteResult::Written) => {
+            let _ = cos::append_log(&r, "task-done", &id, "via cli");
             if json {
-                println!("{}", serde_json::to_string_pretty(&t).unwrap());
+                println!("{}", serde_json::json!({"id": id, "state": "done"}));
             } else {
-                println!("{}", t.id);
-                eprintln!("indiana: added {} ({})", t.id, t.domain);
+                println!("{id}");
+                eprintln!("indiana: marked {id} done");
             }
             ExitCode::SUCCESS
         }
+        Ok(WriteResult::Unchanged) => {
+            eprintln!("indiana: no task '{id}'");
+            ExitCode::FAILURE
+        }
+        Ok(WriteResult::Retry) => {
+            eprintln!("indiana: tracker is busy — try again");
+            ExitCode::FAILURE
+        }
         Err(e) => {
-            eprintln!("indiana: {e}");
+            eprintln!("indiana: cannot write tracker: {e}");
             ExitCode::FAILURE
         }
     }
 }
 
-fn todo_list(root: Option<PathBuf>, domain: Option<String>, json: bool) -> ExitCode {
-    let r = todo_root(root);
-    match todos::list(&r, domain.as_deref()) {
-        Ok(list) => {
-            if json {
-                println!("{}", serde_json::to_string_pretty(&list).unwrap());
-            } else if list.is_empty() {
-                eprintln!("indiana: no todos");
+fn log_cmd(root: Option<PathBuf>, lines: usize, json: bool) -> ExitCode {
+    let r = resolve_root(root);
+    let entries = cos::load_log(&r);
+    let tail: Vec<&cos::LogEntry> = entries.iter().rev().take(lines).rev().collect();
+    if json {
+        println!("{}", serde_json::to_string_pretty(&tail).unwrap());
+    } else if tail.is_empty() {
+        eprintln!("indiana: log is empty");
+    } else {
+        for e in tail {
+            let detail = if e.detail.is_empty() {
+                String::new()
             } else {
-                let mut current: Option<&str> = None;
-                for t in &list {
-                    if current != Some(t.domain.as_str()) {
-                        println!("{}", t.domain);
-                        current = Some(t.domain.as_str());
-                    }
-                    let deps = if t.dependencies.is_empty() {
-                        String::new()
-                    } else {
-                        format!("  [deps: {}]", t.dependencies.join(", "))
-                    };
-                    println!("  {}  {}{}", t.id, t.todo, deps);
-                }
-            }
-            ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("indiana: {e}");
-            ExitCode::FAILURE
+                format!(" {}", e.detail)
+            };
+            println!("{} {} [{}]{detail}", e.ts, e.event, e.id);
         }
     }
-}
-
-fn todo_delete(root: Option<PathBuf>, json: bool, id: String) -> ExitCode {
-    let r = todo_root(root);
-    match todos::delete(&r, &id) {
-        Ok(()) => {
-            if json {
-                println!("{}", serde_json::json!({"id": id, "deleted": true}));
-            } else {
-                println!("{}", id);
-                eprintln!("indiana: deleted {}", id);
-            }
-            ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("indiana: {e}");
-            ExitCode::FAILURE
-        }
-    }
+    ExitCode::SUCCESS
 }

@@ -81,14 +81,19 @@ impl<W: Write> AcpAgent<W> {
     }
 
     /// Drive one full turn. Returns the turn's `stopReason` (e.g. `end_turn`).
-    pub fn run_turn<F>(
+    /// `on_update` receives every `session/update` notification's params so the
+    /// caller can project the agent's streamed work (transcript).
+    pub fn run_turn<F, U>(
         &mut self,
         cwd: &Path,
         prompt: &str,
+        model: Option<&str>,
         on_elicitation: &mut F,
+        on_update: &mut U,
     ) -> io::Result<String>
     where
         F: FnMut(&Value) -> io::Result<Value>,
+        U: FnMut(&Value),
     {
         self.call(
             "initialize",
@@ -100,17 +105,47 @@ impl<W: Write> AcpAgent<W> {
                 },
             }),
             on_elicitation,
+            on_update,
         )?;
         let session = self.call(
             "session/new",
             json!({ "cwd": cwd.display().to_string(), "mcpServers": [] }),
             on_elicitation,
+            on_update,
         )?;
         let session_id = session
             .get("sessionId")
             .and_then(Value::as_str)
             .ok_or_else(|| io::Error::other("session/new returned no sessionId"))?
             .to_string();
+        if let Some(model) = model {
+            let config_id = session
+                .get("configOptions")
+                .and_then(Value::as_array)
+                .and_then(|options| {
+                    options.iter().find(|option| {
+                        option.get("category").and_then(Value::as_str) == Some("model")
+                            || option.get("id").and_then(Value::as_str) == Some("model")
+                    })
+                })
+                .and_then(|option| option.get("id"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    io::Error::other(
+                        "configured model cannot be selected: agent exposes no model option",
+                    )
+                })?;
+            self.call(
+                "session/set_config_option",
+                json!({
+                    "sessionId": session_id,
+                    "configId": config_id,
+                    "value": model,
+                }),
+                on_elicitation,
+                on_update,
+            )?;
+        }
         let result = self.call(
             "session/prompt",
             json!({
@@ -118,6 +153,7 @@ impl<W: Write> AcpAgent<W> {
                 "prompt": [ { "type": "text", "text": prompt } ],
             }),
             on_elicitation,
+            on_update,
         )?;
         Ok(result
             .get("stopReason")
@@ -128,9 +164,16 @@ impl<W: Write> AcpAgent<W> {
 
     /// Send a request and pump the connection until its response arrives,
     /// servicing any agent-initiated requests in between.
-    fn call<F>(&mut self, method: &str, params: Value, on_elicitation: &mut F) -> io::Result<Value>
+    fn call<F, U>(
+        &mut self,
+        method: &str,
+        params: Value,
+        on_elicitation: &mut F,
+        on_update: &mut U,
+    ) -> io::Result<Value>
     where
         F: FnMut(&Value) -> io::Result<Value>,
+        U: FnMut(&Value),
     {
         let id = self.next_id;
         self.next_id += 1;
@@ -140,10 +183,13 @@ impl<W: Write> AcpAgent<W> {
             // A message with a `method` is an inbound request/notification.
             if let Some(inbound) = msg.get("method").and_then(Value::as_str) {
                 let m = inbound.to_string();
-                // A request carries an id; a notification (session/update, …)
-                // has none and is logged only.
+                // A request carries an id; a notification has none. The one
+                // notification we project is `session/update` (agent chunks,
+                // tool calls); everything is still logged either way.
                 if let Some(req_id) = msg.get("id").cloned() {
                     self.handle_request(&m, req_id, msg.get("params").cloned(), on_elicitation)?;
+                } else if m == "session/update" {
+                    on_update(msg.get("params").unwrap_or(&Value::Null));
                 }
                 continue;
             }

@@ -160,6 +160,14 @@ fn git_log_count(repo: &Path) -> usize {
         .unwrap_or(0)
 }
 
+fn expect_agent_model(home: &Path, model: &str) {
+    let path = home.join("config.json");
+    let mut config: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    config["agent"]["env"]["MOCK_ACP_EXPECT_MODEL"] = model.into();
+    std::fs::write(path, serde_json::to_string_pretty(&config).unwrap()).unwrap();
+}
+
 // E13: `::fix -a` is claimed to `:working`, dispatched, and the mock agent
 // resolves it — the marker line is removed and a commit lands.
 #[test]
@@ -197,6 +205,17 @@ fn test_autorun_success_resolves_and_commits() {
     assert!(
         !text.contains(":working]"),
         "no in-flight bracket should remain"
+    );
+    // The dispatch lifecycle lands in the repo's chief-of-staff action log
+    // (COS_PRD.md): claimed on dispatch, done on resolution.
+    assert!(
+        wait_until(|| {
+            std::fs::read_to_string(repo.join(".indiana/chief-of-staff/log.md"))
+                .map(|log| log.contains(" claimed [") && log.contains(" done ["))
+                .unwrap_or(false)
+        }),
+        "lifecycle missing from action log: {:?}",
+        std::fs::read_to_string(repo.join(".indiana/chief-of-staff/log.md"))
     );
 }
 
@@ -242,6 +261,91 @@ fn test_autorun_question_pauses_and_resumes() {
     assert!(!std::fs::read_to_string(doc).unwrap().contains("::fix"));
 }
 
+// E13: a live turn's streamed work is served over the socket as a transcript
+// (`jobtranscript`), reads as agent → question → answer, and vanishes with
+// the job once the turn resolves.
+#[test]
+fn test_job_transcript_follows_live_turn() {
+    let home = unique("home");
+    let repo = git_repo_with("intro\n::fix -a choose spelling\n");
+    write_config(&home, &repo, "question", true);
+    let commits_before = git_log_count(&repo);
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+
+    // The question pause holds the job open so the transcript is observable.
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let job_id = loop {
+        let jobs = request(&home, serde_json::json!({ "cmd": "jobs" }));
+        if let Some(job) = jobs["jobs"].as_array().and_then(|jobs| jobs.first()) {
+            if job["state"].as_str() == Some("awaiting_input") {
+                break job["id"].as_str().expect("job id").to_string();
+            }
+        }
+        assert!(Instant::now() < deadline, "agent never asked a question");
+        std::thread::sleep(Duration::from_millis(100));
+    };
+
+    let transcript = request(
+        &home,
+        serde_json::json!({ "cmd": "jobtranscript", "job_id": job_id, "since_seq": 0 }),
+    );
+    assert_eq!(transcript["found"], true, "transcript {transcript:?}");
+    let events = transcript["events"].as_array().unwrap();
+    assert!(
+        events.iter().any(|e| e["kind"] == "agent"
+            && e["text"]
+                .as_str()
+                .unwrap_or("")
+                .contains("mock agent working")),
+        "expected the streamed agent chunk: {events:?}"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| e["kind"] == "question" && e["text"] == "Which spelling should I use?"),
+        "expected the question event: {events:?}"
+    );
+    let next_seq = transcript["next_seq"].as_u64().unwrap();
+
+    let answer = request(
+        &home,
+        serde_json::json!({
+            "cmd": "answerjob",
+            "job_id": job_id,
+            "action": "accept",
+            "answer": "colour",
+        }),
+    );
+    assert_eq!(answer["accepted"], true);
+
+    // The answer lands in the transcript (unless the turn resolves first and
+    // takes the whole transcript with it — both are valid outcomes here, so
+    // only assert on it while the job is still alive).
+    let after = request(
+        &home,
+        serde_json::json!({ "cmd": "jobtranscript", "job_id": job_id, "since_seq": next_seq }),
+    );
+    if after["found"] == true {
+        let fresh = after["events"].as_array().unwrap();
+        assert!(
+            fresh.iter().all(|e| e["seq"].as_u64().unwrap() >= next_seq),
+            "since_seq must filter already-seen events: {fresh:?}"
+        );
+    }
+
+    assert!(wait_until(|| git_log_count(&repo) > commits_before));
+    // Turn ended → job gone → transcript gone.
+    assert!(wait_until(|| {
+        let gone = request(
+            &home,
+            serde_json::json!({ "cmd": "jobtranscript", "job_id": job_id, "since_seq": 0 }),
+        );
+        gone["found"] == false
+    }));
+}
+
 // E13: when the agent fails to resolve, the marker is left `:failed`, not
 // re-dispatched, and the surrounding text is preserved.
 #[test]
@@ -265,7 +369,76 @@ fn test_autorun_failure_marks_failed() {
         "the marker survives, now failed"
     );
     assert!(text.contains("expand this"), "message preserved");
-    assert!(!text.contains("-a"), "the -a flag was consumed on claim");
+    assert!(
+        text.contains(":failed] expand this"),
+        "the -a flag is consumed by the claim; failure keeps the message only: {text:?}"
+    );
+}
+
+// E13: several `-a` markers in one repo run one turn at a time — never as
+// concurrent agents racing the same working tree. The mock resolves every
+// `:working` line it finds and commits once per turn, so serialized dispatch
+// yields exactly one commit per marker; overlapping turns would collapse them.
+#[test]
+fn test_autorun_serializes_turns_per_repo() {
+    let home = unique("home");
+    let repo = git_repo_with("intro\n::fix -a first thing\nmiddle\n::fix -a second thing\n");
+    write_config(&home, &repo, "succeed", true);
+    let doc = repo.join("doc.md");
+    let commits_before = git_log_count(&repo);
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+
+    assert!(
+        wait_until(|| git_log_count(&repo) >= commits_before + 2),
+        "expected two serialized turns (one commit each); commits = {}, doc.md = {:?}",
+        git_log_count(&repo) - commits_before,
+        std::fs::read_to_string(&doc)
+    );
+    let text = std::fs::read_to_string(&doc).unwrap();
+    assert!(!text.contains("::fix"), "both markers resolved: {text:?}");
+    assert!(
+        text.contains("intro") && text.contains("middle"),
+        "content intact"
+    );
+    assert_eq!(
+        git_log_count(&repo),
+        commits_before + 2,
+        "exactly one commit per marker — turns did not overlap"
+    );
+}
+
+// E13: one editor save burst becomes one watcher rebuild and therefore one
+// agent turn for the marker, not one turn per filesystem event.
+#[test]
+fn test_autorun_debounces_save_burst_to_one_turn() {
+    let home = unique("home");
+    let repo = git_repo_with("intro\n");
+    write_config(&home, &repo, "succeed", true);
+    let doc = repo.join("doc.md");
+    let commits_before = git_log_count(&repo);
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+
+    for _ in 0..40 {
+        std::fs::write(&doc, "intro\n::fix -a save once\n").unwrap();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+
+    assert!(
+        wait_until(|| git_log_count(&repo) > commits_before),
+        "debounced marker never dispatched; doc.md = {:?}",
+        std::fs::read_to_string(&doc)
+    );
+    std::thread::sleep(Duration::from_millis(800));
+    assert_eq!(
+        git_log_count(&repo),
+        commits_before + 1,
+        "one save burst must launch exactly one agent turn"
+    );
+    assert!(!std::fs::read_to_string(&doc).unwrap().contains("::fix"));
 }
 
 // E13: with auto-run off (the pausable switch), a `-a` marker is left untouched
@@ -296,6 +469,16 @@ fn set_repo_autorun(repo: &Path, enabled: bool) {
     std::fs::write(
         dir.join("settings.json"),
         serde_json::json!({ "autoRun": enabled }).to_string(),
+    )
+    .unwrap();
+}
+
+fn set_repo_model(repo: &Path, model: &str) {
+    let dir = repo.join(".indiana").join("casablanca");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("settings.json"),
+        serde_json::json!({ "model": model }).to_string(),
     )
     .unwrap();
 }
@@ -337,6 +520,27 @@ fn test_autorun_per_repo_disables_over_global_on() {
         "::fix -a do nothing yet\n",
         "per-repo autoRun:false must veto the global default"
     );
+}
+
+// E13: the repo-local model is selected through ACP before the prompt runs.
+#[test]
+fn test_autorun_selects_repo_model() {
+    let home = unique("home");
+    let repo = git_repo_with("intro\n::fix -a use configured model\n");
+    write_config(&home, &repo, "succeed", true);
+    expect_agent_model(&home, "sonnet");
+    set_repo_model(&repo, "sonnet");
+    let doc = repo.join("doc.md");
+    let commits_before = git_log_count(&repo);
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+    assert!(
+        wait_until(|| git_log_count(&repo) > commits_before),
+        "configured model was not selected; doc.md = {:?}",
+        std::fs::read_to_string(&doc)
+    );
+    assert!(!std::fs::read_to_string(&doc).unwrap().contains("::fix"));
 }
 
 #[test]

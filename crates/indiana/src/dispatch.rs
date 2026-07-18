@@ -11,12 +11,15 @@ use crate::paths::indiana_dir;
 use indiana_core::compile::{
     compile_one, compile_with_options, render_dispatch, render_group_dispatch, CompileOptions,
 };
-use indiana_core::index::Index;
+use indiana_core::cos;
 use indiana_core::system_prompt::SystemPrompt;
+use indiana_core::index::Index;
 use indiana_core::markers;
 use indiana_core::parser::Status;
 use indiana_core::write::{self, OwnWriteTracker, WriteResult};
-use indiana_protocol::{AgentJob, AgentJobState, AgentQuestion, ElicitationAction};
+use indiana_protocol::{
+    AgentJob, AgentJobState, AgentQuestion, ElicitationAction, TranscriptEvent, TranscriptEventKind,
+};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{File, OpenOptions};
@@ -29,6 +32,11 @@ use std::sync::{Arc, Mutex};
 /// a later rebuild cycle rather than spawning an unbounded fleet.
 const MAX_INFLIGHT: usize = 3;
 
+/// Ceiling on retained transcript events per job. Older events fall off the
+/// front; `seq` keeps increasing, so a poller past the window just resumes
+/// from what is retained.
+const MAX_TRANSCRIPT_EVENTS: usize = 1000;
+
 /// A one-shot answer that resumes the ACP request currently waiting in a turn.
 struct PendingAnswer {
     action: ElicitationAction,
@@ -38,6 +46,10 @@ struct PendingAnswer {
 struct JobEntry {
     job: AgentJob,
     answer: Option<SyncSender<PendingAnswer>>,
+    /// Chat-shaped projection of the turn's `session/update` stream, plus the
+    /// questions asked and answers given. Dies with the job, like the job.
+    transcript: Vec<TranscriptEvent>,
+    next_seq: u64,
 }
 
 /// Live agent processes are daemon memory, projected through the Unix socket
@@ -49,10 +61,15 @@ struct JobRegistry {
 
 impl JobRegistry {
     fn insert(&self, job: AgentJob) {
-        self.entries
-            .lock()
-            .unwrap()
-            .insert(job.id.clone(), JobEntry { job, answer: None });
+        self.entries.lock().unwrap().insert(
+            job.id.clone(),
+            JobEntry {
+                job,
+                answer: None,
+                transcript: Vec::new(),
+                next_seq: 0,
+            },
+        );
     }
 
     fn remove(&self, id: &str) {
@@ -104,9 +121,21 @@ impl JobRegistry {
             entry.job.question = Some(question.clone());
             entry.answer = Some(sender);
         }
+        self.push_event(
+            id,
+            TranscriptEventKind::Question,
+            question.message.clone(),
+            false,
+        );
         let response = receiver
             .recv()
             .map_err(|_| io::Error::other("agent question was interrupted"))?;
+        let answer_text = match response.action {
+            ElicitationAction::Accept => response.answer.clone().unwrap_or_default(),
+            ElicitationAction::Decline => "declined".to_string(),
+            ElicitationAction::Cancel => "cancelled".to_string(),
+        };
+        self.push_event(id, TranscriptEventKind::Answer, answer_text, false);
         let result = match response.action {
             ElicitationAction::Accept => {
                 let mut content = serde_json::Map::new();
@@ -121,6 +150,85 @@ impl JobRegistry {
         };
         Ok(result)
     }
+
+    /// Project one `session/update` notification into the job's transcript.
+    /// Message and thought chunks merge into their predecessor so a streamed
+    /// sentence is one event, not fifty.
+    fn append_update(&self, id: &str, params: &Value) {
+        let Some(update) = params.get("update") else {
+            return;
+        };
+        let (kind, text, merge) = match update.get("sessionUpdate").and_then(Value::as_str) {
+            Some("agent_message_chunk") => match chunk_text(update) {
+                Some(text) => (TranscriptEventKind::Agent, text, true),
+                None => return,
+            },
+            Some("agent_thought_chunk") => match chunk_text(update) {
+                Some(text) => (TranscriptEventKind::Thought, text, true),
+                None => return,
+            },
+            Some("tool_call") | Some("tool_call_update") => {
+                let Some(title) = update
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .or_else(|| update.get("toolCallId").and_then(Value::as_str))
+                else {
+                    return;
+                };
+                let text = match update.get("status").and_then(Value::as_str) {
+                    Some(status) => format!("{title} ({status})"),
+                    None => title.to_string(),
+                };
+                (TranscriptEventKind::Tool, text, false)
+            }
+            _ => return,
+        };
+        self.push_event(id, kind, text, merge);
+    }
+
+    fn push_event(&self, id: &str, kind: TranscriptEventKind, text: String, merge: bool) {
+        let mut entries = self.entries.lock().unwrap();
+        let Some(entry) = entries.get_mut(id) else {
+            return;
+        };
+        if merge {
+            if let Some(last) = entry.transcript.last_mut() {
+                if last.kind == kind {
+                    last.text.push_str(&text);
+                    return;
+                }
+            }
+        }
+        let seq = entry.next_seq;
+        entry.next_seq += 1;
+        entry.transcript.push(TranscriptEvent { seq, kind, text });
+        if entry.transcript.len() > MAX_TRANSCRIPT_EVENTS {
+            let excess = entry.transcript.len() - MAX_TRANSCRIPT_EVENTS;
+            entry.transcript.drain(..excess);
+        }
+    }
+
+    /// Events at or after `since_seq`, plus the seq to poll from next.
+    /// `None` when the job is gone (turn ended).
+    fn transcript(&self, id: &str, since_seq: u64) -> Option<(Vec<TranscriptEvent>, u64)> {
+        let entries = self.entries.lock().unwrap();
+        let entry = entries.get(id)?;
+        let events = entry
+            .transcript
+            .iter()
+            .filter(|event| event.seq >= since_seq)
+            .cloned()
+            .collect();
+        Some((events, entry.next_seq))
+    }
+}
+
+fn chunk_text(update: &Value) -> Option<String> {
+    update
+        .get("content")?
+        .get("text")?
+        .as_str()
+        .map(str::to_string)
 }
 
 /// Casablanca's first question UI is deliberately chat-small: one string field
@@ -160,11 +268,37 @@ fn parse_question(params: &Value) -> io::Result<AgentQuestion> {
 #[derive(Clone, Default)]
 pub struct Dispatcher {
     inflight: Arc<Mutex<HashSet<String>>>,
-    /// Repos with a live auto-run turn. One `-a` turn per repo at a time, so
+    /// Repos with a live agent turn. One turn per repo at a time, so
     /// concurrent agents never race on the shared working tree / git commit
     /// (IN_AUTORUN.md). Different repos still run in parallel.
     inflight_roots: Arc<Mutex<HashSet<PathBuf>>>,
     jobs: JobRegistry,
+}
+
+/// RAII reservation of a repo for one agent turn: acquired before a claim,
+/// released when the turn's worker (or an early-return path) drops it.
+struct RootLease {
+    roots: Arc<Mutex<HashSet<PathBuf>>>,
+    root: PathBuf,
+}
+
+impl RootLease {
+    fn acquire(roots: &Arc<Mutex<HashSet<PathBuf>>>, root: &Path) -> Option<RootLease> {
+        let mut held = roots.lock().unwrap();
+        if !held.insert(root.to_path_buf()) {
+            return None; // repo busy — a turn is already running there
+        }
+        Some(RootLease {
+            roots: Arc::clone(roots),
+            root: root.to_path_buf(),
+        })
+    }
+}
+
+impl Drop for RootLease {
+    fn drop(&mut self) {
+        self.roots.lock().unwrap().remove(&self.root);
+    }
 }
 
 impl Dispatcher {
@@ -180,6 +314,11 @@ impl Dispatcher {
     /// Resume a process paused on its one active agent question.
     pub fn answer_job(&self, id: &str, action: ElicitationAction, answer: Option<String>) -> bool {
         self.jobs.answer(id, action, answer)
+    }
+
+    /// A live turn's transcript from `since_seq` on, for the follow view.
+    pub fn job_transcript(&self, id: &str, since_seq: u64) -> Option<(Vec<TranscriptEvent>, u64)> {
+        self.jobs.transcript(id, since_seq)
     }
 
     /// Claim and dispatch auto-run markers found in a fresh index. Auto-run is
@@ -235,6 +374,11 @@ impl Dispatcher {
         if group == 0 {
             return 0;
         }
+        // One turn per repo, same as `-a` dispatch: a group run also edits and
+        // commits, so it must not overlap another agent in this working tree.
+        let Some(lease) = RootLease::acquire(&self.inflight_roots, root) else {
+            return 0;
+        };
         let key = format!("group:{}:{group}", root.display());
         {
             let mut inflight = self.inflight.lock().unwrap();
@@ -287,6 +431,23 @@ impl Dispatcher {
             self.inflight.lock().unwrap().remove(&key);
             return 0;
         }
+        for marker in &claimed.markers {
+            if let Some(id) = &marker.id {
+                let rel = marker.path.strip_prefix(root).unwrap_or(&marker.path);
+                cos_log(
+                    root,
+                    "claimed",
+                    id,
+                    &format!(
+                        "{} {}:{} (group -{group})",
+                        markers::long_name(marker.kind),
+                        rel.display(),
+                        marker.line
+                    ),
+                    own_writes,
+                );
+            }
+        }
 
         let payload = compile_with_options(
             &claimed,
@@ -298,6 +459,7 @@ impl Dispatcher {
         );
         let system_prompt = SystemPrompt::for_root(root);
         let prompt = render_group_dispatch(&payload, group, &system_prompt);
+        let model = agent_model(root);
         let ids: HashSet<String> = claimed
             .markers
             .iter()
@@ -327,6 +489,9 @@ impl Dispatcher {
             question: None,
         });
         let jobs = self.jobs.clone();
+        let this = self.clone();
+        let config = config.clone();
+        let roots = roots.to_vec();
         std::thread::spawn(move || {
             run_group_turn(
                 &agent,
@@ -335,12 +500,17 @@ impl Dispatcher {
                 &ids,
                 group,
                 &prompt,
+                model.as_deref(),
                 &own_writes,
                 &jobs,
                 &job_id,
             );
             jobs.remove(&job_id);
             inflight.lock().unwrap().remove(&key);
+            drop(lease);
+            // Chain: `-a` candidates that waited on this repo dispatch now.
+            let next = Index::build_read_only(&root);
+            this.consider(&next, &roots, &config, &own_writes);
         });
         count
     }
@@ -353,7 +523,20 @@ impl Dispatcher {
         config: &Config,
         own_writes: &Arc<Mutex<OwnWriteTracker>>,
     ) {
-        // Claim: mint an id and set `:working`, stripping the `-a` flag. A fresh
+        // One turn per repo (IN_AUTORUN.md): reserve the root *before* claiming,
+        // so a busy repo's candidates stay untouched (`-a`, no status) and are
+        // picked up when the running turn finishes. Concurrent agents in one
+        // working tree race each other's edits and commits — never allow it.
+        let root = owning_root(path, roots).unwrap_or_else(|| {
+            path.parent()
+                .unwrap_or_else(|| Path::new("."))
+                .to_path_buf()
+        });
+        let Some(lease) = RootLease::acquire(&self.inflight_roots, &root) else {
+            return;
+        };
+
+        // Claim: mint an id and set `:working` (flags stay in source). A fresh
         // marker is rewritten (record the own-write); an orphaned one is already
         // `:working` (idempotent Unchanged). A racing edit → Retry: skip.
         match write::set_status(path, line, "working") {
@@ -384,13 +567,18 @@ impl Dispatcher {
             inflight.insert(id.clone());
         }
 
-        let root = owning_root(path, roots).unwrap_or_else(|| {
-            path.parent()
-                .unwrap_or_else(|| Path::new("."))
-                .to_path_buf()
-        });
+        let rel = path.strip_prefix(&root).unwrap_or(path);
+        cos_log(
+            &root,
+            "claimed",
+            &id,
+            &format!("{} {}:{line}", markers::long_name(marker.kind), rel.display()),
+            own_writes,
+        );
+
         let system_prompt = SystemPrompt::for_root(&root);
         let prompt = render_dispatch(&compile_one(&marker, roots), &system_prompt);
+        let model = agent_model(&root);
         let agent = config.agent.clone();
         let inflight = Arc::clone(&self.inflight);
         let own_writes = Arc::clone(own_writes);
@@ -403,11 +591,30 @@ impl Dispatcher {
             question: None,
         });
         let jobs = self.jobs.clone();
+        let this = self.clone();
+        let config = config.clone();
+        let roots = roots.to_vec();
 
         std::thread::spawn(move || {
-            run_turn(&agent, &root, &path, &id, &prompt, &own_writes, &jobs);
+            run_turn(
+                &agent,
+                &root,
+                &path,
+                &id,
+                &prompt,
+                model.as_deref(),
+                &own_writes,
+                &jobs,
+            );
             jobs.remove(&id);
             inflight.lock().unwrap().remove(&id);
+            drop(lease);
+            // Chain: dispatch the next candidate that waited on this repo.
+            // The agent's edits usually retrigger the watcher anyway, but a
+            // turn that fails without touching files would otherwise leave
+            // waiting markers stranded until the next unrelated save.
+            let next = Index::build_read_only(&root);
+            this.consider(&next, &roots, &config, &own_writes);
         });
     }
 }
@@ -419,14 +626,16 @@ fn run_turn(
     path: &Path,
     id: &str,
     prompt: &str,
+    model: Option<&str>,
     own_writes: &Arc<Mutex<OwnWriteTracker>>,
     jobs: &JobRegistry,
 ) {
     let mut log = open_log(id);
     let jobs = jobs.clone();
     let mut on_question = |params: &Value| jobs.await_answer(id, params);
+    let mut on_update = |params: &Value| jobs.append_update(id, params);
     let outcome = AcpAgent::spawn(agent, &mut log)
-        .and_then(|mut a| a.run_turn(root, prompt, &mut on_question));
+        .and_then(|mut a| a.run_turn(root, prompt, model, &mut on_question, &mut on_update));
 
     // Decide by inspecting the file, not the stop reason: the agent resolves a
     // marker by deleting its line (IN_AUTORUN.md), so a `:working` marker that
@@ -445,12 +654,14 @@ fn run_turn(
                 format!("# turn ended ({reason}) but marker survived → failed\n").as_bytes(),
             );
             mark_failed(path, m.line, own_writes);
+            cos_log(root, "failed", id, "marker survived turn", own_writes);
         }
         (Ok(reason), None) => {
             let _ = std::io::Write::write_all(
                 &mut log,
                 format!("# resolved: marker removed by agent ({reason})\n").as_bytes(),
             );
+            cos_log(root, "done", id, "", own_writes);
         }
         (Err(e), surviving) => {
             let _ =
@@ -458,6 +669,7 @@ fn run_turn(
             if let Some(m) = surviving {
                 mark_failed(path, m.line, own_writes);
             }
+            cos_log(root, "failed", id, &format!("dispatch error: {e}"), own_writes);
         }
     }
 }
@@ -469,6 +681,7 @@ fn run_group_turn(
     ids: &HashSet<String>,
     group: u64,
     prompt: &str,
+    model: Option<&str>,
     own_writes: &Arc<Mutex<OwnWriteTracker>>,
     jobs: &JobRegistry,
     job_id: &str,
@@ -481,8 +694,9 @@ fn run_group_turn(
     let mut log = open_log(&format!("group-{group}-{log_id}"));
     let jobs = jobs.clone();
     let mut on_question = |params: &Value| jobs.await_answer(job_id, params);
+    let mut on_update = |params: &Value| jobs.append_update(job_id, params);
     let outcome = AcpAgent::spawn(agent, &mut log)
-        .and_then(|mut a| a.run_turn(root, prompt, &mut on_question));
+        .and_then(|mut a| a.run_turn(root, prompt, model, &mut on_question, &mut on_update));
 
     let mut fresh = Index::default();
     for path in paths {
@@ -504,6 +718,9 @@ fn run_group_turn(
                 &mut log,
                 format!("# resolved group -{group}: all markers removed ({reason})\n").as_bytes(),
             );
+            for id in ids {
+                cos_log(root, "done", id, &format!("group -{group}"), own_writes);
+            }
         }
         (Ok(reason), false) => {
             let _ = std::io::Write::write_all(
@@ -514,6 +731,17 @@ fn run_group_turn(
                 )
                 .as_bytes(),
             );
+            let survived: HashSet<&str> = surviving
+                .iter()
+                .filter_map(|m| m.id.as_deref())
+                .collect();
+            for id in ids {
+                if survived.contains(id.as_str()) {
+                    cos_log(root, "failed", id, "marker survived turn", own_writes);
+                } else {
+                    cos_log(root, "done", id, &format!("group -{group}"), own_writes);
+                }
+            }
             for marker in surviving {
                 mark_failed(&marker.path, marker.line, own_writes);
             }
@@ -523,6 +751,15 @@ fn run_group_turn(
                 &mut log,
                 format!("# group -{group} dispatch error: {error}\n").as_bytes(),
             );
+            for id in ids {
+                cos_log(
+                    root,
+                    "failed",
+                    id,
+                    &format!("dispatch error: {error}"),
+                    own_writes,
+                );
+            }
             for marker in surviving {
                 mark_failed(&marker.path, marker.line, own_writes);
             }
@@ -536,6 +773,20 @@ fn mark_failed(path: &Path, line: usize, own_writes: &Arc<Mutex<OwnWriteTracker>
     }
 }
 
+/// Append a dispatch-lifecycle event to the repo's chief-of-staff action log
+/// (COS_PRD.md), recording the write so the daemon's watcher skips it.
+fn cos_log(
+    root: &Path,
+    event: &str,
+    id: &str,
+    detail: &str,
+    own_writes: &Arc<Mutex<OwnWriteTracker>>,
+) {
+    if cos::append_log(root, event, id, detail).is_ok() {
+        own_writes.lock().unwrap().record(&cos::log_path(root));
+    }
+}
+
 /// Whether auto-run is enabled for a marker's owning repo (IN_AUTORUN.md):
 /// the repo's `.indiana/casablanca/settings.json` `autoRun` bool wins, falling
 /// back to the global `config.auto_run` when the repo hasn't set it (or set a
@@ -545,6 +796,14 @@ fn auto_run_enabled(root: Option<&Path>, config: &Config) -> bool {
         Some(serde_json::Value::Bool(enabled)) => enabled,
         _ => config.auto_run,
     }
+}
+
+/// Optional ACP model value selected for this repo's session. Missing, blank,
+/// or non-string settings leave selection to the adapter.
+fn agent_model(root: &Path) -> Option<String> {
+    crate::casablanca::get(root, "model")
+        .and_then(|value| value.as_str().map(str::trim).map(str::to_string))
+        .filter(|model| !model.is_empty())
 }
 
 /// The deepest monitored root that contains `path` — the agent's working dir.
@@ -567,4 +826,84 @@ fn open_log(id: &str) -> File {
         .open(dir.join(format!("{id}.log")))
         .or_else(|_| File::create("/dev/null"))
         .expect("open dispatch log or /dev/null")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn registry_with_job(id: &str) -> JobRegistry {
+        let registry = JobRegistry::default();
+        registry.insert(AgentJob {
+            id: id.to_string(),
+            root: PathBuf::from("/tmp/repo"),
+            markers: vec![PathBuf::from("/tmp/repo/doc.md")],
+            state: AgentJobState::Running,
+            question: None,
+        });
+        registry
+    }
+
+    fn message_chunk(text: &str) -> Value {
+        json!({ "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": { "type": "text", "text": text },
+        }})
+    }
+
+    #[test]
+    fn test_message_chunks_merge_into_one_event() {
+        let registry = registry_with_job("happy-otter");
+        registry.append_update("happy-otter", &message_chunk("Hello "));
+        registry.append_update("happy-otter", &message_chunk("world"));
+        let (events, next_seq) = registry.transcript("happy-otter", 0).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].text, "Hello world");
+        assert_eq!(events[0].kind, TranscriptEventKind::Agent);
+        assert_eq!(next_seq, 1);
+    }
+
+    #[test]
+    fn test_tool_calls_break_merging_and_since_seq_filters() {
+        let registry = registry_with_job("happy-otter");
+        registry.append_update("happy-otter", &message_chunk("thinking"));
+        registry.append_update(
+            "happy-otter",
+            &json!({ "update": {
+                "sessionUpdate": "tool_call",
+                "toolCallId": "call-1",
+                "title": "Edit doc.md",
+                "status": "in_progress",
+            }}),
+        );
+        registry.append_update("happy-otter", &message_chunk("done"));
+        let (events, next_seq) = registry.transcript("happy-otter", 0).unwrap();
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[1].kind, TranscriptEventKind::Tool);
+        assert_eq!(events[1].text, "Edit doc.md (in_progress)");
+        assert_eq!(next_seq, 3);
+        let (later, _) = registry.transcript("happy-otter", 2).unwrap();
+        assert_eq!(later.len(), 1);
+        assert_eq!(later[0].text, "done");
+        assert!(registry.transcript("gone-job", 0).is_none());
+    }
+
+    #[test]
+    fn test_transcript_caps_from_the_front_and_seq_keeps_increasing() {
+        let registry = registry_with_job("happy-otter");
+        for i in 0..(MAX_TRANSCRIPT_EVENTS + 5) {
+            registry.append_update(
+                "happy-otter",
+                &json!({ "update": {
+                    "sessionUpdate": "tool_call",
+                    "title": format!("tool {i}"),
+                }}),
+            );
+        }
+        let (events, next_seq) = registry.transcript("happy-otter", 0).unwrap();
+        assert_eq!(events.len(), MAX_TRANSCRIPT_EVENTS);
+        assert_eq!(next_seq, (MAX_TRANSCRIPT_EVENTS + 5) as u64);
+        assert_eq!(events[0].seq, 5);
+        assert_eq!(events[0].text, "tool 5");
+    }
 }

@@ -12,7 +12,8 @@ Commands:
   mcp          Run the MCP stdio server
   templates    Manage repo-local `.indiana` command templates
   service      Manage the launchd service
-  todo         Manage the Chief of Staff todo list (SQLite, repo-local `.indiana/chief-of-staff/todos.db`)
+  task         Manage the Chief of Staff task tracker (`.indiana/chief-of-staff/tasks.md`)
+  log          Tail the Chief of Staff action log (`.indiana/chief-of-staff/log.md`)
   casablanca   Read or edit per-repo Casablanca settings (`.indiana/casablanca/settings.json`)
   frontmatter  Add default frontmatter to markdown files missing it
   help         Print this message or the help of the given subcommand(s)
@@ -33,6 +34,6 @@ Kinds (for --kind):
   elaborate    e
   note         n
   action       a
-  todo         td
+  todo         td, task
   delete       d
   prompt       p

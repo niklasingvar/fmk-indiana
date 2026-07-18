@@ -120,10 +120,7 @@ fn test_stale_socket() {
     std::fs::write(home.join("indiana.sock"), b"stale").unwrap();
     let repo = repo_with("::l\n");
     let _a = spawn_serve(&home, Some(&repo));
-    assert!(
-        wait_ready(&home),
-        "daemon did not recover the stale socket"
-    );
+    assert!(wait_ready(&home), "daemon did not recover the stale socket");
     assert!(
         wait_until(&home, |j| j.contains("\"love\"")),
         "recovered daemon never served the repo"

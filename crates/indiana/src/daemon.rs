@@ -8,8 +8,9 @@ use crate::config::Config;
 use crate::dispatch::Dispatcher;
 use crate::paths::{indiana_dir, socket_path};
 use crate::protocol::{
-    AddResponse, AnswerJobResponse, CopyResponse, FolderInfo, GroupInfo, JobsResponse,
-    PayloadResponse, RemoveResponse, Request, Response, RunGroupResponse, StatusResponse,
+    AddResponse, AnswerJobResponse, CopyResponse, FolderInfo, GroupInfo, JobTranscriptResponse,
+    JobsResponse, PayloadResponse, RemoveResponse, Request, Response, RunGroupResponse,
+    StatusResponse,
 };
 use indiana_core::compile::{
     compile_with_options, render_text, system_prompt_for_roots, CompileOptions, CompiledPayload,
@@ -18,25 +19,24 @@ use indiana_core::index::{Index, ScanReport};
 use indiana_core::markers::parse_kind;
 use indiana_core::templates::init_folder_indiana;
 use indiana_core::write::OwnWriteTracker;
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
-use std::collections::BTreeMap;
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use std::collections::{BTreeMap, HashSet};
 use std::io::{self, BufRead, BufReader, ErrorKind, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-/// The concrete debouncer `new_debouncer` hands back.
-type Deb = Debouncer<RecommendedWatcher, FileIdMap>;
+const DEBOUNCE_WINDOW: Duration = Duration::from_millis(300);
+type Deb = RecommendedWatcher;
 
 /// Build one index across several roots (the daemon may monitor many folders).
 fn build_index(roots: &[PathBuf]) -> ScanReport {
     let mut combined = Index::default();
     let mut written_paths = Vec::new();
     for root in roots {
-        let report = Index::build_with_options(root, indiana_core::index::ScanOptions::write_ids());
+        let report = Index::build_with_options(root, indiana_core::index::ScanOptions::write_ids().with_capture());
         combined.markers.extend(report.index.markers);
         combined.warnings.extend(report.index.warnings);
         written_paths.extend(report.written_paths);
@@ -47,12 +47,10 @@ fn build_index(roots: &[PathBuf]) -> ScanReport {
     }
 }
 
-/// Watch one root recursively, keeping the debouncer's cache in sync.
+/// Watch one root recursively.
 fn watch_root(deb: &mut Deb, root: &Path) -> io::Result<()> {
-    deb.watcher()
-        .watch(root, RecursiveMode::Recursive)
+    deb.watch(root, RecursiveMode::Recursive)
         .map_err(io::Error::other)?;
-    deb.cache().add_root(root, RecursiveMode::Recursive);
     Ok(())
 }
 
@@ -145,8 +143,7 @@ pub fn serve(root: Option<PathBuf>) -> io::Result<()> {
     // must stay alive for the daemon's lifetime, so it lives in this scope and
     // the accept loop borrows it to add folders on the fly.
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut debouncer =
-        new_debouncer(Duration::from_millis(300), None, tx).map_err(io::Error::other)?;
+    let mut debouncer = notify::recommended_watcher(tx).map_err(io::Error::other)?;
     for r in &initial_roots {
         watch_root(&mut debouncer, r)?;
     }
@@ -185,44 +182,61 @@ pub fn serve(root: Option<PathBuf>) -> io::Result<()> {
 /// current roots snapshot. Reading roots fresh each time lets `add` grow the
 /// monitored set without restarting the thread.
 fn spawn_watch_thread(
-    rx: Receiver<DebounceEventResult>,
+    rx: Receiver<notify::Result<Event>>,
     roots: Arc<Mutex<Vec<PathBuf>>>,
     index: Arc<Mutex<Index>>,
     own_writes: Arc<Mutex<OwnWriteTracker>>,
     dispatcher: Dispatcher,
 ) {
     std::thread::spawn(move || {
-        // One message per debounced batch — bursts coalesce to one rebuild.
-        for res in rx {
-            if let Ok(events) = res {
-                let paths: Vec<PathBuf> = events
-                    .iter()
-                    .flat_map(|event| event.paths.iter().cloned())
-                    .collect();
-                {
-                    let mut tracker = own_writes.lock().unwrap();
-                    tracker.cleanup();
-                    if !paths.is_empty() && paths.iter().all(|path| tracker.is_suppressed(path)) {
-                        continue;
-                    }
+        while let Some(paths) = next_event_batch(&rx) {
+            {
+                let mut tracker = own_writes.lock().unwrap();
+                tracker.cleanup();
+                if paths.iter().all(|path| tracker.is_suppressed(path)) {
+                    continue;
                 }
-
-                let snapshot = roots.lock().unwrap().clone();
-                let fresh = build_index(&snapshot);
-                {
-                    let mut tracker = own_writes.lock().unwrap();
-                    for path in &fresh.written_paths {
-                        tracker.record(path);
-                    }
-                }
-                *index.lock().unwrap() = fresh.index.clone();
-                // Auto-run: claim and dispatch any `-a` markers this rebuild
-                // surfaced (IN_AUTORUN.md). No-op unless config.auto_run is on;
-                // config is reloaded so the switch takes effect without restart.
-                dispatcher.consider(&fresh.index, &snapshot, &Config::load(), &own_writes);
             }
+
+            let snapshot = roots.lock().unwrap().clone();
+            let fresh = build_index(&snapshot);
+            {
+                let mut tracker = own_writes.lock().unwrap();
+                for path in &fresh.written_paths {
+                    tracker.record(path);
+                }
+            }
+            *index.lock().unwrap() = fresh.index.clone();
+            // Auto-run: claim and dispatch any `-a` markers this rebuild
+            // surfaced (IN_AUTORUN.md). No-op unless config.auto_run is on;
+            // config is reloaded so the switch takes effect without restart.
+            dispatcher.consider(&fresh.index, &snapshot, &Config::load(), &own_writes);
         }
     });
+}
+
+/// Block for the first filesystem event, then collect paths until the stream
+/// has been quiet for the debounce window. Unlike notify-debouncer-full 0.3,
+/// this has no timer thread waking while the daemon is idle.
+fn next_event_batch(rx: &Receiver<notify::Result<Event>>) -> Option<HashSet<PathBuf>> {
+    let mut paths: HashSet<PathBuf> = loop {
+        match rx.recv() {
+            Ok(Ok(event)) if !event.paths.is_empty() => {
+                break event.paths.into_iter().collect();
+            }
+            Ok(_) => continue,
+            Err(_) => return None,
+        }
+    };
+
+    loop {
+        match rx.recv_timeout(DEBOUNCE_WINDOW) {
+            Ok(Ok(event)) => paths.extend(event.paths),
+            Ok(Err(_)) => {}
+            Err(RecvTimeoutError::Timeout) => return Some(paths),
+            Err(RecvTimeoutError::Disconnected) => return None,
+        }
+    }
 }
 
 /// Add a folder while the daemon runs: persist config, watch it, rebuild the
@@ -277,8 +291,7 @@ fn remove_folder_live(
             r.retain(|p| p != &abs);
         }
         // Unwatch the root: inverse of watch_root.
-        let _ = debouncer.watcher().unwatch(&abs);
-        debouncer.cache().remove_root(&abs);
+        let _ = debouncer.unwatch(&abs);
         let snapshot = roots.lock().unwrap().clone();
         let fresh = build_index(&snapshot);
         {
@@ -425,6 +438,21 @@ fn handle(
             accepted: dispatcher.answer_job(&job_id, action, answer),
         })
         .map_err(io::Error::other)?,
+        Request::JobTranscript { job_id, since_seq } => {
+            let response = match dispatcher.job_transcript(&job_id, since_seq) {
+                Some((events, next_seq)) => JobTranscriptResponse {
+                    found: true,
+                    events,
+                    next_seq,
+                },
+                None => JobTranscriptResponse {
+                    found: false,
+                    events: Vec::new(),
+                    next_seq: 0,
+                },
+            };
+            serde_json::to_string(&response).map_err(io::Error::other)?
+        }
         Request::Shutdown => {
             let ack = r#"{"ok":true}"#;
             let mut stream = stream;
@@ -582,4 +610,23 @@ pub fn client_shutdown() -> Option<()> {
     let mut line = String::new();
     let _ = reader.read_line(&mut line);
     Some(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::EventKind;
+
+    #[test]
+    fn event_burst_becomes_one_deduplicated_batch() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        for i in 0..1_000 {
+            let path = PathBuf::from(format!("file-{}.md", i % 100));
+            tx.send(Ok(Event::new(EventKind::Any).add_path(path)))
+                .unwrap();
+        }
+
+        let paths = next_event_batch(&rx).expect("event channel should remain open");
+        assert_eq!(paths.len(), 100);
+    }
 }

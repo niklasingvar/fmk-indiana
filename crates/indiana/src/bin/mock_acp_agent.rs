@@ -23,6 +23,7 @@ fn main() {
     let mut reader = stdin.lock();
     let mut out = io::stdout();
     let mut cwd = String::new();
+    let mut selected_model: Option<String> = None;
 
     loop {
         let mut line = String::new();
@@ -48,7 +49,26 @@ fn main() {
             }
             (Some("session/new"), Some(id)) => {
                 cwd = msg["params"]["cwd"].as_str().unwrap_or("").to_string();
-                respond(&mut out, id, json!({ "sessionId": "mock-session" }));
+                respond(
+                    &mut out,
+                    id,
+                    json!({
+                        "sessionId": "mock-session",
+                        "configOptions": [model_option(selected_model.as_deref().unwrap_or("default"))],
+                    }),
+                );
+            }
+            (Some("session/set_config_option"), Some(id)) => {
+                if msg["params"]["configId"].as_str() == Some("model") {
+                    selected_model = msg["params"]["value"].as_str().map(str::to_string);
+                }
+                respond(
+                    &mut out,
+                    id,
+                    json!({
+                        "configOptions": [model_option(selected_model.as_deref().unwrap_or("default"))],
+                    }),
+                );
             }
             (Some("session/prompt"), Some(id)) => {
                 notify(
@@ -68,7 +88,10 @@ fn main() {
                     request_permission(&mut out);
                     read_permission_response(&mut reader)
                 };
-                if may_resolve && (mode == "succeed" || mode == "question") {
+                let expected_model = std::env::var("MOCK_ACP_EXPECT_MODEL").ok();
+                let model_matches = expected_model.as_deref() == selected_model.as_deref()
+                    || expected_model.is_none();
+                if may_resolve && model_matches && (mode == "succeed" || mode == "question") {
                     resolve_markers(Path::new(&cwd));
                     commit(Path::new(&cwd));
                 }
@@ -79,6 +102,22 @@ fn main() {
             _ => {} // notification, or a response we don't need
         }
     }
+}
+
+fn model_option(current: &str) -> Value {
+    json!({
+        "id": "model",
+        "name": "Model",
+        "category": "model",
+        "type": "select",
+        "currentValue": current,
+        "options": [
+            { "value": "default", "name": "Default" },
+            { "value": "sonnet", "name": "Sonnet" },
+            { "value": "opus", "name": "Opus" },
+            { "value": "haiku", "name": "Haiku" },
+        ],
+    })
 }
 
 fn send(out: &mut impl Write, msg: Value) {
