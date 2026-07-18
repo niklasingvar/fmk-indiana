@@ -1,29 +1,30 @@
 ---
 status: draft
-purpose: Vision for Chief of Staff — human/agent focus management including a ticket system. Deliberately not yet designed.
+purpose: Vision for Chief of Staff — human/agent focus management. The first baked slice is the task tracker and action log (COS_PRD.md).
 approval: pending
 ---
 
 # COS — VISION
 
-> Unbaked by decision (2026-07): vision first, architecture later. Nothing here is a spec; do not build against this file.
+> The shipped slice is specced in [COS_PRD.md](COS_PRD.md); this file holds the direction beyond it.
 
 ## What it is
 - Focus management for a human working with agents — including a ticket system.
 - Not status-tracking; attention-tracking. The question it answers: "what should I be doing right now?" — one glance.
 
+## Decided (2026-07)
+- Two queues, fed by markers: `::todo` / `::task` → Agent queue, `::action` → Human queue.
+- The tracker is a hand-editable markdown file (`.indiana/chief-of-staff/tasks.md`); the action log (`log.md`) records what ran. Contract: [COS_PRD.md](COS_PRD.md).
+- A captured marker gets an injected id and a tracker line with an origin backlink; the marker line in source stays the single truth.
+- `::action` compiles as a human-queue item: agents never execute it.
+- `todos.db` and `indiana todo` retired; `indiana task` / `indiana log` are the CLI face.
+
 ## Direction
-- Two queues: Human TODOs (decide, review, provide) and Agent TODOs (autonomous work items).
 - Indiana executes against the agent queue; completed loops and open questions flow back as Human TODOs.
 - Division of labor: the human queue stays short and decision-shaped; the agent queue drains in the background.
 - The menulet becomes its glanceable surface — later ([MENULET_PRD.md](../menulet/MENULET_PRD.md) stays lightweight for now).
 
-## What exists today (placeholder, not design)
-- `.indiana/chief-of-staff/todos.db` — flat list via `indiana todo add|list|delete`, `--json` for agents.
-- Scaffolded `actions.md`, `notes.md`, `focus.md`.
-- Treat these as a stub that proved plumbing; the queue model above may replace them wholesale.
-
-## Before any architecture
-- Settle the vision: what is a ticket, what state moves it between queues, what does "focus" mean operationally.
-- Decide the relationship between `::todo`/`::action` markers and the queues.
-- Then, and only then, a COS_PRD.
+## Non-goals (for now)
+- Dispatching a task from the tracker or the Casablanca panel (v1 gesture: jump to origin).
+- A menulet focus view.
+- What "focus" means operationally beyond the queues — still to settle before more architecture.

@@ -33,8 +33,9 @@ approval: pending
 ## Walk and watch
 - Startup: full walk of all markdown under the repo root.
 - Steady state: event-driven via FSEvents; ~300 ms debounce after the last change.
+- The debounce worker blocks on the event channel while idle; no polling timer wakes merely to check for work.
 - FSEvents coalesces bursts — `git checkout`, bulk `sed`, editor auto-save fire hundreds of events in milliseconds.
-- Debounce batches by path, not a global sleep-and-rescan. Each changed path is rescanned once after it goes idle.
+- Debounce the event stream globally, then rebuild the shared index once after the tree goes quiet.
 - Exclude `.indiana/` from the walk — Indiana's own scratch is not content.
 - Why event-driven: near-zero idle CPU; the human feels instant pickup.
 

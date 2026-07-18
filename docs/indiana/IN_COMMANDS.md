@@ -13,7 +13,7 @@ approval: pending
 - `::<cmd>` at column 0, or inline at end of a content line.
 - Short or long form, e.g. `::h` == `::hate`.
 - A message follows the token only when the kind takes one (see the table; pure reactions take none).
-- Auto-run flag: `-a` / `--auto` immediately after the token (before the message) asks the daemon to run this marker at once over ACP — `::fix -a banana`. Honored only on agent directives that act directly (`::fix`, `::elaborate`, `::prompt`); on any other kind a leading `-a` is ordinary message text. The daemon claims the marker (`::fix[id:working]`, flag consumed), dispatches, and the agent resolves it. Full lifecycle: [IN_AUTORUN.md](IN_AUTORUN.md).
+- Auto-run flag: `-a` / `--auto` immediately after the token (before the message) asks the daemon to run this marker at once over ACP — `::fix -a banana`. Honored only on agent directives that act directly (`::fix`, `::elaborate`, `::prompt`); on any other kind a leading `-a` is ordinary message text. The daemon claims the marker (`::fix[id:working] -a …` — the flag stays in source; the bracket status gates dispatch), dispatches, and the agent resolves it by deleting the line. Full lifecycle: [IN_AUTORUN.md](IN_AUTORUN.md).
 - Numeric group flag: a positive `-<number>` before the message assigns the marker to that repo-wide batch — `::fix -1 banana`. All marker kinds may be grouped; the flag is metadata and does not enter the compiled message. A menulet Run dispatches every member as one ACP turn; Copy renders only that group. `-a` and a numeric group may coexist, in either order, but `-a` still dispatches that marker individually.
 - Inside a code fence → ignored.
 - Frontmatter property comments use `# frontmatter.<key> ::<cmd> [message]`; their inline scope is the named property.
@@ -30,7 +30,7 @@ approval: pending
 - Agent runs directly: `::prompt`.
 - Reaction: `::hate`, `::love`, `::keep`.
 - User context: `::note`.
-- User task: `::action`, `::todo`.
+- User task: `::action` (Human queue), `::todo` / `::task` (Agent queue) — tracked into the Chief of Staff tracker ([COS_PRD.md](../chief-of-staff/COS_PRD.md)).
 
 ## The set
 | Short | Long | Arg | Kind | Meaning |
@@ -42,8 +42,8 @@ approval: pending
 | `::f` | `::fix` | optional message | agent directive | Agent fixes this; message refines how. |
 | `::e` | `::elaborate` | optional message | agent directive | Agent takes action and elaborates the change. |
 | `::n` | `::note` | message | user context | Note for the user. |
-| `::a` | `::action` | message | user task | Task for the user to log. |
-| `::td` | `::todo` | message | user task | Alias for action. |
+| `::a` | `::action` | message | user task | Human-queue item; tracked, never executed by agents. |
+| `::td`, `::task` | `::todo` | message | user task | Agent-queue task; tracked with an origin backlink. |
 | `::d` | `::delete` | optional message | agent gated directive | Agent deletes targeted content; checks in with the user before acting. |
 | `::p` | `::prompt` | optional message | agent runs directly | Auto-calls the code agent to act on this prompt (behavior ships later). |
 
@@ -55,7 +55,9 @@ approval: pending
 - `::fix [msg]` → "Fix this." + msg.
 - `::elaborate [msg]` → "Take action on this and elaborate the change." + msg.
 - `::question [msg]` → "The user asks: <msg>. Answer it." If no message: "The user does not understand this. Explain it."
-- `::note <msg>` / `::action <msg>` / `::todo <msg>` → passed through as user context / user task.
+- `::note <msg>` → passed through as user context.
+- `::todo <msg>` → msg + do it, mark the tracker line done, delete the marker line ([COS_PRD.md](../chief-of-staff/COS_PRD.md)).
+- `::action <msg>` → msg + human-queue item, do not execute.
 - `::delete [msg]` → "Take action on this and delete the targeted content. Confirm with the user before deleting." + msg.
 - `::prompt [msg]` → "Run the code agent directly on this." + msg. (Auto-calling the code agent ships later.)
 

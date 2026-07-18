@@ -131,31 +131,36 @@ Harness invariants (uphold for any new daemon test):
 | [IN_SCAN.md](IN_SCAN.md) | Deleted file → markers removed from index | `test_watch_delete` — delete a file with markers → markers gone from counts |
 | [IN_SCAN.md](IN_SCAN.md) | Burst of writes debounced to single rescan | `test_watch_debounce` — write 10 files in rapid succession → one rescan, not ten |
 
-## E12 — Chief of Staff todo CLI
+## E12 — Chief of Staff tracker + action log
 | Ref | Requirement | Test |
 |-----|-------------|------|
-| [IN_FOLDER.md](IN_FOLDER.md) | `indiana todo add` stores a row; `list`/`delete` round-trip | `test_todo_add_list_delete` |
-| [IN_FOLDER.md](IN_FOLDER.md) | `list --json` emits a stable flat array for agents | `test_todo_list_json` |
-| [IN_FOLDER.md](IN_FOLDER.md) | `add --json` returns the full row including dependencies | `test_todo_add_json` |
-| [IN_FOLDER.md](IN_FOLDER.md) | A todo is at most 29 whitespace-delimited words | `test_todo_max_29_words` |
-| [IN_FOLDER.md](IN_FOLDER.md) | Empty todo and empty domain are rejected | `test_todo_empty_todo_and_domain` |
-| [IN_FOLDER.md](IN_FOLDER.md) | A dependency must reference an existing todo | `test_todo_unknown_dependency` |
-| [IN_PRINCIPLES.md](IN_PRINCIPLES.md) | Deleting a todo cascades dependency edges to and from it | `test_todo_dependency_cascade` |
-| [IN_FOLDER.md](IN_FOLDER.md) | Deleting a missing id is a clean failure | `test_todo_delete_not_found` |
-| [IN_FOLDER.md](IN_FOLDER.md) | `--domain` filters the list | `test_todo_list_domain_filter` |
-| [IN_FOLDER.md](IN_FOLDER.md) | The db lives at `.indiana/chief-of-staff/todos.db` | `test_todo_db_path` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | `indiana task add` → `list` → `done` round-trip; done leaves the default view | `test_add_list_done_round_trip` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | `--queue` filters; `--json` emits stable task rows | `test_queue_filter_and_json_shape` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | `done` on a missing id is a clean failure | `test_done_unknown_id_fails` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | Hand-edited tracker lines survive machine writes byte-for-byte | `test_hand_edited_file_survives`, `test_unknown_lines_survive_rewrites` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | A scan captures `::todo`/`::task` into Agent, `::action` into Human, with origin + source id | `test_scan_capture_visible_to_task_list`, `test_capture_routes_queues_and_logs` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | Capture is idempotent: a second build is write-free | `test_capture_idempotent_across_builds` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | Capture is opt-in: a plain write scan mints no chief-of-staff files | `test_capture_off_without_opt_in` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | A duplicated marker id captures one row, not two | `test_duplicate_id_captures_once` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | An unreadable file hides its markers without resolving their tasks | `test_unreadable_file_does_not_resolve` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | Marker removal resolves the task; `:working`/`:failed` mirror onto it | `test_marker_removed_resolves_task`, `test_marker_status_mirrors_onto_task` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | Human state edits stand; hand-added rows are never reconciled | `test_human_done_stands_while_bare_marker_lives`, `test_human_added_task_untouched_by_reconcile` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | `indiana log` tails in order; `-n` limits; `--json` is machine-shaped | `test_log_tail_order_and_json` |
+| [COS_PRD.md](../chief-of-staff/COS_PRD.md) | Dispatch lifecycle (`claimed`/`done`) lands in the repo's log | `test_autorun_success_resolves_and_commits` |
 
 ## E13 — Auto-run dispatch (ACP)
 Behind `--features test-support`; driven against a mock ACP agent for determinism.
 | Ref | Requirement | Test |
 |-----|-------------|------|
 | [IN_AUTORUN.md](IN_AUTORUN.md) | `-a` / `--auto` parses to `auto`, stripped from the message; only on directives | `test_auto_flag_short`, `test_auto_flag_ignored_on_non_directive`, `test_auto_runnable_directives_only` |
-| [IN_AUTORUN.md](IN_AUTORUN.md), [IN_LINE.md](IN_LINE.md) | Claim mints an id + `working`, strips the flag, idempotent | `test_claim_working_mints_id_and_strips_flag`, `test_claim_working_idempotent` |
+| [IN_AUTORUN.md](IN_AUTORUN.md), [IN_LINE.md](IN_LINE.md) | Claim mints an id + `working`; flags stay in source, idempotent | `test_claim_working_mints_id_and_keeps_flag`, `test_claim_working_idempotent`, `test_claim_keeps_flags_in_source_order` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | A `::fix -a` marker is claimed, dispatched, resolved, and committed | `test_autorun_success_resolves_and_commits` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | A turn that leaves the marker → `failed`, not re-dispatched | `test_autorun_failure_marks_failed` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | `config.auto_run` off leaves the marker untouched | `test_autorun_disabled_leaves_marker` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | Permission requests are auto-granted (allow-always preferred) | `test_grant_permission_prefers_allow_always` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | ACP form question becomes a live job, accepts a human response, and resumes the same turn | `test_autorun_question_pauses_and_resumes` |
+| [IN_AUTORUN.md](IN_AUTORUN.md) | Repo-local `model` is selected through ACP before the prompt | `test_autorun_selects_repo_model` |
+| [IN_AUTORUN_ARCHITECTURE.md](IN_AUTORUN_ARCHITECTURE.md) | One save burst launches one turn; distinct markers in one repo run serially | `test_autorun_debounces_save_burst_to_one_turn`, `test_autorun_serializes_turns_per_repo` |
 | [IN_COMMANDS.md](IN_COMMANDS.md) | Positive numeric flags become group metadata and are stripped from messages; `-a` may coexist and is consumed on claim in either order | `test_numeric_group_flag`, `test_numeric_groups_support_multiple_labels`, `test_numeric_group_coexists_with_auto_in_either_order`, `test_claim_group_retains_group_and_strips_auto_in_either_order` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | Status reports sorted group counts; grouped Copy filters the payload; Run dispatches all members as one turn | `test_group_summary_copy_and_run_one_turn` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | A grouped turn that leaves markers marks every surviving member failed | `test_group_failure_marks_all_survivors_failed` |

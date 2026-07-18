@@ -111,7 +111,7 @@ Not status-tracking; attention-tracking. Chief of Staff is focus management for 
 
 Indiana reads the Agent TODO queue and executes against it; completed loops and open questions flow back as Human TODOs. The point is a clean division of labor: the human queue stays short and decision-shaped, the agent queue drains in the background, and at any moment the answer to "what should I be doing right now?" is one glance away.
 
-(What exists today — a flat `todos.db` and scaffolded markdown files under `.indiana/chief-of-staff/` — is a placeholder, not the design.)
+(What exists today — the task tracker and action log under `.indiana/chief-of-staff/` ([COS_PRD.md](docs/chief-of-staff/COS_PRD.md)): markers capture into two queues, the daemon logs what ran — is the first baked slice of this, not the whole design.)
 
 ### Menulet — the menu-bar surface
 

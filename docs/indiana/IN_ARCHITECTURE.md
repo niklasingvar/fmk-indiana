@@ -31,6 +31,6 @@ approval: pending
 - On-disk line format: [IN_LINE.md](IN_LINE.md).
 - Invariants: [IN_PRINCIPLES.md](IN_PRINCIPLES.md).
 
-## Chief of Staff todos (separate)
-- A repo-local SQLite list at `.indiana/chief-of-staff/todos.db` ([IN_FOLDER.md](IN_FOLDER.md)), written and read by the `indiana todo` CLI for agents and humans.
-- Not part of the marker index and not derived from source — a separate state store ([IN_PRINCIPLES.md](IN_PRINCIPLES.md) carve-out). It does not flow through the markdown write chokepoint.
+## Chief of Staff tracker (separate)
+- Repo-local markdown at `.indiana/chief-of-staff/tasks.md` + `log.md` ([COS_PRD.md](../chief-of-staff/COS_PRD.md)), fed by marker capture during the scan's write pass and by the `indiana task`/`indiana log` CLI.
+- Not part of the marker index ([IN_PRINCIPLES.md](IN_PRINCIPLES.md) carve-out). Tracker writes use the same mtime-guarded atomic discipline but never touch user markdown — the marker chokepoint stays marker-only.

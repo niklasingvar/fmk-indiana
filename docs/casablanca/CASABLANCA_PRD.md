@@ -11,12 +11,17 @@ approval: pending
 Features actually built today. One row = one feature. Paths are relative to `crates/casablanca/src/`.
 
 ## Shell & app
-- App shell: folder pane + editor pane — `renderer/src/app/Shell.tsx`
+- App shell: folder pane + editor pane + one shared right stage panel — `renderer/src/app/Shell.tsx`
+- Stage concern (`app/stage/`): panel identities, icon controls, single right-side slot — `stage-panel.ts`, `StageControls.tsx`, `StageIconButton.tsx`, `StagePanel.tsx`
+- Stage panels (mutually exclusive, top-right icons): Properties, Tasks, History — History is the existing per-note git history panel; no repository-wide Git panel yet
+- Agent concern (`app/agents/`): daemon job poll, compact spinner indicators left of stage icons, follow popover, editor→popover bus — `useAgentJobs.ts`, `AgentIndicators.tsx`, `JobFollowPopover.tsx`, `job-events.ts`
 - Vault-unset empty state with folder picker — `renderer/src/app/EmptyState.tsx`
 - Preload-bridge-missing guard screen — `renderer/src/App.tsx`
 - Renderer error boundary — `renderer/src/app/ErrorBoundary.tsx`
 - Theme init before first paint + light/dark toggle — `renderer/src/app/theme.ts`, `renderer/src/editor/EditorPane.tsx`
-- Top-bar live agent-process chips, daemon-health dot, and question popover — `renderer/src/app/TopBar.tsx`, `main/lib/indiana.ts`
+- TopBar composes project name + agent indicators + stage icons + daemon-health dot — `renderer/src/app/TopBar.tsx`, `main/lib/indiana.ts`
+- Job follow popover: live agent transcript (1s `jobtranscript` poll) with integrated question form — `renderer/src/app/agents/JobFollowPopover.tsx`, [CASABLANCA_AGENT_JOBS.md](CASABLANCA_AGENT_JOBS.md)
+- Chief of Staff tasks panel (stage Tasks icon): both queues + recent action log via `indiana task list`/`indiana log` `--json`, live refresh on tree push, marker composer appends `::todo`/`::task`/`::action` to the open note, click-to-origin — `renderer/src/cos/TasksPanel.tsx`, [COS_PRD.md](../chief-of-staff/COS_PRD.md)
 
 ## Folder pane / file tree
 - Flat file tree with click-to-expand/collapse and click-to-open — `renderer/src/folder-pane/FileTree.tsx`, `shared/flatten-tree.ts`
@@ -44,17 +49,19 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 - Code-text link merge (``[`text`](url)``) — `renderer/src/editor/plugins/merge-code-links.ts`
 - Indiana `::` marker survival through round-trip — `renderer/src/editor/plugins/MarkdownPlugin.tsx`, `renderer/src/editor/markdown-roundtrip.test.ts`
 - Presentation-only highlighting for recognized Indiana marker suffixes; fenced and inline code remain plain; rich clipboard data omits the presentation style — `renderer/src/editor/plugins/MarkerHighlightPlugin.tsx`
+- Inline spinner on a claimed marker's `[id:working]` bracket (CSS ::after on a style sentinel); click opens the job follow popover — `renderer/src/editor/plugins/MarkerHighlightPlugin.tsx`, `renderer/src/styles.css`, `renderer/src/app/agents/job-events.ts`
+- External-edit adoption for the open note: own-echo / claim-splice (no remount, dirty-safe) / clean remount / dirty-diverge warn — `renderer/src/storage/useVault.ts`, `shared/marker-claim.ts`, `renderer/src/editor/plugins/MarkerClaimPlugin.tsx`, [CASABLANCA_AGENT_JOBS.md](CASABLANCA_AGENT_JOBS.md)
 - Undo/redo, auto-focus, placeholder — `renderer/src/editor/Editor.tsx`
 - Clickable links → vault note or external browser — `renderer/src/editor/Editor.tsx`, `renderer/src/editor/EditorPane.tsx`
 - Clickable "code chip" links — `renderer/src/editor/Editor.tsx`
 - @-mention vault file links with suggestion list — `renderer/src/editor/plugins/MentionLinkPlugin.tsx`, `renderer/src/editor/EditorPane.tsx`
 - Frontmatter preserved as opaque YAML block — `shared/note-serialization.ts`, `renderer/src/storage/useVault.ts`
-- Right-side Properties inspector: editable raw YAML frontmatter — `renderer/src/editor/FrontmatterPanel.tsx`, `shared/frontmatter.ts`
+- Properties inspector (stage panel): editable raw YAML frontmatter — `renderer/src/editor/FrontmatterPanel.tsx`, `shared/frontmatter.ts`
 - Debounced autosave (500ms) with Saved/Saving status — `renderer/src/storage/useVault.ts`, `renderer/src/editor/EditorPane.tsx`
 - Note navigation history with back/forward + ⌘[/⌘] shortcuts — `renderer/src/storage/useVault.ts`, `renderer/src/editor/EditorPane.tsx`
 - Active-note path in header — `renderer/src/editor/EditorPane.tsx`
 - Copy all → `indiana copy` with inline success/failure status — `renderer/src/editor/EditorPane.tsx`, `main/lib/indiana.ts`
-- Per-note history panel: commits touching the note + "Current changes" entry, unified red/green source diff, read-only — `renderer/src/history/HistoryPanel.tsx`, `shared/diff.ts`
+- Per-note history panel (stage History icon): commits touching the note + "Current changes" entry, unified red/green source diff, read-only — `renderer/src/history/HistoryPanel.tsx`, `shared/diff.ts`
 
 ## HTML preview & annotations
 - HTML notes open in preview iframe (not Lexical) via `vault://` — `renderer/src/preview/HtmlPreview.tsx`
@@ -76,7 +83,7 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 - Note read/write/create IPC with post-mutation tree+git refresh — `main/ipc.ts`, `main/lib/vault.ts`
 - Generic entry-delete IPC with recursive folder support through OS Trash — `main/ipc.ts`, `main/lib/file-operations.ts`, `shared/ipc.ts`, `preload/index.ts`
 - New note created with default `# title` body — `main/lib/vault.ts`
-- File watcher (chokidar) → tree/git/preview refresh, cleanup on quit — `main/watcher.ts`, `main/index.ts`
+- File watcher (chokidar) → tree/git/preview refresh + `note:changed` push for open-note adoption, cleanup on quit — `main/watcher.ts`, `main/index.ts`
 - Git working-tree status (porcelain) with folder aggregation — `main/lib/git.ts`
 - Auto `git init` + initial snapshot commit for projects without a repo (only git write Casablanca ever does; loop commits belong to the coding agent) — `main/lib/git.ts` (`ensureRepo`), `main/ipc.ts`
 - Per-note git log + diff IPC (`git:log`, `git:diff-commit`, `git:diff-head`), untracked files synthesized via `--no-index` — `main/lib/git.ts`, `main/ipc.ts`
@@ -88,5 +95,5 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 - Inline Excalidraw canvas — `renderer/src/editor/plugins/ExcalidrawPlugin.tsx` is a dead stub (`NOT WIRED YET`).
 - Auto-linking typed URLs; interactive GFM task lists.
 - Inline rename, context menu, drag-and-drop move, per-folder create.
-- Git blame; external-edit draft reload for an open note.
+- Git blame; three-way merge for a dirty buffer + diverged disk (today: warn, autosave wins).
 - `vault:set`, `vault:rel` — main-process handlers exist, but nothing in the renderer UI calls them, so users cannot reach them.
