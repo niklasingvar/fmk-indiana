@@ -279,6 +279,42 @@ fn line_ranges(bytes: &[u8]) -> Vec<(usize, usize)> {
     ranges
 }
 
+/// Read-modify-write a whole file with the chokepoint discipline: mtime
+/// snapshot before read, compare before write, atomic replace, one internal
+/// retry (a second race returns `Retry` for the caller to surface). A missing
+/// file is created from `seed` first. `f` returns the new full text, or None
+/// for a no-op. This is the door for non-marker state files (tasks.md, log.md
+/// — COS_PRD.md); marker lines keep going through `inject`/`set_status`.
+pub fn guarded_rewrite<F>(path: &Path, seed: &[u8], f: F) -> io::Result<WriteResult>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    for _ in 0..2 {
+        let before = match fs::metadata(path) {
+            Ok(m) => m.modified().ok(),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                atomic_write(path, seed)?;
+                fs::metadata(path)?.modified().ok()
+            }
+            Err(e) => return Err(e),
+        };
+        let text = fs::read_to_string(path)?;
+        let Some(new_text) = f(&text) else {
+            return Ok(WriteResult::Unchanged);
+        };
+        let after = fs::metadata(path)?.modified().ok();
+        if before != after {
+            continue; // raced a concurrent writer; retry once
+        }
+        atomic_write(path, new_text.as_bytes())?;
+        return Ok(WriteResult::Written);
+    }
+    Ok(WriteResult::Retry)
+}
+
 pub fn atomic_write(path: &Path, content: &[u8]) -> io::Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let mut tmp = tempfile::NamedTempFile::new_in(parent)?;

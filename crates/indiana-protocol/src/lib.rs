@@ -39,6 +39,13 @@ pub enum Request {
         #[serde(default)]
         answer: Option<String>,
     },
+    /// Return a live turn's transcript events at or after `since_seq`, so a
+    /// face can follow the agent's work by polling.
+    JobTranscript {
+        job_id: String,
+        #[serde(default)]
+        since_seq: u64,
+    },
     /// Graceful shutdown: ack, unlink the socket, exit.
     Shutdown,
 }
@@ -155,6 +162,36 @@ pub struct AnswerJobResponse {
     pub accepted: bool,
 }
 
+/// What one transcript entry represents in the chat-shaped follow view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranscriptEventKind {
+    Agent,
+    Thought,
+    Tool,
+    Question,
+    Answer,
+}
+
+/// One entry of a live turn's transcript. `seq` is monotonic per job so a
+/// face can poll with `since_seq` and only receive what it hasn't seen.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TranscriptEvent {
+    pub seq: u64,
+    pub kind: TranscriptEventKind,
+    pub text: String,
+}
+
+/// Transcripts are daemon memory like the jobs they belong to: they vanish
+/// when the turn ends (`found: false`). The raw ACP log on disk remains the
+/// durable record.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JobTranscriptResponse {
+    pub found: bool,
+    pub events: Vec<TranscriptEvent>,
+    pub next_seq: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,6 +219,31 @@ mod tests {
             serde_json::from_str::<Request>(&json).unwrap(),
             Request::RunGroup { group: 7, .. }
         ));
+    }
+
+    #[test]
+    fn test_job_transcript_round_trip() {
+        let req: Request =
+            serde_json::from_str(r#"{"cmd":"jobtranscript","job_id":"happy-otter"}"#).unwrap();
+        assert!(matches!(
+            req,
+            Request::JobTranscript { ref job_id, since_seq: 0 } if job_id == "happy-otter"
+        ));
+
+        let response = JobTranscriptResponse {
+            found: true,
+            events: vec![TranscriptEvent {
+                seq: 3,
+                kind: TranscriptEventKind::Agent,
+                text: "working on it".into(),
+            }],
+            next_seq: 4,
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains(r#""kind":"agent""#));
+        let back: JobTranscriptResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.events, response.events);
+        assert_eq!(back.next_seq, 4);
     }
 
     #[test]

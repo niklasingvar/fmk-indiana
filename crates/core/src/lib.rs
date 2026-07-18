@@ -4,6 +4,7 @@
 //! id + write chokepoint (M7), scope (M8), compiler (M9).
 
 pub mod compile;
+pub mod cos;
 pub mod cursor;
 pub mod frontmatter;
 pub mod id;

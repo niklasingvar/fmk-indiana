@@ -174,7 +174,8 @@ fn scaffold_meta(root: &Path) -> io::Result<()> {
     std::fs::create_dir_all(&chief_of_staff)?;
     for (name, body) in [
         ("README.md", include_str!("../templates/chief-of-staff/README.md")),
-        ("actions.md", include_str!("../templates/chief-of-staff/actions.md")),
+        ("tasks.md", crate::cos::TASKS_SEED),
+        ("log.md", crate::cos::LOG_SEED),
         ("notes.md", include_str!("../templates/chief-of-staff/notes.md")),
         ("focus.md", include_str!("../templates/chief-of-staff/focus.md")),
     ] {
@@ -334,7 +335,8 @@ mod tests {
         assert!(d.join(".indiana/context-model/purpose/PURPOSE.md").exists());
         assert!(d.join(".indiana/context-model/learnings/INBOX.md").exists());
         assert!(d.join(".indiana/chief-of-staff/README.md").exists());
-        assert!(d.join(".indiana/chief-of-staff/actions.md").exists());
+        assert!(d.join(".indiana/chief-of-staff/tasks.md").exists());
+        assert!(d.join(".indiana/chief-of-staff/log.md").exists());
         assert!(d.join(".indiana/chief-of-staff/notes.md").exists());
         assert!(d.join(".indiana/chief-of-staff/focus.md").exists());
         assert_eq!(

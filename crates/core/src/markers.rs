@@ -27,6 +27,14 @@ pub enum Msg {
     Required,
 }
 
+/// Chief-of-staff queue a tracked marker belongs to (COS_PRD.md).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Queue {
+    Agent,
+    Human,
+}
+
 /// One row of the table.
 pub struct MarkerSpec {
     /// Short tokens, without the `::` prefix (e.g. `"h"`, `"?"`).
@@ -35,13 +43,22 @@ pub struct MarkerSpec {
     pub long: &'static str,
     pub kind: Kind,
     pub msg: Msg,
-    /// Tracked kinds get an injected id (IN_IDENTITY.md: action / todo only).
-    pub tracked: bool,
     /// Command-type contract for faces and humans (e.g. `agent_directive`,
     /// `agent_gated_directive`). Metadata, not a runtime branch — the compiler
     /// uses only the prompt body. Surfaced in scaffold frontmatter and MCP
     /// grammar output.
     pub command_type: &'static str,
+    /// Queue for tracked kinds; None for everything else. Being tracked
+    /// (id injection, IN_IDENTITY.md) is derived from this — one field,
+    /// one source, so the two can never disagree.
+    pub queue: Option<Queue>,
+}
+
+impl MarkerSpec {
+    /// Tracked kinds get an injected id and capture into the tracker.
+    pub fn tracked(&self) -> bool {
+        self.queue.is_some()
+    }
 }
 
 /// The table. Source of truth for the grammar.
@@ -51,90 +68,101 @@ pub const TABLE: &[MarkerSpec] = &[
         long: "question",
         kind: Kind::Question,
         msg: Msg::Optional,
-        tracked: false,
         command_type: "agent_explains",
+        queue: None,
     },
     MarkerSpec {
         shorts: &["h"],
         long: "hate",
         kind: Kind::Hate,
         msg: Msg::None,
-        tracked: false,
         command_type: "reaction",
+        queue: None,
     },
     MarkerSpec {
         shorts: &["l"],
         long: "love",
         kind: Kind::Love,
         msg: Msg::None,
-        tracked: false,
         command_type: "reaction",
+        queue: None,
     },
     MarkerSpec {
         shorts: &["k"],
         long: "keep",
         kind: Kind::Keep,
         msg: Msg::None,
-        tracked: false,
         command_type: "reaction",
+        queue: None,
     },
     MarkerSpec {
         shorts: &["f"],
         long: "fix",
         kind: Kind::Fix,
         msg: Msg::Optional,
-        tracked: false,
         command_type: "agent_directive",
+        queue: None,
     },
     MarkerSpec {
         shorts: &["e"],
         long: "elaborate",
         kind: Kind::Elaborate,
         msg: Msg::Optional,
-        tracked: false,
         command_type: "agent_directive",
+        queue: None,
     },
     MarkerSpec {
         shorts: &["n"],
         long: "note",
         kind: Kind::Note,
         msg: Msg::Required,
-        tracked: false,
         command_type: "user_context",
+        queue: None,
     },
     MarkerSpec {
         shorts: &["a"],
         long: "action",
         kind: Kind::Action,
         msg: Msg::Required,
-        tracked: true,
         command_type: "user_task",
+        queue: Some(Queue::Human),
     },
     MarkerSpec {
-        shorts: &["td"],
+        shorts: &["td", "task"],
         long: "todo",
         kind: Kind::Todo,
         msg: Msg::Required,
-        tracked: true,
         command_type: "user_task",
+        queue: Some(Queue::Agent),
     },
     MarkerSpec {
         shorts: &["d"],
         long: "delete",
         kind: Kind::Delete,
         msg: Msg::Optional,
-        tracked: false,
         command_type: "agent_gated_directive",
+        queue: None,
     },
     MarkerSpec {
         shorts: &["p"],
         long: "prompt",
         kind: Kind::Prompt,
         msg: Msg::Optional,
-        tracked: false,
         command_type: "agent_run_directly",
+        queue: None,
     },
 ];
+
+/// Queue for a kind, derived from the TABLE row.
+pub fn queue_of(kind: Kind) -> Option<Queue> {
+    TABLE.iter().find(|s| s.kind == kind).and_then(|s| s.queue)
+}
+
+/// Whether a kind is tracked (id injection + task capture). TABLE-driven so
+/// adding a tracked kind is one row, never an index.rs edit.
+pub fn is_tracked(kind: Kind) -> bool {
+    queue_of(kind).is_some()
+}
 
 /// Action and Todo are aliases: one tracked, actionable kind under two tokens
 /// (IN_IDENTITY.md). Filtering by either token returns both.
@@ -199,13 +227,15 @@ mod tests {
         assert_eq!(lookup("h").unwrap().kind, lookup("hate").unwrap().kind);
         assert_eq!(lookup("?").unwrap().kind, lookup("question").unwrap().kind);
         assert_eq!(lookup("td").unwrap().kind, lookup("todo").unwrap().kind);
+        assert_eq!(lookup("task").unwrap().kind, lookup("todo").unwrap().kind);
     }
 
     #[test]
     fn test_only_action_todo_tracked() {
         for s in TABLE {
             let want = matches!(s.kind, Kind::Action | Kind::Todo);
-            assert_eq!(s.tracked, want, "{:?} tracked flag wrong", s.kind);
+            assert_eq!(s.tracked(), want, "{:?} tracked flag wrong", s.kind);
+            assert_eq!(is_tracked(s.kind), want);
         }
     }
 

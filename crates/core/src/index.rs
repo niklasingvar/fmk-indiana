@@ -77,15 +77,31 @@ impl Counts {
 #[derive(Debug, Clone, Copy)]
 pub struct ScanOptions {
     pub read_only: bool,
+    /// Run the chief-of-staff capture/reconcile pass (COS_PRD.md). Off by
+    /// default: only deliberate entry points (daemon rebuilds, explicit
+    /// `indiana scan <path>`) may mint `.indiana/chief-of-staff/` files —
+    /// a plain write scan injects ids and nothing else.
+    pub capture: bool,
 }
 
 impl ScanOptions {
     pub fn write_ids() -> Self {
-        Self { read_only: false }
+        Self {
+            read_only: false,
+            capture: false,
+        }
+    }
+
+    pub fn with_capture(mut self) -> Self {
+        self.capture = true;
+        self
     }
 
     pub fn read_only() -> Self {
-        Self { read_only: true }
+        Self {
+            read_only: true,
+            capture: false,
+        }
     }
 }
 
@@ -116,7 +132,7 @@ impl Index {
         let requests: Vec<InjectRequest> = first
             .markers
             .iter()
-            .filter(|m| matches!(m.kind, Kind::Action | Kind::Todo))
+            .filter(|m| crate::markers::is_tracked(m.kind))
             .map(|m| InjectRequest {
                 path: m.path.clone(),
                 line_no: m.line,
@@ -135,19 +151,26 @@ impl Index {
             })
             .collect();
 
-        if options.read_only || written_paths.is_empty() {
-            return ScanReport {
-                index: first,
-                written_paths,
-            };
+        let index = if options.read_only || written_paths.is_empty() {
+            first
+        } else {
+            let mut second = Index::default();
+            for path in walk_markdown(root) {
+                second.scan_file(&path);
+            }
+            second
+        };
+
+        let mut written_paths = written_paths;
+        if !options.read_only && options.capture {
+            // Chief-of-staff capture/reconcile (COS_PRD.md): tracked ids become
+            // tasks.md rows; tracker writes join OwnWriteTracker via written_paths.
+            let report = crate::cos::capture_and_reconcile(root, &index);
+            written_paths.extend(report.written);
         }
 
-        let mut second = Index::default();
-        for path in walk_markdown(root) {
-            second.scan_file(&path);
-        }
         ScanReport {
-            index: second,
+            index,
             written_paths,
         }
     }
