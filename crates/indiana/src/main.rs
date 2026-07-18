@@ -70,6 +70,13 @@ enum Cmd {
         /// Copy only markers of this kind (action, note, fix, …).
         #[arg(long, value_name = "KIND")]
         kind: Option<String>,
+        /// Copy only markers carrying this numeric batch label (`-1`, `-2`, …).
+        #[arg(long, value_name = "N")]
+        group: Option<u64>,
+        /// Copy only markers tagged for this agent persona (`-m` / `-mike`),
+        /// rendered with the agent's own system prompt.
+        #[arg(long, value_name = "NAME")]
+        agent: Option<String>,
         /// Copy only markers that have not been copied before.
         #[arg(long)]
         latest: bool,
@@ -237,7 +244,13 @@ fn main() -> ExitCode {
         Cmd::Add { path } => add(path),
         Cmd::Remove { path } => remove(path),
         Cmd::Status => status(),
-        Cmd::Copy { path, kind, latest } => copy(path, kind, latest),
+        Cmd::Copy {
+            path,
+            kind,
+            group,
+            agent,
+            latest,
+        } => copy(path, kind, group, agent, latest),
         Cmd::Mcp => match mcp::run() {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
@@ -462,7 +475,17 @@ fn templates_replace(path: PathBuf) -> ExitCode {
     }
 }
 
-fn copy(path: Option<PathBuf>, kind: Option<String>, latest: bool) -> ExitCode {
+fn copy(
+    path: Option<PathBuf>,
+    kind: Option<String>,
+    group: Option<u64>,
+    agent: Option<String>,
+    latest: bool,
+) -> ExitCode {
+    if group.is_some() && agent.is_some() {
+        eprintln!("indiana: --group and --agent are mutually exclusive");
+        return ExitCode::FAILURE;
+    }
     // ── kind filter ──
     let opts = match kind.as_deref() {
         Some(token) => match parse_kind(token) {
@@ -476,6 +499,11 @@ fn copy(path: Option<PathBuf>, kind: Option<String>, latest: bool) -> ExitCode {
             }
         },
         None => CompileOptions::default(),
+    };
+    let opts = CompileOptions {
+        group,
+        agent: agent.clone(),
+        ..opts
     };
 
     // ── scan ──
@@ -522,7 +550,12 @@ fn copy(path: Option<PathBuf>, kind: Option<String>, latest: bool) -> ExitCode {
         eprintln!("warning: {w}");
     }
     let roots_for_prompt = opts.roots.clone().unwrap_or_default();
-    let system_prompt = system_prompt_for_roots(&roots_for_prompt);
+    // An agent copy speaks with that persona's prompt (single-root copies;
+    // a multi-root daemon copy falls back to the shared default).
+    let system_prompt = match (&agent, roots_for_prompt.as_slice()) {
+        (Some(name), [root]) => indiana_core::agents::system_prompt_for_agent(root, name),
+        _ => system_prompt_for_roots(&roots_for_prompt),
+    };
     for w in &system_prompt.warnings {
         eprintln!("warning: {w}");
     }

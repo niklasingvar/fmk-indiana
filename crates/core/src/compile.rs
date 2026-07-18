@@ -29,6 +29,8 @@ pub struct CompiledMarker {
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
     pub path: PathBuf,
     pub line: usize,
     pub scope_kind: ScopeKind,
@@ -53,6 +55,8 @@ pub struct CompileOptions {
     pub copied: Option<HashSet<String>>,
     /// Only include markers carrying this numeric batch label.
     pub group: Option<u64>,
+    /// Only include markers tagged for this named agent persona.
+    pub agent: Option<String>,
     /// Root folders for template lookup. None → embedded templates only.
     pub roots: Option<Vec<PathBuf>>,
 }
@@ -87,6 +91,10 @@ pub fn compile_with_options(index: &Index, options: &CompileOptions) -> Compiled
             Some(group) => m.group == Some(group),
             None => true,
         })
+        .filter(|m| match &options.agent {
+            Some(agent) => m.agent.as_deref() == Some(agent.as_str()),
+            None => true,
+        })
         .map(|marker| {
             let catalog = match &root_catalogs {
                 Some(cats) => owning_root(&marker.path, options.roots.as_ref().unwrap())
@@ -104,6 +112,7 @@ pub fn compile_with_options(index: &Index, options: &CompileOptions) -> Compiled
 /// commit (IN_AUTORUN.md). `{path}`/`{line}`/`{marker}` are filled per marker.
 const AUTORUN_CODA: &str = include_str!("../templates/autorun_coda.md");
 const GROUP_RUN_CODA: &str = include_str!("../templates/group_run_coda.md");
+const AGENT_RUN_CODA: &str = include_str!("../templates/agent_run_coda.md");
 
 /// One marker rendered as `path:line [kind]` + prompt + scope.
 fn marker_block(marker: &CompiledMarker) -> String {
@@ -172,7 +181,40 @@ pub fn render_group_dispatch(
     if markers.is_empty() {
         return String::new();
     }
-    let targets = payload
+    let coda = GROUP_RUN_CODA
+        .replace("{group}", &group.to_string())
+        .replace("{count}", &payload.markers.len().to_string())
+        .replace("{targets}", &dispatch_targets(payload));
+    format!("{}\n---\n{markers}\n---\n{coda}", system_prompt.body)
+}
+
+/// One ACP prompt for every marker tagged for one named agent persona. The
+/// daemon claims all members before compiling, same as a numeric batch; the
+/// system prompt is the agent's own (`agents::system_prompt_for_agent`).
+pub fn render_agent_dispatch(
+    payload: &CompiledPayload,
+    agent: &str,
+    system_prompt: &SystemPrompt,
+) -> String {
+    let markers = payload
+        .markers
+        .iter()
+        .map(marker_block)
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    if markers.is_empty() {
+        return String::new();
+    }
+    let coda = AGENT_RUN_CODA
+        .replace("{agent}", agent)
+        .replace("{count}", &payload.markers.len().to_string())
+        .replace("{targets}", &dispatch_targets(payload));
+    format!("{}\n---\n{markers}\n---\n{coda}", system_prompt.body)
+}
+
+/// The claimed-token target list every batch-dispatch coda names.
+fn dispatch_targets(payload: &CompiledPayload) -> String {
+    payload
         .markers
         .iter()
         .map(|marker| {
@@ -187,12 +229,7 @@ pub fn render_group_dispatch(
             )
         })
         .collect::<Vec<_>>()
-        .join("\n");
-    let coda = GROUP_RUN_CODA
-        .replace("{group}", &group.to_string())
-        .replace("{count}", &payload.markers.len().to_string())
-        .replace("{targets}", &targets);
-    format!("{}\n---\n{markers}\n---\n{coda}", system_prompt.body)
+        .join("\n")
 }
 
 fn compile_marker(marker: &Located, templates: &HashMap<String, String>) -> CompiledMarker {
@@ -203,6 +240,7 @@ fn compile_marker(marker: &Located, templates: &HashMap<String, String>) -> Comp
         compiled_prompt: prompt(marker, templates),
         message: marker.message.clone(),
         group: marker.group,
+        agent: marker.agent.clone(),
         path: marker.path.clone(),
         line: marker.line,
         scope_kind: marker.scope.kind.clone(),
@@ -433,6 +471,7 @@ mod tests {
             copied: None,
             group: None,
             roots: None,
+            agent: None,
         };
         let payload = compile_with_options(&idx, &opts);
         assert_eq!(payload.markers.len(), 1);
@@ -448,6 +487,7 @@ mod tests {
             copied: None,
             group: None,
             roots: None,
+            agent: None,
         };
         let payload = compile_with_options(&idx, &opts);
         assert_eq!(payload.markers.len(), 2);
@@ -482,6 +522,7 @@ mod tests {
             copied: Some(copied),
             group: None,
             roots: None,
+            agent: None,
         };
         let payload = compile_with_options(&idx, &opts);
         assert_eq!(payload.markers.len(), 2, "should exclude the hate marker");
@@ -500,6 +541,7 @@ mod tests {
             copied: Some(HashSet::new()),
             group: None,
             roots: None,
+            agent: None,
         };
         let payload = compile_with_options(&idx, &opts);
         assert_eq!(payload.markers.len(), 2);
@@ -514,6 +556,7 @@ mod tests {
             copied: None,
             group: None,
             roots: None,
+            agent: None,
         };
         let payload = compile_with_options(&idx, &opts);
         assert_eq!(payload.markers.len(), 2);
@@ -533,6 +576,7 @@ mod tests {
             copied: Some(copied),
             group: None,
             roots: None,
+            agent: None,
         };
         let payload = compile_with_options(&idx, &opts);
         // Only todo should remain (action was already copied, action is excluded).
@@ -552,6 +596,7 @@ mod tests {
                 copied: None,
                 group: None,
                 roots: None,
+            agent: None,
             },
         );
         assert_eq!(all.markers.len(), explicit.markers.len());
@@ -625,6 +670,59 @@ mod tests {
         assert_eq!(payload.markers.len(), 2);
         assert!(payload.markers.iter().all(|marker| marker.group == Some(1)));
         assert_eq!(payload.markers[0].message.as_deref(), Some("first"));
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_compile_agent_only() {
+        let d = tmp();
+        crate::agents::scaffold_agents(&d).unwrap();
+        fs::write(
+            d.join("doc.md"),
+            "::fix -m create this task\n::note plain\n::fix -l shape it\n",
+        )
+        .unwrap();
+        let idx = Index::build(&d);
+        let payload = compile_with_options(
+            &idx,
+            &CompileOptions {
+                agent: Some("mike".to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(payload.markers.len(), 1);
+        assert_eq!(payload.markers[0].agent.as_deref(), Some("mike"));
+        assert_eq!(
+            payload.markers[0].compiled_prompt,
+            "Fix this. create this task"
+        );
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_render_agent_dispatch_carries_persona_prompt() {
+        let d = tmp();
+        crate::agents::scaffold_agents(&d).unwrap();
+        fs::write(
+            d.join("doc.md"),
+            "::fix[happy-otter:working] -m create this task\n",
+        )
+        .unwrap();
+        let idx = Index::build(&d);
+        let payload = compile_with_options(
+            &idx,
+            &CompileOptions {
+                agent: Some("mike".to_string()),
+                ..Default::default()
+            },
+        );
+        let sp = crate::agents::system_prompt_for_agent(&d, "mike");
+        let rendered = render_agent_dispatch(&payload, "mike", &sp);
+        assert!(rendered.contains("you are MIKE"), "persona prompt leads");
+        assert!(rendered.contains("markers tagged -mike"));
+        assert!(rendered.contains("::fix[happy-otter:working]"));
+        assert!(!rendered.contains("{agent}"), "placeholders filled");
+        assert!(!rendered.contains("{targets}"), "placeholders filled");
         fs::remove_dir_all(d).ok();
     }
 

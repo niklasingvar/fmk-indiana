@@ -20,16 +20,22 @@ pub enum Request {
     /// Stop monitoring a folder: remove from config, unwatch, rebuild index.
     Remove { path: PathBuf },
     /// Return the compiled bundle for one folder as ready-to-paste text.
-    /// `kind` and `group` are optional filters.
+    /// `kind`, `group`, and `agent` are optional filters. An `agent` copy is
+    /// rendered with that agent's persona prompt instead of the default.
     Copy {
         path: PathBuf,
         #[serde(default)]
         kind: Option<String>,
         #[serde(default)]
         group: Option<u64>,
+        #[serde(default)]
+        agent: Option<String>,
     },
     /// Dispatch one numeric batch as a single manual ACP turn.
     RunGroup { path: PathBuf, group: u64 },
+    /// Dispatch every marker tagged for one named agent persona as a single
+    /// manual ACP turn, carrying the agent's own system prompt.
+    RunAgent { path: PathBuf, agent: String },
     /// Return live ACP turns so faces can render their state.
     Jobs,
     /// Answer the one pending user-input request for an ACP turn.
@@ -76,11 +82,20 @@ pub struct FolderInfo {
     /// Numeric batches and their member counts, computed by the daemon.
     #[serde(default)]
     pub groups: Vec<GroupInfo>,
+    /// Named agent personas with tagged markers, and their member counts.
+    #[serde(default)]
+    pub agents: Vec<AgentCountInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupInfo {
     pub group: u64,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentCountInfo {
+    pub name: String,
     pub count: usize,
 }
 
@@ -202,6 +217,7 @@ mod tests {
             path: PathBuf::from("/tmp/repo"),
             kind: None,
             group: Some(7),
+            agent: None,
         };
         let json = serde_json::to_string(&copy).unwrap();
         assert!(json.contains(r#""group":7"#));
@@ -255,9 +271,40 @@ mod tests {
                 GroupInfo { group: 1, count: 3 },
                 GroupInfo { group: 2, count: 1 },
             ],
+            agents: vec![AgentCountInfo {
+                name: "mike".into(),
+                count: 2,
+            }],
         };
         let json = serde_json::to_string(&info).unwrap();
         let back: FolderInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(back.groups[0], GroupInfo { group: 1, count: 3 });
+        assert_eq!(
+            back.agents[0],
+            AgentCountInfo {
+                name: "mike".into(),
+                count: 2
+            }
+        );
+    }
+
+    #[test]
+    fn test_agent_requests_round_trip() {
+        let copy: Request = serde_json::from_str(
+            r#"{"cmd":"copy","path":"/tmp/repo","agent":"mike"}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            copy,
+            Request::Copy { ref agent, .. } if agent.as_deref() == Some("mike")
+        ));
+
+        let run: Request =
+            serde_json::from_str(r#"{"cmd":"runagent","path":"/tmp/repo","agent":"mike"}"#)
+                .unwrap();
+        assert!(matches!(
+            run,
+            Request::RunAgent { ref agent, .. } if agent == "mike"
+        ));
     }
 }

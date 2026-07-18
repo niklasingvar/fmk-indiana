@@ -80,6 +80,14 @@ impl SystemPrompt {
         }
     }
 
+    /// Parse a system-prompt-shaped file at an arbitrary path (agent personas
+    /// share the format — frontmatter with `version`, then the body). The
+    /// caller decides the fallback; this only reads and validates.
+    pub fn for_path(path: &Path) -> Result<Self, String> {
+        let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        parse_template(&text, SystemPromptSource::Root)
+    }
+
     /// Embedded template bytes for scaffolding into `.indiana/SYSTEM_PROMPT.md`.
     pub fn embedded_raw() -> &'static str {
         EMBEDDED

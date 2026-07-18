@@ -3,6 +3,7 @@
 //! Modules land per milestone: markers + parser (M2), walk + index (M3),
 //! id + write chokepoint (M7), scope (M8), compiler (M9).
 
+pub mod agents;
 pub mod compile;
 pub mod cos;
 pub mod cursor;

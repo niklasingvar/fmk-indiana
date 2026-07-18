@@ -7,6 +7,7 @@
 //! ignored, satisfying both IN_SCAN.md (no paragraph tracking needed) and
 //! IN_TEST.md E2 (`    ::h` is not a marker).
 
+use crate::agents::AgentCatalog;
 use crate::markers::{self, Kind, Msg};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -37,6 +38,9 @@ pub struct Marker {
     pub message: Option<String>,
     /// Numeric batch label (`-1`, `-2`, …), stripped from the message.
     pub group: Option<u64>,
+    /// Named agent persona (`-m` / `-mike`), stripped from the message.
+    /// Canonical agent name. Mutually exclusive with `group`.
+    pub agent: Option<String>,
     pub id: Option<String>,
     pub status: Option<Status>,
     pub column: usize,
@@ -99,8 +103,15 @@ impl FenceState {
     }
 }
 
-/// Parse one line, advancing fence state. Pure given (line, prior state).
+/// Parse one line with no known agents. Pure given (line, prior state).
 pub fn parse_line(line: &str, st: &mut FenceState) -> LineResult {
+    parse_line_with(line, st, &AgentCatalog::default())
+}
+
+/// Parse one line, advancing fence state. Pure given (line, prior state,
+/// agents). `agents` supplies the known `-<name>` flag tokens for this root;
+/// an empty catalog leaves any dash token in the message, unchanged.
+pub fn parse_line_with(line: &str, st: &mut FenceState, agents: &AgentCatalog) -> LineResult {
     st.line_no += 1;
     let trimmed = line.trim_start();
 
@@ -123,7 +134,7 @@ pub fn parse_line(line: &str, st: &mut FenceState) -> LineResult {
             // `# frontmatter.<key> ::...` remains valid YAML while every value,
             // ordinary comment, and indented scalar stays inert.
             if line.starts_with(FRONTMATTER_MARKER_PREFIX) {
-                return scan_markers(line);
+                return scan_markers(line, agents);
             }
             return LineResult::None;
         }
@@ -143,7 +154,7 @@ pub fn parse_line(line: &str, st: &mut FenceState) -> LineResult {
         return LineResult::None; // sample text inside a fence — never triggers.
     }
 
-    scan_markers(line)
+    scan_markers(line, agents)
 }
 
 /// Find marker candidates on a content line. >1 valid → ambiguous.
@@ -153,7 +164,7 @@ pub fn parse_line(line: &str, st: &mut FenceState) -> LineResult {
 /// (IN_SCAN.md). Code spans follow the CommonMark rule — an opener of N
 /// backticks is closed only by the next run of exactly N — so a span may
 /// itself contain backtick runs (e.g. a triple ``` shown inline).
-fn scan_markers(line: &str) -> LineResult {
+fn scan_markers(line: &str, agents: &AgentCatalog) -> LineResult {
     let bytes = line.as_bytes();
     let mut found: Vec<Marker> = Vec::new();
 
@@ -172,7 +183,7 @@ fn scan_markers(line: &str) -> LineResult {
             // Position rule: column 0, or preceded by non-whitespace content.
             let valid_pos = i == 0 || line[..i].chars().any(|c| !c.is_whitespace());
             if valid_pos {
-                if let Some(m) = parse_candidate(line, i) {
+                if let Some(m) = parse_candidate(line, i, agents) {
                     found.push(m);
                 }
             }
@@ -212,7 +223,7 @@ fn find_closing_run(bytes: &[u8], from: usize, n: usize) -> Option<usize> {
 /// Parse a `::` at byte index `at`. Returns a Marker only if the token is a
 /// known kind. Strips an optional `[id]` / `[id:status]` bracket before the
 /// message (IN_LINE.md: bracket is stripped before parsing).
-fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
+fn parse_candidate(line: &str, at: usize, agents: &AgentCatalog) -> Option<Marker> {
     let after = &line[at + 2..];
 
     // Token: `?` or a run of ascii letters.
@@ -247,11 +258,13 @@ fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
     }
 
     // Flags after the bracket, before the message. Numeric labels group markers
-    // for manual batch copy/run. `-a` / `--auto` remains restricted to
-    // auto-runnable kinds. Unknown or duplicate flags stop the scan and become
-    // ordinary message text.
+    // for manual batch copy/run; `-<name>` (or a unique first letter) tags a
+    // named agent persona — the two are mutually exclusive. `-a` / `--auto`
+    // remains restricted to auto-runnable kinds. Unknown or duplicate flags
+    // stop the scan and become ordinary message text.
     let mut auto = false;
     let mut group = None;
+    let mut agent: Option<String> = None;
     let mut scan = rest.trim_start();
     loop {
         let end = scan.find(char::is_whitespace).unwrap_or(scan.len());
@@ -261,7 +274,7 @@ fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
             scan = scan[end..].trim_start();
             continue;
         }
-        if group.is_none() {
+        if group.is_none() && agent.is_none() {
             if let Some(number) = flag
                 .strip_prefix('-')
                 .filter(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
@@ -269,6 +282,15 @@ fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
                 .filter(|number| *number > 0)
             {
                 group = Some(number);
+                scan = scan[end..].trim_start();
+                continue;
+            }
+            if let Some(name) = flag
+                .strip_prefix('-')
+                .filter(|token| !token.is_empty())
+                .and_then(|token| agents.resolve_flag(token))
+            {
+                agent = Some(name.to_string());
                 scan = scan[end..].trim_start();
                 continue;
             }
@@ -290,6 +312,7 @@ fn parse_candidate(line: &str, at: usize) -> Option<Marker> {
         raw_token: format!("::{token}"),
         message,
         group,
+        agent,
         id,
         status,
         column: at,
@@ -441,6 +464,70 @@ mod tests {
             assert!(m.auto, "{line}");
             assert_eq!(m.message.as_deref(), Some("banana"), "{line}");
         }
+    }
+
+    // --- agent persona flag (mutually exclusive with numeric groups) ---
+
+    fn catalog() -> AgentCatalog {
+        AgentCatalog {
+            names: vec!["lisa".to_string(), "mike".to_string()],
+        }
+    }
+
+    fn marker_with_agents(line: &str) -> Marker {
+        match parse_line_with(line, &mut FenceState::default(), &catalog()) {
+            LineResult::Marker(m) => m,
+            other => panic!("expected marker, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_agent_flag_letter_and_full_name() {
+        for line in ["::fix -m create this task", "::fix -mike create this task"] {
+            let m = marker_with_agents(line);
+            assert_eq!(m.agent.as_deref(), Some("mike"), "{line}");
+            assert_eq!(m.group, None, "{line}");
+            assert_eq!(m.message.as_deref(), Some("create this task"), "{line}");
+        }
+        let m = marker_with_agents("::note -l model the domain");
+        assert_eq!(m.agent.as_deref(), Some("lisa"));
+    }
+
+    #[test]
+    fn test_agent_flag_unknown_without_catalog_stays_message() {
+        // No agents known (plain parse_line) → `-m` is ordinary message text.
+        let m = marker("::fix -m create this task");
+        assert_eq!(m.agent, None);
+        assert_eq!(m.message.as_deref(), Some("-m create this task"));
+    }
+
+    #[test]
+    fn test_agent_and_group_flags_are_mutually_exclusive() {
+        // Numeric first: `-m` stops the flag scan and stays in the message.
+        let m = marker_with_agents("::fix -1 -m polish the schema");
+        assert_eq!(m.group, Some(1));
+        assert_eq!(m.agent, None);
+        assert_eq!(m.message.as_deref(), Some("-m polish the schema"));
+        // Agent first: `-1` stops the flag scan and stays in the message.
+        let m = marker_with_agents("::fix -m -1 polish the schema");
+        assert_eq!(m.agent.as_deref(), Some("mike"));
+        assert_eq!(m.group, None);
+        assert_eq!(m.message.as_deref(), Some("-1 polish the schema"));
+    }
+
+    #[test]
+    fn test_agent_flag_coexists_with_auto() {
+        let m = marker_with_agents("::fix -a -m banana");
+        assert!(m.auto);
+        assert_eq!(m.agent.as_deref(), Some("mike"));
+        assert_eq!(m.message.as_deref(), Some("banana"));
+    }
+
+    #[test]
+    fn test_duplicate_agent_flag_stays_message() {
+        let m = marker_with_agents("::fix -m -l banana");
+        assert_eq!(m.agent.as_deref(), Some("mike"));
+        assert_eq!(m.message.as_deref(), Some("-l banana"));
     }
 
     #[test]

@@ -94,6 +94,7 @@ pub fn init_folder_indiana(root: &Path) -> io::Result<()> {
     }
     write_command_templates(root, false)?;
     scaffold_system_prompt(root)?;
+    crate::agents::scaffold_agents(root)?;
     scaffold_meta(root)?;
     Ok(())
 }
@@ -349,6 +350,15 @@ mod tests {
             fs::read_to_string(&system_prompt).unwrap(),
             SystemPrompt::embedded_raw()
         );
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn test_init_folder_indiana_scaffolds_agents() {
+        let d = tmp();
+        init_folder_indiana(&d).unwrap();
+        assert!(d.join(".indiana/agents/mike/SYSTEM_PROMPT.md").exists());
+        assert!(d.join(".indiana/agents/lisa/SYSTEM_PROMPT.md").exists());
         fs::remove_dir_all(d).ok();
     }
 

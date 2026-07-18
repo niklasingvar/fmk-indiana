@@ -8,9 +8,9 @@ use crate::config::Config;
 use crate::dispatch::Dispatcher;
 use crate::paths::{indiana_dir, socket_path};
 use crate::protocol::{
-    AddResponse, AnswerJobResponse, CopyResponse, FolderInfo, GroupInfo, JobTranscriptResponse,
-    JobsResponse, PayloadResponse, RemoveResponse, Request, Response, RunGroupResponse,
-    StatusResponse,
+    AddResponse, AgentCountInfo, AnswerJobResponse, CopyResponse, FolderInfo, GroupInfo,
+    JobTranscriptResponse, JobsResponse, PayloadResponse, RemoveResponse, Request, Response,
+    RunGroupResponse, StatusResponse,
 };
 use indiana_core::compile::{
     compile_with_options, render_text, system_prompt_for_roots, CompileOptions, CompiledPayload,
@@ -359,9 +359,13 @@ fn handle(
                 .map(|r| {
                     let count = idx.markers.iter().filter(|m| m.path.starts_with(r)).count();
                     let mut grouped = BTreeMap::<u64, usize>::new();
+                    let mut agents = BTreeMap::<String, usize>::new();
                     for marker in idx.markers.iter().filter(|m| m.path.starts_with(r)) {
                         if let Some(group) = marker.group {
                             *grouped.entry(group).or_default() += 1;
+                        }
+                        if let Some(agent) = &marker.agent {
+                            *agents.entry(agent.clone()).or_default() += 1;
                         }
                     }
                     FolderInfo {
@@ -370,6 +374,10 @@ fn handle(
                         groups: grouped
                             .into_iter()
                             .map(|(group, count)| GroupInfo { group, count })
+                            .collect(),
+                        agents: agents
+                            .into_iter()
+                            .map(|(name, count)| AgentCountInfo { name, count })
                             .collect(),
                     }
                 })
@@ -384,7 +392,12 @@ fn handle(
             let resp = remove_folder_live(&path, roots, index, own_writes, debouncer)?;
             serde_json::to_string(&resp).map_err(io::Error::other)?
         }
-        Request::Copy { path, kind, group } => {
+        Request::Copy {
+            path,
+            kind,
+            group,
+            agent,
+        } => {
             let idx = index.lock().unwrap().clone();
             let snap = roots.lock().unwrap().clone();
             let abs = indexed_root(&path, &snap);
@@ -407,10 +420,15 @@ fn handle(
                 let opts = CompileOptions {
                     kind: kind_filter,
                     group,
+                    agent: agent.clone(),
                     roots: Some(vec![abs.clone()]),
                     ..Default::default()
                 };
-                let system_prompt = system_prompt_for_roots(std::slice::from_ref(&abs));
+                // An agent copy speaks with that persona's prompt.
+                let system_prompt = match &agent {
+                    Some(name) => indiana_core::agents::system_prompt_for_agent(&abs, name),
+                    None => system_prompt_for_roots(std::slice::from_ref(&abs)),
+                };
                 render_text(&compile_with_options(&sub, &opts), &system_prompt)
             };
             serde_json::to_string(&CopyResponse { text }).map_err(io::Error::other)?
@@ -420,6 +438,18 @@ fn handle(
             let snap = roots.lock().unwrap().clone();
             let abs = indexed_root(&path, &snap);
             let count = dispatcher.run_group(&idx, &abs, group, &snap, &Config::load(), own_writes);
+            serde_json::to_string(&RunGroupResponse {
+                accepted: count > 0,
+                count,
+            })
+            .map_err(io::Error::other)?
+        }
+        Request::RunAgent { path, agent } => {
+            let idx = index.lock().unwrap().clone();
+            let snap = roots.lock().unwrap().clone();
+            let abs = indexed_root(&path, &snap);
+            let count =
+                dispatcher.run_agent(&idx, &abs, &agent, &snap, &Config::load(), own_writes);
             serde_json::to_string(&RunGroupResponse {
                 accepted: count > 0,
                 count,
@@ -563,6 +593,7 @@ pub fn client_copy(path: &Path) -> Option<CopyResponse> {
         path: path.to_path_buf(),
         kind: None,
         group: None,
+        agent: None,
     })
     .ok()?;
     writer.write_all(req.as_bytes()).ok()?;

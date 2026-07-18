@@ -1,8 +1,9 @@
 //! The index — a throwaway view over the source (IN_PRINCIPLES.md: source is
 //! truth, index is a cache). Rebuilt from a full scan; never persisted.
 
+use crate::agents::AgentCatalog;
 use crate::markers::Kind;
-use crate::parser::{parse_line, FenceState, LineResult, Marker, Status};
+use crate::parser::{parse_line_with, FenceState, LineResult, Marker, Status};
 use crate::scope::{self, Scope};
 use crate::walk::walk_markdown;
 use crate::write::{self, InjectRequest, WriteResult};
@@ -23,6 +24,9 @@ pub struct Located {
     /// Numeric manual batch label (`-1`, `-2`, …).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<u64>,
+    /// Named agent persona (`-m` / `-mike`); canonical agent name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -124,9 +128,12 @@ impl Index {
 
     /// Build an index, optionally writing IDs into tracked marker lines.
     pub fn build_with_options(root: &Path, options: ScanOptions) -> ScanReport {
+        // Agent flags (`-m`, `-mike`) only resolve against the root's defined
+        // agents, so the catalog is loaded once per build.
+        let agents = AgentCatalog::for_root(root);
         let mut first = Index::default();
         for path in walk_markdown(root) {
-            first.scan_file(&path);
+            first.scan_file_with(&path, &agents);
         }
 
         let requests: Vec<InjectRequest> = first
@@ -156,7 +163,7 @@ impl Index {
         } else {
             let mut second = Index::default();
             for path in walk_markdown(root) {
-                second.scan_file(&path);
+                second.scan_file_with(&path, &agents);
             }
             second
         };
@@ -196,9 +203,15 @@ impl Index {
         c
     }
 
+    /// Scan one file with no known agents (see `scan_file_with`).
+    pub fn scan_file(&mut self, path: &Path) {
+        self.scan_file_with(path, &AgentCatalog::default())
+    }
+
     /// Scan one file's markers into the index (used by the walk and, later, by
     /// per-path rescans on watch — IN_SCAN.md: rescan a path, not the repo).
-    pub fn scan_file(&mut self, path: &Path) {
+    /// `agents` supplies the known persona flag tokens for the owning root.
+    pub fn scan_file_with(&mut self, path: &Path, agents: &AgentCatalog) {
         let text = match std::fs::read_to_string(path) {
             Ok(t) => t,
             Err(e) => {
@@ -212,7 +225,7 @@ impl Index {
         let lines: Vec<&str> = text.lines().collect();
         for (i, line) in lines.iter().enumerate() {
             let line_no = i + 1;
-            match parse_line(line, &mut st) {
+            match parse_line_with(line, &mut st, agents) {
                 LineResult::Marker(m) => self.markers.push(locate(path, line_no, m)),
                 LineResult::Ambiguous => self.warnings.push(format!(
                     "{}:{line_no}: two or more markers on one line — skipped",
@@ -239,6 +252,7 @@ fn locate(path: &Path, line: usize, m: Marker) -> Located {
         raw_token: m.raw_token,
         message: m.message,
         group: m.group,
+        agent: m.agent,
         id: m.id,
         status: m.status,
         column: m.column,
@@ -361,6 +375,28 @@ mod tests {
         let idx = scan_fixture(&d);
         assert_eq!(idx.markers[0].group, Some(12));
         assert_eq!(idx.markers[0].message.as_deref(), Some("ship it"));
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn test_index_carries_agent_when_defined() {
+        let d = tmp();
+        crate::agents::scaffold_agents(&d).unwrap();
+        write(&d, "x.md", "::fix -m create this task\n::fix -lisa shape it\n");
+        let idx = scan_fixture(&d);
+        assert_eq!(idx.markers[0].agent.as_deref(), Some("mike"));
+        assert_eq!(idx.markers[0].message.as_deref(), Some("create this task"));
+        assert_eq!(idx.markers[1].agent.as_deref(), Some("lisa"));
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn test_index_agent_flag_without_agents_stays_message() {
+        let d = tmp();
+        write(&d, "x.md", "::fix -m create this task\n");
+        let idx = scan_fixture(&d);
+        assert_eq!(idx.markers[0].agent, None);
+        assert_eq!(idx.markers[0].message.as_deref(), Some("-m create this task"));
         fs::remove_dir_all(&d).ok();
     }
 

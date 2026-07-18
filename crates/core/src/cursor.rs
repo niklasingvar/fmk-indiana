@@ -102,6 +102,7 @@ mod tests {
             raw_token: raw_token.to_string(),
             message: msg.map(|s| s.to_string()),
             group: None,
+            agent: None,
             id: None,
             status: None,
             auto: false,
@@ -178,6 +179,7 @@ mod tests {
             compiled_prompt: "ignored by identity".into(),
             message: None,
             group: None,
+            agent: None,
             path: l.path.clone(),
             line: 42, // line differs — must not affect identity
             scope_kind: ScopeKind::Inline,

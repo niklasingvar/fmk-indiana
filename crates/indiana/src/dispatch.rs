@@ -8,12 +8,14 @@
 use crate::acp::AcpAgent;
 use crate::config::Config;
 use crate::paths::indiana_dir;
+use indiana_core::agents::{self, AgentCatalog};
 use indiana_core::compile::{
-    compile_one, compile_with_options, render_dispatch, render_group_dispatch, CompileOptions,
+    compile_one, compile_with_options, render_agent_dispatch, render_dispatch,
+    render_group_dispatch, CompileOptions, CompiledPayload,
 };
 use indiana_core::cos;
+use indiana_core::index::{Index, Located};
 use indiana_core::system_prompt::SystemPrompt;
-use indiana_core::index::Index;
 use indiana_core::markers;
 use indiana_core::parser::Status;
 use indiana_core::write::{self, OwnWriteTracker, WriteResult};
@@ -275,6 +277,76 @@ pub struct Dispatcher {
     jobs: JobRegistry,
 }
 
+/// How a manual batch selects its members: a numeric group label (`-3`) or a
+/// named agent persona (`-mike`). The selector also decides which system
+/// prompt and coda the dispatched turn carries.
+#[derive(Debug, Clone)]
+enum BatchSelector {
+    Group(u64),
+    Agent(String),
+}
+
+impl BatchSelector {
+    fn matches(&self, marker: &Located) -> bool {
+        match self {
+            BatchSelector::Group(group) => marker.group == Some(*group),
+            BatchSelector::Agent(name) => marker.agent.as_deref() == Some(name.as_str()),
+        }
+    }
+
+    /// Unique inflight-key fragment. Group labels are digits and agent names
+    /// start with a letter, so the two spaces cannot collide.
+    fn label(&self) -> String {
+        match self {
+            BatchSelector::Group(group) => group.to_string(),
+            BatchSelector::Agent(name) => name.clone(),
+        }
+    }
+
+    fn job_prefix(&self) -> String {
+        match self {
+            BatchSelector::Group(group) => format!("group-{group}"),
+            BatchSelector::Agent(name) => format!("agent-{name}"),
+        }
+    }
+
+    /// Human-facing detail for the chief-of-staff log.
+    fn detail(&self) -> String {
+        match self {
+            BatchSelector::Group(group) => format!("group -{group}"),
+            BatchSelector::Agent(name) => format!("agent -{name}"),
+        }
+    }
+
+    fn compile_options(&self) -> CompileOptions {
+        match self {
+            BatchSelector::Group(group) => CompileOptions {
+                group: Some(*group),
+                ..Default::default()
+            },
+            BatchSelector::Agent(name) => CompileOptions {
+                agent: Some(name.clone()),
+                ..Default::default()
+            },
+        }
+    }
+
+    /// A group speaks with the root's default prompt; an agent with its own.
+    fn system_prompt(&self, root: &Path) -> SystemPrompt {
+        match self {
+            BatchSelector::Group(_) => SystemPrompt::for_root(root),
+            BatchSelector::Agent(name) => agents::system_prompt_for_agent(root, name),
+        }
+    }
+
+    fn render(&self, payload: &CompiledPayload, system_prompt: &SystemPrompt) -> String {
+        match self {
+            BatchSelector::Group(group) => render_group_dispatch(payload, *group, system_prompt),
+            BatchSelector::Agent(name) => render_agent_dispatch(payload, name, system_prompt),
+        }
+    }
+}
+
 /// RAII reservation of a repo for one agent turn: acquired before a claim,
 /// released when the turn's worker (or an early-return path) drops it.
 struct RootLease {
@@ -374,12 +446,51 @@ impl Dispatcher {
         if group == 0 {
             return 0;
         }
-        // One turn per repo, same as `-a` dispatch: a group run also edits and
+        self.run_batch(index, root, BatchSelector::Group(group), roots, config, own_writes)
+    }
+
+    /// Claim every marker tagged for one named agent persona and dispatch the
+    /// compiled batch as a single ACP turn carrying the agent's own system
+    /// prompt (`.indiana/agents/<name>/SYSTEM_PROMPT.md`).
+    pub fn run_agent(
+        &self,
+        index: &Index,
+        root: &Path,
+        agent: &str,
+        roots: &[PathBuf],
+        config: &Config,
+        own_writes: &Arc<Mutex<OwnWriteTracker>>,
+    ) -> usize {
+        if agent.trim().is_empty() {
+            return 0;
+        }
+        self.run_batch(
+            index,
+            root,
+            BatchSelector::Agent(agent.to_string()),
+            roots,
+            config,
+            own_writes,
+        )
+    }
+
+    /// Shared manual-batch dispatch: numeric groups and agent personas differ
+    /// only in how members are selected and which system prompt leads.
+    fn run_batch(
+        &self,
+        index: &Index,
+        root: &Path,
+        selector: BatchSelector,
+        roots: &[PathBuf],
+        config: &Config,
+        own_writes: &Arc<Mutex<OwnWriteTracker>>,
+    ) -> usize {
+        // One turn per repo, same as `-a` dispatch: a batch run also edits and
         // commits, so it must not overlap another agent in this working tree.
         let Some(lease) = RootLease::acquire(&self.inflight_roots, root) else {
             return 0;
         };
-        let key = format!("group:{}:{group}", root.display());
+        let key = format!("batch:{}:{}", root.display(), selector.label());
         {
             let mut inflight = self.inflight.lock().unwrap();
             if inflight.contains(&key) || inflight.len() >= MAX_INFLIGHT {
@@ -393,7 +504,7 @@ impl Dispatcher {
             .iter()
             .filter(|marker| {
                 marker.path.starts_with(root)
-                    && marker.group == Some(group)
+                    && selector.matches(marker)
                     && marker.status != Some(Status::Working)
                     && marker.status != Some(Status::Done)
             })
@@ -418,13 +529,15 @@ impl Dispatcher {
             }
         }
 
+        // Re-scan with the root's agent catalog so persona tags still resolve.
+        let catalog = AgentCatalog::for_root(root);
         let mut claimed = Index::default();
         for path in &paths {
-            claimed.scan_file(path);
+            claimed.scan_file_with(path, &catalog);
         }
         claimed.markers.retain(|marker| {
             marker.path.starts_with(root)
-                && marker.group == Some(group)
+                && selector.matches(marker)
                 && marker.status == Some(Status::Working)
         });
         if claimed.markers.is_empty() {
@@ -439,10 +552,11 @@ impl Dispatcher {
                     "claimed",
                     id,
                     &format!(
-                        "{} {}:{} (group -{group})",
+                        "{} {}:{} ({})",
                         markers::long_name(marker.kind),
                         rel.display(),
-                        marker.line
+                        marker.line,
+                        selector.detail()
                     ),
                     own_writes,
                 );
@@ -452,13 +566,12 @@ impl Dispatcher {
         let payload = compile_with_options(
             &claimed,
             &CompileOptions {
-                group: Some(group),
                 roots: Some(roots.to_vec()),
-                ..Default::default()
+                ..selector.compile_options()
             },
         );
-        let system_prompt = SystemPrompt::for_root(root);
-        let prompt = render_group_dispatch(&payload, group, &system_prompt);
+        let system_prompt = selector.system_prompt(root);
+        let prompt = selector.render(&payload, &system_prompt);
         let model = agent_model(root);
         let ids: HashSet<String> = claimed
             .markers
@@ -479,8 +592,8 @@ impl Dispatcher {
             .iter()
             .next()
             .cloned()
-            .unwrap_or_else(|| format!("group-{group}"));
-        let job_id = format!("group-{group}-{log_id}");
+            .unwrap_or_else(|| selector.job_prefix());
+        let job_id = format!("{}-{log_id}", selector.job_prefix());
         self.jobs.insert(AgentJob {
             id: job_id.clone(),
             root: root.clone(),
@@ -493,12 +606,12 @@ impl Dispatcher {
         let config = config.clone();
         let roots = roots.to_vec();
         std::thread::spawn(move || {
-            run_group_turn(
+            run_batch_turn(
                 &agent,
                 &root,
                 &paths,
                 &ids,
-                group,
+                &selector,
                 &prompt,
                 model.as_deref(),
                 &own_writes,
@@ -674,39 +787,36 @@ fn run_turn(
     }
 }
 
-fn run_group_turn(
+fn run_batch_turn(
     agent: &crate::config::AgentConfig,
     root: &Path,
     paths: &HashSet<PathBuf>,
     ids: &HashSet<String>,
-    group: u64,
+    selector: &BatchSelector,
     prompt: &str,
     model: Option<&str>,
     own_writes: &Arc<Mutex<OwnWriteTracker>>,
     jobs: &JobRegistry,
     job_id: &str,
 ) {
-    let log_id = ids
-        .iter()
-        .next()
-        .cloned()
-        .unwrap_or_else(|| format!("group-{group}"));
-    let mut log = open_log(&format!("group-{group}-{log_id}"));
+    let detail = selector.detail();
+    let mut log = open_log(job_id);
     let jobs = jobs.clone();
     let mut on_question = |params: &Value| jobs.await_answer(job_id, params);
     let mut on_update = |params: &Value| jobs.append_update(job_id, params);
     let outcome = AcpAgent::spawn(agent, &mut log)
         .and_then(|mut a| a.run_turn(root, prompt, model, &mut on_question, &mut on_update));
 
+    let catalog = AgentCatalog::for_root(root);
     let mut fresh = Index::default();
     for path in paths {
-        fresh.scan_file(path);
+        fresh.scan_file_with(path, &catalog);
     }
     let surviving: Vec<_> = fresh
         .markers
         .into_iter()
         .filter(|marker| {
-            marker.group == Some(group)
+            selector.matches(marker)
                 && marker.status == Some(Status::Working)
                 && marker.id.as_ref().is_some_and(|id| ids.contains(id))
         })
@@ -716,17 +826,17 @@ fn run_group_turn(
         (Ok(reason), true) => {
             let _ = std::io::Write::write_all(
                 &mut log,
-                format!("# resolved group -{group}: all markers removed ({reason})\n").as_bytes(),
+                format!("# resolved {detail}: all markers removed ({reason})\n").as_bytes(),
             );
             for id in ids {
-                cos_log(root, "done", id, &format!("group -{group}"), own_writes);
+                cos_log(root, "done", id, &detail, own_writes);
             }
         }
         (Ok(reason), false) => {
             let _ = std::io::Write::write_all(
                 &mut log,
                 format!(
-                    "# group -{group} turn ended ({reason}) but {} marker(s) survived → failed\n",
+                    "# {detail} turn ended ({reason}) but {} marker(s) survived → failed\n",
                     surviving.len()
                 )
                 .as_bytes(),
@@ -739,7 +849,7 @@ fn run_group_turn(
                 if survived.contains(id.as_str()) {
                     cos_log(root, "failed", id, "marker survived turn", own_writes);
                 } else {
-                    cos_log(root, "done", id, &format!("group -{group}"), own_writes);
+                    cos_log(root, "done", id, &detail, own_writes);
                 }
             }
             for marker in surviving {
@@ -749,7 +859,7 @@ fn run_group_turn(
         (Err(error), _) => {
             let _ = std::io::Write::write_all(
                 &mut log,
-                format!("# group -{group} dispatch error: {error}\n").as_bytes(),
+                format!("# {detail} dispatch error: {error}\n").as_bytes(),
             );
             for id in ids {
                 cos_log(
