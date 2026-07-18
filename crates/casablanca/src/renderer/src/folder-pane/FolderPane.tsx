@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { useVault } from '../storage/useVault'
 import type { FlatTreeNode } from '@shared/flatten-tree'
-import { FileTree } from './FileTree'
+import { FileTree, type FileTreeHandle } from './FileTree'
 import { ProjectSwitcher } from './ProjectSwitcher'
 
 type Vault = ReturnType<typeof useVault>
@@ -10,6 +10,7 @@ export function FolderPane({ vault }: { vault: Vault }) {
   const { tree, gitStatus, vaultState, activeNote, openNote, createNote, removeEntry, revealEntry } = vault
   const [creatingIn, setCreatingIn] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
+  const treeRef = useRef<FileTreeHandle>(null)
 
   const submitNew = async (dirRel: string): Promise<void> => {
     const name = newName.trim()
@@ -52,6 +53,14 @@ export function FolderPane({ vault }: { vault: Vault }) {
       <header className="flex items-center gap-0.5 border-b border-pane-border px-1 py-1">
         <ProjectSwitcher vault={vault} />
         <button
+          title="Collapse all folders"
+          aria-label="Collapse all folders"
+          onClick={() => treeRef.current?.collapseAll()}
+          className="shrink-0 rounded px-1 py-0.5 text-[11px] text-text-muted hover:bg-pane-hover hover:text-text-strong"
+        >
+          Collapse all
+        </button>
+        <button
           title="New note in project root"
           onClick={() => requestCreate('')}
           className="shrink-0 rounded px-1 py-0.5 text-sm text-text-muted hover:bg-pane-hover hover:text-text-strong"
@@ -81,6 +90,7 @@ export function FolderPane({ vault }: { vault: Vault }) {
         {tree?.children?.length && vaultState.status === 'ready' ? (
           <FileTree
             key={vaultState.rootPath}
+            ref={treeRef}
             tree={tree}
             activePath={activeNote?.path ?? null}
             onOpen={openNote}

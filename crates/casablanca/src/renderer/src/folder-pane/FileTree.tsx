@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import type { GitStatusMap, TreeNode } from '@shared/domain'
 import { ancestorsOf, flattenTree, type FlatTreeNode } from '@shared/flatten-tree'
 import { FileTreeRow } from './FileTreeRow'
@@ -12,16 +12,11 @@ const TYPE_AHEAD_RESET_MS = 500
  * refreshes and restarts — plus the roving keyboard cursor. Rows render from
  * a pure flatten pass; FileTreeRow is presentation only.
  */
-export function FileTree({
-  tree,
-  activePath,
-  onOpen,
-  onCreate,
-  onDelete,
-  onReveal,
-  vaultKey,
-  gitStatus
-}: {
+export interface FileTreeHandle {
+  collapseAll: () => void
+}
+
+type FileTreeProps = {
   tree: TreeNode
   activePath: string | null
   onOpen: (rel: string) => void
@@ -30,7 +25,18 @@ export function FileTree({
   onReveal: (node: FlatTreeNode) => void
   vaultKey: string
   gitStatus: GitStatusMap
-}) {
+}
+
+export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileTree({
+  tree,
+  activePath,
+  onOpen,
+  onCreate,
+  onDelete,
+  onReveal,
+  vaultKey,
+  gitStatus
+}, ref) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed(vaultKey))
   const [focused, setFocused] = useState<number | null>(null)
   const [contextMenu, setContextMenu] = useState<{
@@ -89,6 +95,8 @@ export function FileTree({
     setCollapsed(new Set(folderPaths(tree)))
   }, [tree])
 
+  useImperativeHandle(ref, () => ({ collapseAll }), [collapseAll])
+
   const focusRow = useCallback((index: number) => {
     setFocused(index)
     rowRefs.current.get(index)?.scrollIntoView({ block: 'nearest' })
@@ -132,16 +140,6 @@ export function FileTree({
 
   return (
     <div>
-      <div className="flex justify-end px-1 pb-0.5">
-        <button
-          title="Collapse all folders"
-          aria-label="Collapse all folders"
-          onClick={collapseAll}
-          className="rounded px-1 py-0.5 text-[11px] text-text-muted hover:bg-pane-hover hover:text-text-strong"
-        >
-          Collapse all
-        </button>
-      </div>
       <div
         role="tree"
         aria-label="Files"
@@ -225,7 +223,7 @@ export function FileTree({
       )}
     </div>
   )
-}
+})
 
 function folderPaths(root: TreeNode): string[] {
   const paths: string[] = []
