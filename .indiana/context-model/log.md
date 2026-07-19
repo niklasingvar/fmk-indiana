@@ -15,3 +15,4 @@ updated: 2026-07-06
 
 ## [2026-07-05] init | context-model — tree scaffolded per CONTEXT-MODEL.md schema; seed files created, all indexed.
 ## [2026-07-06] adopt | .indiana/context-model — prepared tree from files/context-model installed as the dogfood instance; INDIANA.md folded into learnings/INBOX.md; stale montmartre folder removed.
+## [2026-07-19] fix | fundamentals/MARKDOWN_AS_CODE.md — grounded definition in docs-as-code best practice (git + review + CI gates; markdownlint/Vale/lychee); marker removed.
