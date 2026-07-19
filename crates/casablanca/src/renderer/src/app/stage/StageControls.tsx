@@ -55,6 +55,20 @@ function TasksIcon() {
   )
 }
 
+function RunsIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path
+        d="M8.8 2L4 9h3.2L7.2 14 12 7H8.8L8.8 2z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 function HistoryIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -79,6 +93,7 @@ const ICONS: Record<StagePanelId, () => ReactElement> = {
   properties: PropertiesIcon,
   markers: MarkersIcon,
   tasks: TasksIcon,
+  runs: RunsIcon,
   history: HistoryIcon
 }
 
