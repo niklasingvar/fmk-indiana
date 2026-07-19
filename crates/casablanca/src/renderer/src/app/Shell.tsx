@@ -30,6 +30,7 @@ export function Shell({ vault }: { vault: Vault }) {
       properties: isMarkdownNote && hasFrontmatter,
       markers: true,
       tasks: true,
+      runs: true,
       history: isMarkdownNote
     }),
     [isMarkdownNote, hasFrontmatter]
