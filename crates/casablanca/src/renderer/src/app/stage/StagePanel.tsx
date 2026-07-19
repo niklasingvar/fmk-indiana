@@ -1,6 +1,7 @@
 import type { useVault } from '../../storage/useVault'
 import { MarkersPanel } from '../../markers/MarkersPanel'
 import { TasksPanel } from '../../cos/TasksPanel'
+import { RunsPanel } from '../../cos/RunsPanel'
 import { FrontmatterPanel } from '../../editor/FrontmatterPanel'
 import { HistoryPanel } from '../../history/HistoryPanel'
 import type { StagePanelId } from './stage-panel'
@@ -32,6 +33,14 @@ export function StagePanel({
     return (
       <aside className="w-80 shrink-0 border-l border-pane-border bg-pane">
         <TasksPanel vault={vault} />
+      </aside>
+    )
+  }
+
+  if (selected === 'runs') {
+    return (
+      <aside className="w-80 shrink-0 overflow-hidden border-l border-pane-border bg-pane">
+        <RunsPanel />
       </aside>
     )
   }
