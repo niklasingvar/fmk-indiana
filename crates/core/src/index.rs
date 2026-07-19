@@ -3,7 +3,7 @@
 
 use crate::agents::AgentCatalog;
 use crate::markers::Kind;
-use crate::parser::{parse_line_with, FenceState, LineResult, Marker, Status};
+use crate::parser::{file_ignored, parse_line_with, FenceState, LineResult, Marker, Status};
 use crate::scope::{self, Scope};
 use crate::walk::walk_markdown;
 use crate::write::{self, InjectRequest, WriteResult};
@@ -220,6 +220,11 @@ impl Index {
                 return;
             }
         };
+        // File-level opt-out (IN_SCAN.md): `::ignore` in frontmatter or as a
+        // first-line comment silences the whole file — no markers, no warnings.
+        if file_ignored(&text) {
+            return;
+        }
         let mut st = FenceState::default();
         let start = self.markers.len();
         let lines: Vec<&str> = text.lines().collect();
@@ -337,6 +342,28 @@ mod tests {
         write(&d, "b.rs", "::h\n");
         write(&d, "c.json", "::h\n");
         assert!(scan_fixture(&d).markers.is_empty());
+        fs::remove_dir_all(&d).ok();
+    }
+
+    // IN_SCAN.md: `::ignore` in frontmatter silences the whole file.
+    #[test]
+    fn test_ignored_file_contributes_nothing() {
+        let d = tmp();
+        write(&d, "kept.md", "::h\n");
+        write(
+            &d,
+            "ignored.md",
+            "---\nstatus: draft\n# ::ignore\n---\n::l\n::action do it\n```\nunclosed fence\n",
+        );
+        let idx = scan_fixture(&d);
+        assert_eq!(idx.markers.len(), 1);
+        assert_eq!(idx.markers[0].kind, Kind::Hate);
+        // No warnings either — the file is out of scope entirely.
+        assert!(idx.warnings.is_empty());
+        // No ID injection into the ignored file.
+        assert!(!fs::read_to_string(d.join("ignored.md"))
+            .unwrap()
+            .contains("::action["));
         fs::remove_dir_all(&d).ok();
     }
 

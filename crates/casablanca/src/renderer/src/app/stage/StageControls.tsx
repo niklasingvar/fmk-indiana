@@ -16,6 +16,25 @@ function PropertiesIcon() {
   )
 }
 
+function MarkersIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <circle cx="2.6" cy="4.5" r="0.9" fill="currentColor" />
+      <circle cx="5.1" cy="4.5" r="0.9" fill="currentColor" />
+      <circle cx="2.6" cy="8" r="0.9" fill="currentColor" />
+      <circle cx="5.1" cy="8" r="0.9" fill="currentColor" />
+      <circle cx="2.6" cy="11.5" r="0.9" fill="currentColor" />
+      <circle cx="5.1" cy="11.5" r="0.9" fill="currentColor" />
+      <path
+        d="M7.8 4.5h5.7M7.8 8h5.7M7.8 11.5h3.7"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 function TasksIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -58,6 +77,7 @@ function HistoryIcon() {
 
 const ICONS: Record<StagePanelId, () => ReactElement> = {
   properties: PropertiesIcon,
+  markers: MarkersIcon,
   tasks: TasksIcon,
   history: HistoryIcon
 }

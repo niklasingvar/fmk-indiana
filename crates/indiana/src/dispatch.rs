@@ -52,6 +52,19 @@ struct JobEntry {
     /// questions asked and answers given. Dies with the job, like the job.
     transcript: Vec<TranscriptEvent>,
     next_seq: u64,
+    /// Latest `usage_update` notification (context window + cumulative cost),
+    /// when the adapter reports one. Persisted into the run record at turn end.
+    usage: Option<RunUsage>,
+}
+
+/// Context-window and cost figures from ACP `usage_update` notifications.
+/// Cumulative per session; the latest one wins.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RunUsage {
+    pub context_used: Option<u64>,
+    pub context_size: Option<u64>,
+    pub cost_amount: Option<f64>,
+    pub cost_currency: Option<String>,
 }
 
 /// Live agent processes are daemon memory, projected through the Unix socket
@@ -70,6 +83,7 @@ impl JobRegistry {
                 answer: None,
                 transcript: Vec::new(),
                 next_seq: 0,
+                usage: None,
             },
         );
     }
@@ -183,9 +197,37 @@ impl JobRegistry {
                 };
                 (TranscriptEventKind::Tool, text, false)
             }
+            Some("usage_update") => {
+                self.record_usage(id, update);
+                return;
+            }
             _ => return,
         };
         self.push_event(id, kind, text, merge);
+    }
+
+    /// Keep the latest `usage_update` figures; a field the notification omits
+    /// keeps its previous value (cost may arrive on a later update than size).
+    fn record_usage(&self, id: &str, update: &Value) {
+        let mut entries = self.entries.lock().unwrap();
+        let Some(entry) = entries.get_mut(id) else {
+            return;
+        };
+        let usage = entry.usage.get_or_insert_with(RunUsage::default);
+        if let Some(used) = update.get("used").and_then(Value::as_u64) {
+            usage.context_used = Some(used);
+        }
+        if let Some(size) = update.get("size").and_then(Value::as_u64) {
+            usage.context_size = Some(size);
+        }
+        if let Some(cost) = update.get("cost") {
+            if let Some(amount) = cost.get("amount").and_then(Value::as_f64) {
+                usage.cost_amount = Some(amount);
+            }
+            if let Some(currency) = cost.get("currency").and_then(Value::as_str) {
+                usage.cost_currency = Some(currency.to_string());
+            }
+        }
     }
 
     fn push_event(&self, id: &str, kind: TranscriptEventKind, text: String, merge: bool) {
@@ -207,6 +249,16 @@ impl JobRegistry {
         if entry.transcript.len() > MAX_TRANSCRIPT_EVENTS {
             let excess = entry.transcript.len() - MAX_TRANSCRIPT_EVENTS;
             entry.transcript.drain(..excess);
+        }
+    }
+
+    /// The full transcript and latest usage figures — taken at turn end,
+    /// before the job is removed, to persist the durable run record.
+    fn snapshot(&self, id: &str) -> (Vec<TranscriptEvent>, Option<RunUsage>) {
+        let entries = self.entries.lock().unwrap();
+        match entries.get(id) {
+            Some(entry) => (entry.transcript.clone(), entry.usage.clone()),
+            None => (Vec::new(), None),
         }
     }
 
@@ -743,6 +795,7 @@ fn run_turn(
     own_writes: &Arc<Mutex<OwnWriteTracker>>,
     jobs: &JobRegistry,
 ) {
+    let started = cos::now();
     let mut log = open_log(id);
     let jobs = jobs.clone();
     let mut on_question = |params: &Value| jobs.await_answer(id, params);
@@ -760,21 +813,23 @@ fn run_turn(
         .into_iter()
         .find(|m| m.id.as_deref() == Some(id) && m.status == Some(Status::Working));
 
-    match (&outcome, surviving) {
-        (Ok(reason), Some(m)) => {
+    let (event, detail) = match (&outcome, surviving) {
+        (Ok(turn), Some(m)) => {
+            let reason = &turn.stop_reason;
             let _ = std::io::Write::write_all(
                 &mut log,
                 format!("# turn ended ({reason}) but marker survived → failed\n").as_bytes(),
             );
             mark_failed(path, m.line, own_writes);
-            cos_log(root, "failed", id, "marker survived turn", own_writes);
+            ("failed", "marker survived turn".to_string())
         }
-        (Ok(reason), None) => {
+        (Ok(turn), None) => {
+            let reason = &turn.stop_reason;
             let _ = std::io::Write::write_all(
                 &mut log,
                 format!("# resolved: marker removed by agent ({reason})\n").as_bytes(),
             );
-            cos_log(root, "done", id, "", own_writes);
+            ("done", String::new())
         }
         (Err(e), surviving) => {
             let _ =
@@ -782,9 +837,14 @@ fn run_turn(
             if let Some(m) = surviving {
                 mark_failed(path, m.line, own_writes);
             }
-            cos_log(root, "failed", id, &format!("dispatch error: {e}"), own_writes);
+            ("failed", format!("dispatch error: {e}"))
         }
-    }
+    };
+    cos_log(root, event, id, &detail, own_writes);
+    let markers = vec![rel_display(path, root)];
+    persist_run_record(
+        root, id, markers, started, event, &detail, &outcome, &jobs, own_writes,
+    );
 }
 
 fn run_batch_turn(
@@ -799,6 +859,7 @@ fn run_batch_turn(
     jobs: &JobRegistry,
     job_id: &str,
 ) {
+    let started = cos::now();
     let detail = selector.detail();
     let mut log = open_log(job_id);
     let jobs = jobs.clone();
@@ -822,8 +883,9 @@ fn run_batch_turn(
         })
         .collect();
 
-    match (&outcome, surviving.is_empty()) {
-        (Ok(reason), true) => {
+    let (event, record_detail) = match (&outcome, surviving.is_empty()) {
+        (Ok(turn), true) => {
+            let reason = &turn.stop_reason;
             let _ = std::io::Write::write_all(
                 &mut log,
                 format!("# resolved {detail}: all markers removed ({reason})\n").as_bytes(),
@@ -831,8 +893,10 @@ fn run_batch_turn(
             for id in ids {
                 cos_log(root, "done", id, &detail, own_writes);
             }
+            ("done", detail.clone())
         }
-        (Ok(reason), false) => {
+        (Ok(turn), false) => {
+            let reason = &turn.stop_reason;
             let _ = std::io::Write::write_all(
                 &mut log,
                 format!(
@@ -852,9 +916,14 @@ fn run_batch_turn(
                     cos_log(root, "done", id, &detail, own_writes);
                 }
             }
+            let failed_count = surviving.len();
             for marker in surviving {
                 mark_failed(&marker.path, marker.line, own_writes);
             }
+            (
+                "failed",
+                format!("{detail}: {failed_count} marker(s) survived turn"),
+            )
         }
         (Err(error), _) => {
             let _ = std::io::Write::write_all(
@@ -873,8 +942,78 @@ fn run_batch_turn(
             for marker in surviving {
                 mark_failed(&marker.path, marker.line, own_writes);
             }
+            ("failed", format!("{detail}: dispatch error: {error}"))
         }
+    };
+    let markers = paths.iter().map(|p| rel_display(p, root)).collect();
+    persist_run_record(
+        root,
+        job_id,
+        markers,
+        started,
+        event,
+        &record_detail,
+        &outcome,
+        &jobs,
+        own_writes,
+    );
+}
+
+/// Persist the turn's durable audit record (`.indiana/chief-of-staff/runs/`)
+/// from the job's transcript + usage snapshot, and index it with one `run`
+/// line in the action log carrying tokens/cost when the adapter reported them.
+#[allow(clippy::too_many_arguments)]
+fn persist_run_record(
+    root: &Path,
+    job_id: &str,
+    markers: Vec<String>,
+    started: String,
+    event: &str,
+    detail: &str,
+    outcome: &io::Result<crate::acp::TurnOutcome>,
+    jobs: &JobRegistry,
+    own_writes: &Arc<Mutex<OwnWriteTracker>>,
+) {
+    let (events, usage) = jobs.snapshot(job_id);
+    let (stop_reason, tokens) = match outcome {
+        Ok(turn) => (Some(turn.stop_reason.clone()), turn.usage.clone()),
+        Err(_) => (None, None),
+    };
+    let record_detail = match (&stop_reason, detail.is_empty()) {
+        (Some(reason), true) => reason.clone(),
+        (Some(reason), false) => format!("{detail}; {reason}"),
+        (None, _) => detail.to_string(),
+    };
+    let record = crate::run_record::RunRecord {
+        job_id,
+        root,
+        markers,
+        started,
+        ended: cos::now(),
+        outcome: event,
+        detail: record_detail,
+        tokens: tokens.clone(),
+        usage: usage.clone(),
+        events: &events,
+    };
+    let Ok(rel) = crate::run_record::write(&record) else {
+        return; // a missing record never sinks the dispatch outcome
+    };
+    own_writes.lock().unwrap().record(&root.join(&rel));
+    let mut parts = vec![event.to_string()];
+    if let Some(tokens) = crate::run_record::token_summary(tokens.as_ref()) {
+        parts.push(tokens);
     }
+    if let Some(cost) = crate::run_record::cost_summary(usage.as_ref()) {
+        parts.push(cost);
+    }
+    parts.push(rel.display().to_string());
+    cos_log(root, "run", job_id, &parts.join(" · "), own_writes);
+}
+
+/// Root-relative display path for log and record lines.
+fn rel_display(path: &Path, root: &Path) -> String {
+    path.strip_prefix(root).unwrap_or(path).display().to_string()
 }
 
 fn mark_failed(path: &Path, line: usize, own_writes: &Arc<Mutex<OwnWriteTracker>>) {
@@ -996,6 +1135,38 @@ mod tests {
         assert_eq!(later.len(), 1);
         assert_eq!(later[0].text, "done");
         assert!(registry.transcript("gone-job", 0).is_none());
+    }
+
+    #[test]
+    fn test_usage_update_is_recorded_not_transcribed() {
+        let registry = registry_with_job("happy-otter");
+        registry.append_update(
+            "happy-otter",
+            &json!({ "update": {
+                "sessionUpdate": "usage_update",
+                "used": 100,
+                "size": 200000,
+            }}),
+        );
+        registry.append_update(
+            "happy-otter",
+            &json!({ "update": {
+                "sessionUpdate": "usage_update",
+                "used": 4500,
+                "cost": { "amount": 0.5, "currency": "USD" },
+            }}),
+        );
+        let (events, usage) = registry.snapshot("happy-otter");
+        assert!(events.is_empty(), "usage is not a transcript event");
+        let usage = usage.unwrap();
+        assert_eq!(usage.context_used, Some(4500), "latest update wins");
+        assert_eq!(
+            usage.context_size,
+            Some(200000),
+            "an omitted field keeps its prior value"
+        );
+        assert_eq!(usage.cost_amount, Some(0.5));
+        assert_eq!(usage.cost_currency.as_deref(), Some("USD"));
     }
 
     #[test]

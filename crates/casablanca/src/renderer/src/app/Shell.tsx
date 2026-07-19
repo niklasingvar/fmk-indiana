@@ -28,6 +28,7 @@ export function Shell({ vault }: { vault: Vault }) {
   const available = useMemo(
     (): Record<StagePanelId, boolean> => ({
       properties: isMarkdownNote && hasFrontmatter,
+      markers: true,
       tasks: true,
       history: isMarkdownNote
     }),

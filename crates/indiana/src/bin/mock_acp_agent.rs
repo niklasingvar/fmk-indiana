@@ -95,7 +95,29 @@ fn main() {
                     resolve_markers(Path::new(&cwd));
                     commit(Path::new(&cwd));
                 }
-                respond(&mut out, id, json!({ "stopReason": "end_turn" }));
+                // Usage reporting, like the real adapter: a `usage_update`
+                // notification (context + cost) and per-turn token counts on
+                // the prompt response.
+                notify(
+                    &mut out,
+                    json!({
+                        "sessionId": "mock-session",
+                        "update": {
+                            "sessionUpdate": "usage_update",
+                            "used": 45000,
+                            "size": 200000,
+                            "cost": { "amount": 0.1234, "currency": "USD" }
+                        }
+                    }),
+                );
+                respond(
+                    &mut out,
+                    id,
+                    json!({
+                        "stopReason": "end_turn",
+                        "usage": { "inputTokens": 1234, "outputTokens": 567, "totalTokens": 1801 }
+                    }),
+                );
             }
             // Any other request (authenticate, session/cancel, …) → empty ok.
             (Some(_), Some(id)) => respond(&mut out, id, json!({})),

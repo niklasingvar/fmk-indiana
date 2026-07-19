@@ -10,6 +10,7 @@ mod dispatch;
 mod mcp;
 mod paths;
 mod protocol;
+mod run_record;
 mod service;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};

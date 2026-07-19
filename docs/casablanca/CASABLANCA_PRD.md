@@ -18,8 +18,9 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 - Vault-unset empty state with folder picker — `renderer/src/app/EmptyState.tsx`
 - Preload-bridge-missing guard screen — `renderer/src/App.tsx`
 - Renderer error boundary — `renderer/src/app/ErrorBoundary.tsx`
-- Theme init before first paint + light/dark toggle — `renderer/src/app/theme.ts`, `renderer/src/editor/EditorPane.tsx`
-- TopBar composes project name + agent indicators + stage icons + daemon-health dot — `renderer/src/app/TopBar.tsx`, `main/lib/indiana.ts`
+- Theme from per-repo `.indiana/casablanca/settings.json` `theme` (`light`|`dark`); no toggle — `renderer/src/app/theme.ts`, `main/lib/repo-settings.ts`
+- TopBar composes project name + centered batch cluster (below) + agent indicators + stage icons + daemon-health dot — `renderer/src/app/TopBar.tsx`, `main/lib/indiana.ts`
+- Centered batch cluster: numeric group buttons 1…n (minimum 1–3, growing with the highest labeled group) plus one button per agent persona from `.indiana/agents/` (M = mike, L = lisa by default) plus Copy all; a button with no tagged indianas grays out. Click copies that batch (`indiana copy --group N` / `--agent name`; persona copies carry the agent's own system prompt); right-click opens a one-item Dispatch menu (`rungroup` / `runagent` daemon requests) — `renderer/src/app/GroupButtons.tsx`, `main/lib/indiana.ts`, [IN_COMMANDS.md](../indiana/IN_COMMANDS.md)
 - Job follow popover: live agent transcript (1s `jobtranscript` poll) with integrated question form — `renderer/src/app/agents/JobFollowPopover.tsx`, [CASABLANCA_AGENT_JOBS.md](CASABLANCA_AGENT_JOBS.md)
 - Chief of Staff tasks panel (stage Tasks icon): both queues + recent action log via `indiana task list`/`indiana log` `--json`, live refresh on tree push, marker composer appends `::todo`/`::task`/`::action` to the open note, click-to-origin — `renderer/src/cos/TasksPanel.tsx`, [COS_PRD.md](../chief-of-staff/COS_PRD.md)
 
@@ -61,7 +62,7 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 - Debounced autosave (500ms) with Saved/Saving status — `renderer/src/storage/useVault.ts`, `renderer/src/editor/EditorPane.tsx`
 - Note navigation history with back/forward + ⌘[/⌘] shortcuts — `renderer/src/storage/useVault.ts`, `renderer/src/editor/EditorPane.tsx`
 - Active-note path in header — `renderer/src/editor/EditorPane.tsx`
-- Copy all → `indiana copy` with inline success/failure status — `renderer/src/editor/EditorPane.tsx`, `main/lib/indiana.ts`
+- Copy all (top-bar center icon) → `indiana copy` with status in the icon tooltip — `renderer/src/app/TopBar.tsx`, `main/lib/indiana.ts`
 - Per-note history panel (stage History icon): commits touching the note + "Current changes" entry, unified red/green source diff, read-only — `renderer/src/history/HistoryPanel.tsx`, `shared/diff.ts`
 
 ## HTML preview & annotations
@@ -84,7 +85,7 @@ Features actually built today. One row = one feature. Paths are relative to `cra
 - Note read/write/create IPC with post-mutation tree+git refresh — `main/ipc.ts`, `main/lib/vault.ts`
 - Generic entry-delete IPC with recursive folder support through OS Trash — `main/ipc.ts`, `main/lib/file-operations.ts`, `shared/ipc.ts`, `preload/index.ts`
 - New note created with default `# title` body — `main/lib/vault.ts`
-- File watcher (chokidar) → tree/git/preview refresh + `note:changed` push for open-note adoption, cleanup on quit — `main/watcher.ts`, `main/index.ts`
+- File watcher (chokidar) → tree/git/preview refresh + `note:changed` push for open-note adoption, cleanup on quit — `main/watcher.ts`, `main/index.ts`. Caveat: chokidar v4 dropped glob support — watch the root and filter by extension in `ignored`/the event handler; glob patterns silently watch nothing.
 - Git working-tree status (porcelain) with folder aggregation — `main/lib/git.ts`
 - Auto `git init` + initial snapshot commit for projects without a repo (only git write Casablanca ever does; loop commits belong to the coding agent) — `main/lib/git.ts` (`ensureRepo`), `main/ipc.ts`
 - Per-note git log + diff IPC (`git:log`, `git:diff-commit`, `git:diff-head`), untracked files synthesized via `--no-index` — `main/lib/git.ts`, `main/ipc.ts`

@@ -198,8 +198,8 @@ pub struct TranscriptEvent {
 }
 
 /// Transcripts are daemon memory like the jobs they belong to: they vanish
-/// when the turn ends (`found: false`). The raw ACP log on disk remains the
-/// durable record.
+/// when the turn ends (`found: false`). The durable records are the per-run
+/// audit file under `.indiana/chief-of-staff/runs/` and the raw ACP log.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JobTranscriptResponse {
     pub found: bool,

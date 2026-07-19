@@ -6,6 +6,23 @@ approval: approved
 
 # CLAUDE.md - floor plan
 
+Also served as `AGENTS.md` (root and `.omp/` symlinks) — one floor plan, every harness.
+
+## Repo layout
+- `crates/core` - Rust engine (`indiana-core`): parsing, markers, compilation
+- `crates/indiana` - CLI + daemon binary; the primary interface
+- `crates/indiana-protocol` - daemon protocol types shared across crates
+- `crates/menulet` - Tauri menubar app; ships the indiana binary as sidecar
+- `crates/casablanca` - Electron editor: `src/main` (node side: fs, git, watcher, IPC), `src/preload` (bridge), `src/renderer` (React + Lexical), `src/shared` (types + pure logic, unit-test friendly)
+- `docs/` - intent and contracts; `docs/AGENT_*.md` - agent rules; `fundamentals/` - one principle per file
+- `.indiana/` - this repo's own live vault (indianas, chief-of-staff, context-model)
+
+## Verify before done
+- Rust: `cargo test`
+- Casablanca: `cd crates/casablanca && npm test && npm run typecheck`
+- Casablanca main-process (`src/main`) changes need an Electron restart; dev hot reload covers only the renderer.
+- Bug fix: write the reproducing test first ([docs/AGENT_CODING.md](docs/AGENT_CODING.md)).
+
 ## Start here
 - [FUNDAMENTALS.md](FUNDAMENTALS.md) - beliefs, structural laws, loop practices, one tier each
 - [VISION.md](VISION.md) - the destination; FUNDAMENTALS.md is its distilled form

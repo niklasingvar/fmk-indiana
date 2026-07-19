@@ -6,7 +6,8 @@ import {
   ensureRepoDefaults,
   parseRepoSettings,
   readRepoSettings,
-  repoColorOf
+  repoColorOf,
+  repoThemeOf
 } from './repo-settings'
 
 describe('parseRepoSettings', () => {
@@ -33,6 +34,19 @@ describe('repoColorOf', () => {
     expect(repoColorOf({})).toBeNull()
     expect(repoColorOf({ color: '   ' })).toBeNull()
     expect(repoColorOf({ color: 42 })).toBeNull()
+  })
+})
+
+describe('repoThemeOf', () => {
+  it('accepts light and dark', () => {
+    expect(repoThemeOf({ theme: 'light' })).toBe('light')
+    expect(repoThemeOf({ theme: 'dark' })).toBe('dark')
+  })
+
+  it('ignores missing or invalid values', () => {
+    expect(repoThemeOf({})).toBeNull()
+    expect(repoThemeOf({ theme: 'auto' })).toBeNull()
+    expect(repoThemeOf({ theme: 1 })).toBeNull()
   })
 })
 

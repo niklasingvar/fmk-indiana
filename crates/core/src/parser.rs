@@ -70,6 +70,57 @@ enum Fm {
 
 const FRONTMATTER_MARKER_PREFIX: &str = "# frontmatter.";
 
+/// Comment leaders recognized on a first-line `::ignore` (eslint-style opt-out
+/// for files without frontmatter). A trailing `-->` / `*/` closer is allowed.
+const IGNORE_COMMENT_LEADERS: &[&str] = &["//", "#", "<!--", "/*", "--", ";"];
+
+/// True when the file opts out of scanning entirely (IN_SCAN.md). Two forms:
+/// leading YAML frontmatter containing a column-zero `::ignore` line (or the
+/// YAML-safe comment `# ::ignore`), or — for files without frontmatter — a
+/// first line that is `::ignore` bare or behind a comment leader
+/// (`// ::ignore`, `<!-- ::ignore -->`, …). Checked once per file, before
+/// line parsing; an ignored file contributes no markers and no warnings.
+/// Indented occurrences inside frontmatter (block scalars quoting the
+/// directive) stay inert, same as every other frontmatter line.
+pub fn file_ignored(text: &str) -> bool {
+    let mut lines = text.lines();
+    let Some(first) = lines.next() else {
+        return false;
+    };
+    if first.trim() == "---" {
+        for line in lines {
+            if line.trim() == "---" {
+                return false;
+            }
+            let t = line.trim_end();
+            if t == "::ignore" || t == "# ::ignore" {
+                return true;
+            }
+        }
+        return false;
+    }
+    first_line_ignore(first)
+}
+
+/// `::ignore` on the file's first line, bare or behind one comment leader.
+fn first_line_ignore(line: &str) -> bool {
+    let t = line.trim();
+    if t == "::ignore" {
+        return true;
+    }
+    for leader in IGNORE_COMMENT_LEADERS {
+        if let Some(rest) = t.strip_prefix(leader) {
+            let rest = rest
+                .trim()
+                .trim_end_matches("-->")
+                .trim_end_matches("*/")
+                .trim_end();
+            return rest == "::ignore";
+        }
+    }
+    false
+}
+
 /// The one cross-line bit: independent ``` and ~~~ fences, plus leading
 /// YAML frontmatter (IN_SCAN.md code fences). `line_no` is 1-based.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -607,6 +658,43 @@ mod tests {
             "---\nstatus: draft # ::fix ignored\n# note ::fix ignored\n  # frontmatter.status ::fix ignored\n---\n"
         )
         .is_empty());
+    }
+
+    // --- file-level ::ignore opt-out (IN_SCAN.md) ---
+
+    #[test]
+    fn test_file_ignored_frontmatter() {
+        assert!(file_ignored("---\nstatus: draft\n::ignore\n---\n::h\n"));
+        assert!(file_ignored("---\n# ::ignore\n---\nbody ::fix x\n"));
+    }
+
+    #[test]
+    fn test_file_ignored_first_line_comment() {
+        assert!(file_ignored("::ignore\nbody\n"));
+        assert!(file_ignored("// ::ignore\nfn main() {}\n"));
+        assert!(file_ignored("# ::ignore\nimport os\n"));
+        assert!(file_ignored("<!-- ::ignore -->\n<p>hi</p>\n"));
+        assert!(file_ignored("/* ::ignore */\nbody\n"));
+    }
+
+    #[test]
+    fn test_file_ignored_negative_cases() {
+        assert!(!file_ignored(""));
+        assert!(!file_ignored("body\n::h\n"));
+        // Only the first line (or frontmatter) can opt out.
+        assert!(!file_ignored("body\n// ::ignore\n"));
+        // After the closing `---` the directive is ordinary text.
+        assert!(!file_ignored("---\nstatus: draft\n---\n::ignore\n"));
+        // Indented inside frontmatter (quoted in a block scalar) stays inert.
+        assert!(!file_ignored("---\nnote: |\n  ::ignore\n---\n"));
+        // The directive must be the whole comment, not a substring.
+        assert!(!file_ignored("# how ::ignore works\nbody\n"));
+    }
+
+    #[test]
+    fn test_ignore_token_is_not_a_marker() {
+        // `ignore` is a directive, not a marker kind — inert in prose.
+        assert_eq!(parse("::ignore"), LineResult::None);
     }
 
     #[test]

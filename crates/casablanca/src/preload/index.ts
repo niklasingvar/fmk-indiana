@@ -4,10 +4,12 @@ import type {
   AnnotationRequest,
   AnnotationResult,
   AgentJobsResult,
+  AgentRunsResult,
   AnswerAgentJobResult,
   CopyAllResult,
   CosLogResult,
   CosTasksResult,
+  DispatchResult,
   ElicitationAction,
   GitLogEntry,
   JobTranscriptResult,
@@ -15,6 +17,8 @@ import type {
   Note,
   Project,
   TreeNode,
+  VaultAgentsResult,
+  VaultMarkersResult,
   VaultState
 } from '@shared/domain'
 
@@ -89,6 +93,22 @@ const api = {
   },
   indiana: {
     copyAll: (): Promise<CopyAllResult> => ipcRenderer.invoke(IPC.INDIANA_COPY_ALL),
+    /** Copy one numeric batch (`-1`, `-2`, …) with the default system prompt. */
+    copyGroup: (group: number): Promise<CopyAllResult> =>
+      ipcRenderer.invoke(IPC.INDIANA_COPY_GROUP, group),
+    /** Copy one agent persona's batch with that agent's system prompt. */
+    copyAgent: (agent: string): Promise<CopyAllResult> =>
+      ipcRenderer.invoke(IPC.INDIANA_COPY_AGENT, agent),
+    /** Dispatch one numeric batch as a manual agent turn. */
+    runGroup: (group: number): Promise<DispatchResult> =>
+      ipcRenderer.invoke(IPC.INDIANA_RUN_GROUP, group),
+    /** Dispatch one agent persona's batch as a manual agent turn. */
+    runAgent: (agent: string): Promise<DispatchResult> =>
+      ipcRenderer.invoke(IPC.INDIANA_RUN_AGENT, agent),
+    /** Agent personas defined in the vault (`.indiana/agents/`). */
+    agents: (): Promise<VaultAgentsResult> => ipcRenderer.invoke(IPC.INDIANA_AGENTS),
+    /** Every `::` marker in the vault, from a read-only scan. */
+    markers: (): Promise<VaultMarkersResult> => ipcRenderer.invoke(IPC.INDIANA_MARKERS),
     jobs: (): Promise<AgentJobsResult> => ipcRenderer.invoke(IPC.INDIANA_JOBS),
     answerJob: (
       jobId: string,
@@ -104,7 +124,11 @@ const api = {
     /** Chief of Staff tracker rows, all states (COS_PRD.md). */
     tasks: (): Promise<CosTasksResult> => ipcRenderer.invoke(IPC.COS_TASKS),
     /** Tail of the action log, oldest first. */
-    log: (lines?: number): Promise<CosLogResult> => ipcRenderer.invoke(IPC.COS_LOG, lines)
+    log: (lines?: number): Promise<CosLogResult> => ipcRenderer.invoke(IPC.COS_LOG, lines),
+    /** Durable agent-run audit records, newest first (COS_PRD.md runs/). */
+    runs: (): Promise<AgentRunsResult> => ipcRenderer.invoke(IPC.COS_RUNS),
+    /** Full markdown of one run record, by filename from `runs()`. */
+    run: (file: string): Promise<string> => ipcRenderer.invoke(IPC.COS_RUN_READ, file)
   }
 }
 

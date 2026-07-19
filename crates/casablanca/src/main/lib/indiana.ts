@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { existsSync } from 'node:fs'
+import { existsSync, promises as fsp } from 'node:fs'
 import { createConnection } from 'node:net'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -12,10 +12,15 @@ import type {
   CosLogResult,
   CosTask,
   CosTasksResult,
+  DispatchResult,
   ElicitationAction,
   JobTranscriptResult,
+  MarkerStatus,
   TranscriptEvent,
-  VaultConfig
+  VaultAgentsResult,
+  VaultConfig,
+  VaultMarker,
+  VaultMarkersResult
 } from '@shared/domain'
 
 const execFileAsync = promisify(execFile)
@@ -179,12 +184,64 @@ export async function tailLog(vault: VaultConfig, lines: number): Promise<CosLog
   }
 }
 
+/** The scan JSON's marker shape (indiana_core::index::Located). */
+interface ScannedMarker {
+  path: string
+  line: number
+  kind: string
+  raw_token: string
+  message?: string
+  group?: number
+  agent?: string
+  id?: string
+  status?: MarkerStatus
+}
+
+/** Project scan output onto the renderer's shape, paths made vault-relative. */
+export function toVaultMarkers(scanJson: string, rootPath: string): VaultMarker[] {
+  const root = rootPath.endsWith('/') ? rootPath : `${rootPath}/`
+  const parsed = JSON.parse(scanJson) as { markers: ScannedMarker[] }
+  return parsed.markers.map((m) => ({
+    path: m.path.startsWith(root) ? m.path.slice(root.length) : m.path,
+    line: m.line,
+    kind: m.kind,
+    rawToken: m.raw_token,
+    message: m.message,
+    group: m.group,
+    agent: m.agent,
+    id: m.id,
+    status: m.status
+  }))
+}
+
 /**
- * Run `indiana copy <vault root>`: compile every pending marker in the vault
- * and put the bundle on the clipboard. Indiana owns compilation and the
- * clipboard; Casablanca only triggers and reports.
+ * List every marker in the vault via `indiana scan --json --read-only` —
+ * read-only so opening the overview never injects IDs or touches files.
+ * A missing binary or failed scan degrades to an unavailable panel.
  */
-export async function copyAllMarkers(vault: VaultConfig): Promise<CopyAllResult> {
+export async function listMarkers(vault: VaultConfig): Promise<VaultMarkersResult> {
+  const bin = resolveIndianaBinary()
+  if (!bin) return { available: false, markers: [] }
+  try {
+    const { stdout } = await execFileAsync(
+      bin,
+      ['scan', '--json', '--read-only', vault.rootPath],
+      { timeout: 15_000, maxBuffer: 16 * 1024 * 1024 }
+    )
+    return { available: true, markers: toVaultMarkers(stdout, vault.rootPath) }
+  } catch (err) {
+    const e = err as { stderr?: string; message?: string }
+    console.warn('[indiana] scan failed:', e.stderr?.trim() || e.message || String(err))
+    return { available: false, markers: [] }
+  }
+}
+
+/**
+ * Run `indiana copy <vault root> [filters]`: compile the selected markers and
+ * put the bundle on the clipboard. Indiana owns compilation and the clipboard;
+ * Casablanca only triggers and reports.
+ */
+async function copyMarkers(vault: VaultConfig, filters: string[]): Promise<CopyAllResult> {
   const bin = resolveIndianaBinary()
   if (!bin) {
     return {
@@ -193,14 +250,77 @@ export async function copyAllMarkers(vault: VaultConfig): Promise<CopyAllResult>
     }
   }
   try {
-    const { stdout, stderr } = await execFileAsync(bin, ['copy', vault.rootPath], {
-      timeout: 15_000
+    const { stderr } = await execFileAsync(bin, ['copy', vault.rootPath, ...filters], {
+      timeout: 15_000,
+      maxBuffer: 16 * 1024 * 1024
     })
-    const message = (stdout.trim() || stderr.trim()) || 'Copied to clipboard'
-    return { ok: true, message }
+    return { ok: true, message: stderr.trim() || 'Copied to clipboard' }
   } catch (err) {
     const e = err as { stderr?: string; message?: string }
     const message = e.stderr?.trim() || e.message || String(err)
     return { ok: false, message }
+  }
+}
+
+export function copyAllMarkers(vault: VaultConfig): Promise<CopyAllResult> {
+  return copyMarkers(vault, [])
+}
+
+/** Copy one numeric batch (`::fix -1 …`) with the default system prompt. */
+export function copyGroupMarkers(vault: VaultConfig, group: number): Promise<CopyAllResult> {
+  return copyMarkers(vault, ['--group', String(group)])
+}
+
+/** Copy one agent's batch (`::fix -m …`) with that persona's system prompt. */
+export function copyAgentMarkers(vault: VaultConfig, agent: string): Promise<CopyAllResult> {
+  return copyMarkers(vault, ['--agent', agent])
+}
+
+/** Dispatch one numeric batch as a manual agent turn through the daemon. */
+export async function runGroup(vault: VaultConfig, group: number): Promise<DispatchResult> {
+  try {
+    return await daemonRequest<DispatchResult>({
+      cmd: 'rungroup',
+      path: vault.rootPath,
+      group
+    })
+  } catch {
+    return { accepted: false, count: 0 }
+  }
+}
+
+/** Dispatch one agent persona's batch as a manual agent turn through the daemon. */
+export async function runAgent(vault: VaultConfig, agent: string): Promise<DispatchResult> {
+  try {
+    return await daemonRequest<DispatchResult>({
+      cmd: 'runagent',
+      path: vault.rootPath,
+      agent
+    })
+  } catch {
+    return { accepted: false, count: 0 }
+  }
+}
+
+/** A directory name usable as an agent flag token (indiana_core::agents). */
+const AGENT_NAME = /^[a-z][a-z0-9-]*$/
+
+/**
+ * The vault's agent personas: directories under `.indiana/agents/` carrying a
+ * `SYSTEM_PROMPT.md`. Read straight from disk — the roster is a fact of the
+ * folder, not of the daemon.
+ */
+export async function listAgents(vault: VaultConfig): Promise<VaultAgentsResult> {
+  const dir = join(vault.rootPath, '.indiana', 'agents')
+  try {
+    const entries = await fsp.readdir(dir, { withFileTypes: true })
+    const agents = entries
+      .filter((entry) => entry.isDirectory() && AGENT_NAME.test(entry.name))
+      .filter((entry) => existsSync(join(dir, entry.name, 'SYSTEM_PROMPT.md')))
+      .map((entry) => entry.name)
+      .sort()
+    return { agents }
+  } catch {
+    return { agents: [] }
   }
 }

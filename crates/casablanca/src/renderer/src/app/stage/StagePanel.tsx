@@ -1,4 +1,5 @@
 import type { useVault } from '../../storage/useVault'
+import { MarkersPanel } from '../../markers/MarkersPanel'
 import { TasksPanel } from '../../cos/TasksPanel'
 import { FrontmatterPanel } from '../../editor/FrontmatterPanel'
 import { HistoryPanel } from '../../history/HistoryPanel'
@@ -18,6 +19,14 @@ export function StagePanel({
   vault: Vault
 }) {
   const { activeNote, draft, noteVersion, setDraftFrontmatter } = vault
+
+  if (selected === 'markers') {
+    return (
+      <aside className="w-80 shrink-0 border-l border-pane-border bg-pane">
+        <MarkersPanel vault={vault} />
+      </aside>
+    )
+  }
 
   if (selected === 'tasks') {
     return (

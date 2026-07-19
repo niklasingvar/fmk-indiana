@@ -2,9 +2,14 @@
  * Per-repo Casablanca settings at `<root>/.indiana/casablanca/settings.json`
  * (CASABLANCA_OVERVIEW.md). A committable JSON bag shared with the `indiana`
  * CLI (`indiana casablanca get/set`). The editor reads the keys it knows —
- * currently the project `color` — and ignores the rest. Missing/invalid file
+ * currently `color` and `theme` — and ignores the rest. Missing/invalid file
  * degrades to no overrides.
  */
+
+export type RepoTheme = 'light' | 'dark'
+
+/** Relative path of the settings file inside a vault (posix). */
+export const REPO_SETTINGS_REL = '.indiana/casablanca/settings.json'
 
 import { join } from 'node:path'
 import { promises as fs } from 'node:fs'
@@ -29,6 +34,12 @@ export function parseRepoSettings(raw: string): Record<string, unknown> {
 export function repoColorOf(settings: Record<string, unknown>): string | null {
   const color = settings.color
   return typeof color === 'string' && color.trim() ? color : null
+}
+
+/** The `theme` override if settings define `light` or `dark` (pure). */
+export function repoThemeOf(settings: Record<string, unknown>): RepoTheme | null {
+  const theme = settings.theme
+  return theme === 'light' || theme === 'dark' ? theme : null
 }
 
 export async function readRepoSettings(rootPath: string): Promise<Record<string, unknown>> {

@@ -22,7 +22,9 @@ max_lines: 90
 - Lines that do not match the grammar (or sit outside a queue section) are not tasks; machine rewrites preserve them byte-for-byte.
 - `log.md` — the action log. Append-only, machine-written, safe to truncate or delete (history only).
 - Log line grammar: `YYYY-MM-DD HH:MM <event> [<id>] <detail…>` (UTC).
-- Events: `capture` · `claimed` · `done` · `failed` · `resolved` · `task-add` · `task-done`.
+- Events: `capture` · `claimed` · `done` · `failed` · `resolved` · `run` · `task-add` · `task-done`.
+- `runs/<date>-<time>-<job>.md` — one durable audit record per agent turn: outcome, marker files, the streamed transcript (which otherwise dies with the job), and usage when the ACP adapter reports it (per-turn tokens from the prompt response's `usage`; context window and cumulative cost from `usage_update`). Machine-written at turn end, timestamped so a retried id keeps every attempt, safe to delete.
+- The `run` event indexes the record: `run [<job>] <outcome> · <tokens> · <cost> · <record path>`, usage parts present only when reported.
 
 ## Capture and reconcile
 - Runs only at deliberate entry points (`ScanOptions.capture`): daemon rebuilds and explicit `indiana scan <path>`. A plain write scan or `indiana copy` injects ids and nothing else — no folder is turned into a chief-of-staff root as a side effect. `.indiana/` itself is never scanned ([IN_SCAN.md](../indiana/IN_SCAN.md)), so tracker-internal markers are inert and capture cannot loop.

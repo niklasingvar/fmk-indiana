@@ -3,6 +3,9 @@ import type { GitStatusMap, Note, NoteDocument, Project, TreeNode, VaultState } 
 import { isHtmlPath } from '@shared/annotation-line'
 import { applyMarkerClaims, diffMarkerClaims, type MarkerClaimPatch } from '@shared/marker-claim'
 import { parseNoteDocument, serializeNoteDocument } from '@shared/note-serialization'
+import { applyTheme } from '../app/theme'
+
+const SETTINGS_REL = '.indiana/casablanca/settings.json'
 
 const AUTOSAVE_MS = 500
 
@@ -50,6 +53,22 @@ export function useVault() {
     void window.api.vault.get().then((s) => setVaultState(s))
     void refreshProjects()
   }, [refreshProjects])
+
+  // Theme is a per-repo settings.json key — apply whenever vault state carries it.
+  useEffect(() => {
+    if (vaultState.status === 'ready') applyTheme(vaultState.theme)
+  }, [vaultState])
+
+  // Re-read vault state when settings.json changes (in-app save or external edit).
+  useEffect(() => {
+    if (vaultState.status !== 'ready') return
+    return window.api.notes.onChanged((rel) => {
+      if (rel !== SETTINGS_REL) return
+      void window.api.vault.get().then((s) => {
+        if (s.status === 'ready') setVaultState(s)
+      })
+    })
+  }, [vaultState.status])
 
   // Subscribe to tree changes (covers both initial load and external edits).
   useEffect(() => {

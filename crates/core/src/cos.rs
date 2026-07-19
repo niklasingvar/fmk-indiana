@@ -212,6 +212,12 @@ pub fn today() -> String {
     now_stamp().0
 }
 
+/// Full UTC timestamp `YYYY-MM-DD HH:MM` — the same shape log lines carry.
+pub fn now() -> String {
+    let (date, time) = now_stamp();
+    format!("{date} {time}")
+}
+
 /// What the capture pass wrote, so the daemon can suppress its own writes.
 #[derive(Debug, Default)]
 pub struct CaptureReport {

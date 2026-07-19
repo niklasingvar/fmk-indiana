@@ -14,13 +14,25 @@ import type { ProjectRecord } from '@shared/projects'
 import {
   agentJobs,
   answerAgentJob,
+  copyAgentMarkers,
   copyAllMarkers,
+  copyGroupMarkers,
   ensureMonitored,
   jobTranscript,
+  listAgents,
+  listMarkers,
   listTasks,
+  runAgent,
+  runGroup,
   tailLog
 } from './lib/indiana'
-import { ensureRepoDefaults } from './lib/repo-settings'
+import {
+  ensureRepoDefaults,
+  readRepoSettings,
+  repoThemeOf,
+  REPO_SETTINGS_REL
+} from './lib/repo-settings'
+import { listRuns, readRun } from './lib/agent-runs'
 import { appendAnnotation } from './lib/annotations'
 import { ensureRepo, gitDiffCommit, gitDiffHead, gitLog, gitStatus } from './lib/git'
 import { deleteEntry, revealEntry } from './lib/file-operations'
@@ -55,11 +67,15 @@ export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcReg
     return vault
   }
 
-  const readyState = (a: ProjectRecord): VaultState => ({
-    status: 'ready',
-    rootPath: a.rootPath,
-    color: a.color
-  })
+  const readyState = async (a: ProjectRecord): Promise<VaultState> => {
+    const theme = repoThemeOf(await readRepoSettings(a.rootPath)) ?? 'light'
+    return {
+      status: 'ready',
+      rootPath: a.rootPath,
+      color: a.color,
+      theme
+    }
+  }
 
   /** Adopt a new active project: update state, re-target the watcher, push a refresh. */
   const adopt = async (a: ProjectRecord | null): Promise<VaultState> => {
@@ -78,7 +94,7 @@ export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcReg
     }
     deps.retargetWatcher(vault)
     await refresh()
-    return a ? readyState(a) : { status: 'unset' }
+    return a ? await readyState(a) : { status: 'unset' }
   }
 
   const refresh = async (): Promise<void> => {
@@ -101,7 +117,7 @@ export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcReg
 
   // --- project lifecycle ------------------------------------------------
 
-  handle(IPC.VAULT_GET, async () => (active ? readyState(active) : { status: 'unset' }))
+  handle(IPC.VAULT_GET, async () => (active ? await readyState(active) : { status: 'unset' }))
 
   handle(IPC.PROJECTS_LIST, async () => listProjects())
 
@@ -143,6 +159,11 @@ export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcReg
   handle(IPC.NOTE_WRITE, async (rel: unknown, content: unknown) => {
     const note = await writeNote(requireVault(), String(rel), String(content))
     await refresh()
+    // Settings edits apply theme (and other vault-facing keys) without a restart.
+    const posix = String(rel).split('\\').join('/')
+    if (posix === REPO_SETTINGS_REL) {
+      sender.webContents.send(IPC.NOTE_CHANGED, posix)
+    }
     return note
   })
 
@@ -182,6 +203,20 @@ export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcReg
   // --- indiana ------------------------------------------------------------
 
   handle(IPC.INDIANA_COPY_ALL, async () => copyAllMarkers(requireVault()))
+  handle(IPC.INDIANA_COPY_GROUP, async (group: unknown) =>
+    copyGroupMarkers(requireVault(), Number(group))
+  )
+  handle(IPC.INDIANA_COPY_AGENT, async (agent: unknown) =>
+    copyAgentMarkers(requireVault(), String(agent))
+  )
+  handle(IPC.INDIANA_RUN_GROUP, async (group: unknown) =>
+    runGroup(requireVault(), Number(group))
+  )
+  handle(IPC.INDIANA_RUN_AGENT, async (agent: unknown) =>
+    runAgent(requireVault(), String(agent))
+  )
+  handle(IPC.INDIANA_AGENTS, async () => listAgents(requireVault()))
+  handle(IPC.INDIANA_MARKERS, async () => listMarkers(requireVault()))
   handle(IPC.INDIANA_JOBS, async () => agentJobs())
   handle(IPC.INDIANA_ANSWER_JOB, async (jobId: unknown, action: unknown, answer: unknown) =>
     answerAgentJob(
@@ -198,6 +233,8 @@ export async function registerIpc(sender: Sender, deps: IpcDeps): Promise<IpcReg
 
   handle(IPC.COS_TASKS, async () => listTasks(requireVault()))
   handle(IPC.COS_LOG, async (lines: unknown) => tailLog(requireVault(), Number(lines) || 15))
+  handle(IPC.COS_RUNS, async () => listRuns(requireVault()))
+  handle(IPC.COS_RUN_READ, async (file: unknown) => readRun(requireVault(), String(file)))
 
   // The tasks panel appends markers through the live editor (one writer per
   // open note — see renderer/src/editor/MarkerAppendPlugin), so there is

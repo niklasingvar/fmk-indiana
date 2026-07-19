@@ -1,6 +1,7 @@
 import chokidar, { type FSWatcher } from 'chokidar'
-import { sep } from 'node:path'
-import { BrowserWindow } from 'electron'
+import { relative, sep } from 'node:path'
+// Type-only: keeps this module loadable outside Electron (vitest).
+import type { BrowserWindow } from 'electron'
 import { IPC } from '@shared/ipc'
 import { readTree } from './lib/vault'
 import { gitStatus } from './lib/git'
@@ -58,19 +59,37 @@ export function watchVault(vault: VaultConfig, getWindow: () => BrowserWindow | 
     )
   }
 
+  const isRelevantFile = (posix: string): boolean =>
+    /\.(md|mdx|html?)$/i.test(posix) || posix === '.indiana/casablanca/settings.json'
+
+  // Chokidar v4 dropped glob support, so we watch the vault root and filter by
+  // extension in `ignored` (dirs must pass through so recursion continues).
   return chokidar
-    .watch(['**/*.md', '**/*.mdx', '**/*.html', '**/*.htm'], {
+    .watch('.', {
       cwd: vault.rootPath,
       ignoreInitial: true,
       // Dotfolders like .indiana are watched; only heavy/derived dirs are not.
-      ignored: (p: string) => /(^|[/\\])(\.git|node_modules|target|dist|out)([/\\]|$)/.test(p),
+      // `p` is absolute; `stats` is present for files once chokidar stats them.
+      ignored: (p: string, stats) => {
+        if (/(^|[/\\])(\.git|node_modules|target|dist|out)([/\\]|$)/.test(p)) return true
+        if (!stats?.isFile()) return false
+        return !isRelevantFile(relative(vault.rootPath, p).split(sep).join('/'))
+      },
       awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 }
     })
     .on('all', (event, path) => {
+      const posix = path.split(sep).join('/')
+      const isDirEvent = event === 'addDir' || event === 'unlinkDir'
+      if (!isDirEvent && !isRelevantFile(posix)) return
       push()
       if (event === 'add' || event === 'change') {
-        if (/\.html?$/i.test(path)) pushPreview(path)
-        if (/\.mdx?$/i.test(path)) pushNote(path)
+        if (/\.html?$/i.test(posix)) pushPreview(path)
+        if (/\.mdx?$/i.test(posix)) pushNote(path)
+        // Theme (and other editor prefs) live in settings.json — push so the
+        // renderer can re-read vault state without a project switch.
+        if (posix === '.indiana/casablanca/settings.json') {
+          pushNote(path)
+        }
       }
     })
 }

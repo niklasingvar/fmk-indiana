@@ -47,6 +47,48 @@ export interface CopyAllResult {
   message: string
 }
 
+/** Claim status the daemon stamps into a marker's `[id:status]` bracket. */
+export type MarkerStatus = 'working' | 'done' | 'failed'
+
+/** One `::` marker found by `indiana scan`, path vault-relative. */
+export interface VaultMarker {
+  path: string
+  /** 1-based line in the file (frontmatter included). */
+  line: number
+  kind: string
+  /** The token as written, e.g. `::fix` or the alias `::f`. */
+  rawToken: string
+  message?: string
+  /** Numeric batch label (`-1`, `-2`, …). Mutually exclusive with `agent`. */
+  group?: number
+  /** Named agent persona (`-m` / `-mike`), canonical name. */
+  agent?: string
+  id?: string
+  status?: MarkerStatus
+}
+
+/** `available: false` = indiana binary missing or the scan failed. */
+export interface VaultMarkersResult {
+  available: boolean
+  markers: VaultMarker[]
+}
+
+/**
+ * Agent personas defined in the vault: the directory names under
+ * `.indiana/agents/` that carry a `SYSTEM_PROMPT.md`. Sorted.
+ */
+export interface VaultAgentsResult {
+  agents: string[]
+}
+
+/** Outcome of dispatching one batch (numeric group or agent persona). */
+export interface DispatchResult {
+  /** False when the batch was empty, the daemon is offline, or a turn runs. */
+  accepted: boolean
+  /** Number of markers claimed for this turn. */
+  count: number
+}
+
 /** A live ACP agent process, projected by the Indiana daemon. */
 export interface AgentJob {
   id: string
@@ -133,6 +175,31 @@ export interface CosLogResult {
   entries: CosLogEntry[]
 }
 
+/**
+ * One durable agent-run audit record under `.indiana/chief-of-staff/runs/`
+ * (COS_PRD.md), summarized for the runs panel list. `file` is the record's
+ * filename; the full markdown is fetched on selection.
+ */
+export interface AgentRun {
+  file: string
+  jobId: string
+  outcome: 'done' | 'failed' | 'unknown'
+  /** `YYYY-MM-DD HH:MM` (UTC). */
+  started: string
+  /** Stop reason or failure note, when the record carries one. */
+  detail?: string
+  /** e.g. `in 1234 out 567 tok` — as written in the record. */
+  tokens?: string
+  /** e.g. `0.4321 USD` — as written in the record. */
+  cost?: string
+}
+
+/** `available: false` = no runs folder yet (nothing has run). */
+export interface AgentRunsResult {
+  available: boolean
+  runs: AgentRun[]
+}
+
 /** Marker kinds offered by the HTML-preview annotation bubble. */
 export type AnnotationKind =
   | 'question'
@@ -194,7 +261,9 @@ export interface GitLogEntry {
   subject: string
 }
 
+export type VaultTheme = 'light' | 'dark'
+
 export type VaultState =
   | { status: 'unset' }
-  | { status: 'ready'; rootPath: string; color: string }
+  | { status: 'ready'; rootPath: string; color: string; theme: VaultTheme }
   | { status: 'error'; message: string }

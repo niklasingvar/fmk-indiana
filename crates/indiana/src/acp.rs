@@ -41,6 +41,14 @@ fn resolve_command(command: &str) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(command))
 }
 
+/// How one completed turn ended: the ACP `stopReason` plus the optional
+/// (unstable-spec) `usage` object from the `session/prompt` response —
+/// per-turn token counts when the adapter reports them.
+pub struct TurnOutcome {
+    pub stop_reason: String,
+    pub usage: Option<Value>,
+}
+
 /// A spawned ACP agent adapter and its stdio, mid-conversation.
 pub struct AcpAgent<W: Write> {
     child: Child,
@@ -80,7 +88,8 @@ impl<W: Write> AcpAgent<W> {
         })
     }
 
-    /// Drive one full turn. Returns the turn's `stopReason` (e.g. `end_turn`).
+    /// Drive one full turn. Returns the turn's outcome: `stopReason` (e.g.
+    /// `end_turn`) plus the prompt response's `usage` when present.
     /// `on_update` receives every `session/update` notification's params so the
     /// caller can project the agent's streamed work (transcript).
     pub fn run_turn<F, U>(
@@ -90,7 +99,7 @@ impl<W: Write> AcpAgent<W> {
         model: Option<&str>,
         on_elicitation: &mut F,
         on_update: &mut U,
-    ) -> io::Result<String>
+    ) -> io::Result<TurnOutcome>
     where
         F: FnMut(&Value) -> io::Result<Value>,
         U: FnMut(&Value),
@@ -155,11 +164,14 @@ impl<W: Write> AcpAgent<W> {
             on_elicitation,
             on_update,
         )?;
-        Ok(result
-            .get("stopReason")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown")
-            .to_string())
+        Ok(TurnOutcome {
+            stop_reason: result
+                .get("stopReason")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+                .to_string(),
+            usage: result.get("usage").filter(|u| !u.is_null()).cloned(),
+        })
     }
 
     /// Send a request and pump the connection until its response arrives,

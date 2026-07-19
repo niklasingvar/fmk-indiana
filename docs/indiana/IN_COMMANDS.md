@@ -18,6 +18,7 @@ approval: pending
 - Agent persona flag: `-<agent-name>` before the message tags the marker for a named agent defined in `.indiana/agents/<name>/SYSTEM_PROMPT.md` — `::fix -mike create this task`. A single letter works while exactly one agent starts with it (`-m` → mike); on a collision the letter stops resolving and stays message text, full names still work. Copying or dispatching an agent batch prepends that agent's system prompt instead of the default. A numeric group and an agent flag are mutually exclusive — the second flag of the other dimension stops the flag scan and stays message text. `-a` may coexist with either.
 - Inside a code fence → ignored.
 - Frontmatter property comments use `# frontmatter.<key> ::<cmd> [message]`; their inline scope is the named property.
+- File opt-out: `::ignore` in the frontmatter (or as a first-line comment in files without one) removes the whole file from scanning. It is a directive, not a marker kind — details in [IN_SCAN.md](IN_SCAN.md).
 - Why `::` (not `[]`): survives every markdown parser; `rg '^::'` has zero false positives.
 
 ## Identity and scope

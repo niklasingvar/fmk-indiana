@@ -31,6 +31,7 @@ approval: approved
 - Add validation: write tests for invalid inputs, then make them pass.
 - Fix a bug: write a test that reproduces it, then make it pass.
 - Refactor: ensure tests pass before and after.
+- Upgrade a dependency across a major version: read its breaking changes and cover the behavior we rely on with a test. Silent API narrowing is real: chokidar v4 dropped glob support and the watcher watched nothing, without any error.
 - For multi-step tasks, state a brief plan with verification for each step.
 - Strong success criteria let the agent loop independently.
 - Weak success criteria require clarification.

@@ -3,10 +3,10 @@ status: draft
 purpose: The destination — what the whole system becomes. The shipped wedge is docs/PURPOSE.md; conflicts resolve toward this file via ACTION_PLAN.md.
 approval: pending
 ---
-
 # AI-Native Workspace with domain specific langauge, Learning Loops and an Opinionated Context Engineering
 
 *The components (codenames live only here — paths and specs use the canonical names, see [MENTAL_MODEL.md](MENTAL_MODEL.md)):*
+
 - **Indiana** · headless sniffer and command engine (with CLI)
 - **Casablanca** · the editor — rich markdown editing, with visual/presentation support as features
 - **Chief of Staff** · human/agent focus management — ADHD style

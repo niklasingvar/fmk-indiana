@@ -1,3 +1,5 @@
 {
-  "maxRowsPerFile": 120
+  "maxRowsPerFile": 120,
+  "autoRun": true,
+  "theme": "light"
 }

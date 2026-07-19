@@ -33,12 +33,20 @@ export const IPC = {
   ANNOTATION_APPEND: 'annotation:append',
 
   INDIANA_COPY_ALL: 'indiana:copy-all',
+  INDIANA_COPY_GROUP: 'indiana:copy-group',
+  INDIANA_COPY_AGENT: 'indiana:copy-agent',
+  INDIANA_RUN_GROUP: 'indiana:run-group',
+  INDIANA_RUN_AGENT: 'indiana:run-agent',
+  INDIANA_AGENTS: 'indiana:agents',
+  INDIANA_MARKERS: 'indiana:markers',
   INDIANA_JOBS: 'indiana:jobs',
   INDIANA_ANSWER_JOB: 'indiana:answer-job',
   INDIANA_JOB_TRANSCRIPT: 'indiana:job-transcript',
 
   COS_TASKS: 'cos:tasks',
-  COS_LOG: 'cos:log'
+  COS_LOG: 'cos:log',
+  COS_RUNS: 'cos:runs',
+  COS_RUN_READ: 'cos:run-read'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

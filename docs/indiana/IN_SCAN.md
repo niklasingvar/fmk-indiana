@@ -30,6 +30,13 @@ approval: pending
 - YAML frontmatter: a leading `---` block at file start (line 1, closed by the next `---`) is ignored except for explicit column-zero property comments shaped `# frontmatter.<key> ::<cmd>`. Values, ordinary comments, and indented block-scalar content stay inert. This is the only `---` special case — a thematic break mid-document never starts one.
 - Indented code blocks are not detected. A `::` inside a 4-space block still resolves by the column-0 / end-of-line rule; we do not track paragraph state to exclude it. Simplicity over completeness.
 
+## File opt-out
+- A file can opt out of scanning entirely with `::ignore`. An ignored file contributes no markers, no warnings, and never gets IDs injected.
+- Markdown form: a `::ignore` line (or the YAML-safe comment `# ::ignore`) inside the leading frontmatter block. Indented occurrences (block scalars quoting the directive) stay inert, like every other frontmatter line.
+- Comment form: for files without frontmatter, a first line bearing only `::ignore` behind a comment leader (`// ::ignore`, `# ::ignore`, `<!-- ::ignore -->`, `/* ::ignore */`), or bare. Eslint-style; defined now so the rule holds when non-markdown scanning ships — today the walk only visits `.md`.
+- `ignore` is a directive, not a marker kind: `::ignore` in body prose is inert text, never tracked, never compiled.
+- Checked once per file before line parsing (`file_ignored` in the parser); the chokepoint is `scan_file_with`, so every entry point — full walk, per-path rescans, dispatch — honors it.
+
 ## Walk and watch
 - Startup: full walk of all markdown under the repo root.
 - Steady state: event-driven via FSEvents; ~300 ms debounce after the last change.

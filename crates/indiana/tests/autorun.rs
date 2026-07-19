@@ -219,6 +219,58 @@ fn test_autorun_success_resolves_and_commits() {
     );
 }
 
+// E13: every turn leaves a durable audit record under
+// `.indiana/chief-of-staff/runs/` — outcome, transcript, and token usage —
+// indexed by one `run` line in the action log.
+#[test]
+fn test_run_leaves_audit_record_with_usage() {
+    let home = unique("home");
+    let repo = git_repo_with("intro\n::fix -a fix the typo\n");
+    write_config(&home, &repo, "succeed", true);
+    let commits_before = git_log_count(&repo);
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+    assert!(wait_until(|| git_log_count(&repo) > commits_before));
+
+    let runs = repo.join(".indiana/chief-of-staff/runs");
+    assert!(
+        wait_until(|| std::fs::read_dir(&runs)
+            .map(|d| d.count() > 0)
+            .unwrap_or(false)),
+        "no run record was written"
+    );
+    let entry = std::fs::read_dir(&runs).unwrap().next().unwrap().unwrap();
+    let record = std::fs::read_to_string(entry.path()).unwrap();
+    assert!(record.contains("- outcome: done"), "record: {record}");
+    assert!(
+        record.contains("- tokens: in 1234 out 567 tok"),
+        "per-turn tokens from the prompt response: {record}"
+    );
+    assert!(
+        record.contains("- context: 45000 of 200000 tokens used"),
+        "context window from usage_update: {record}"
+    );
+    assert!(record.contains("- cost: 0.1234 USD"), "record: {record}");
+    assert!(
+        record.contains("mock agent working"),
+        "transcript survives the job: {record}"
+    );
+
+    // The action log indexes the record with one `run` line carrying usage.
+    assert!(
+        wait_until_file(&repo.join(".indiana/chief-of-staff/log.md"), |log| {
+            log.lines().any(|l| {
+                l.contains(" run [")
+                    && l.contains("in 1234 out 567 tok")
+                    && l.contains(".indiana/chief-of-staff/runs/")
+            })
+        }),
+        "run line missing from action log: {:?}",
+        std::fs::read_to_string(repo.join(".indiana/chief-of-staff/log.md"))
+    );
+}
+
 // E13: an ACP form question surfaces as a live daemon job, accepts a human
 // answer over the socket, and resumes the same turn.
 #[test]

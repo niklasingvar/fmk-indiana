@@ -6,7 +6,6 @@ command: todo
 command_type: user_task
 message: required
 ---
-
 # ::todo[fo-lo] — user task (passthrough): the message is the prompt.
 
 {message}

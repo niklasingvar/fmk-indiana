@@ -44,6 +44,9 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
 ```
 <root>/.indiana/
   SYSTEM_PROMPT.md
+  agents/
+    mike/SYSTEM_PROMPT.md
+    lisa/SYSTEM_PROMPT.md
   indianas/
     fix/prompt.md
     question/prompt.md
@@ -68,6 +71,7 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
     log.md
     notes.md
     focus.md
+    runs/            (created on first agent turn, not scaffolded)
   casablanca/
     settings.json
 ```
@@ -78,6 +82,16 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
   embedded; invalid falls back with a warning. If the instance `version` is
   behind the embedded version, a warning tells the operator to delete the file
   and refresh — never auto-overwrite. `templates replace` does not touch it.
+- `.indiana/agents/<name>/SYSTEM_PROMPT.md` — one file per agent persona, the
+  same frontmatter format as `SYSTEM_PROMPT.md` and a full standalone
+  replacement for it. A marker tagged `-<name>` (or the unique first letter,
+  [IN_COMMANDS.md](IN_COMMANDS.md)) copies and dispatches with that agent's
+  prompt. The directory roster *is* the agent registry: adding a folder with a
+  valid flag-safe name (lowercase letter first; letters, digits, hyphens)
+  defines a new agent, no other wiring. Mike (chief of staff, organizer) and
+  Lisa (CTO — systems thinker, domain modeller, architecture) are scaffolded by
+  default from `crates/core/templates/agents/`; existing files are never
+  overwritten.
 - Command templates live under `.indiana/indianas/`, one folder per long marker name:
   - `.indiana/indianas/fix/prompt.md`
   - `.indiana/indianas/question/prompt.md`
@@ -94,12 +108,16 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
   works in roots scaffolded before they existed. `indiana task add|list|done`
   and `indiana log` are the CLI face; `--json` is the agent surface. (A stale
   `todos.db` from the retired `indiana todo` stub is inert; delete freely.)
+  `runs/` holds one machine-written audit record per agent turn — outcome,
+  transcript, token usage ([COS_PRD.md](../chief-of-staff/COS_PRD.md)); created
+  on first dispatch, safe to delete, history only.
 - `.indiana/casablanca/settings.json` — per-repo [Casablanca](../casablanca/CASABLANCA_OVERVIEW.md)
   settings: a committable JSON bag the editor, the daemon, and the CLI share.
   Created on first write, not by scaffolding. Known keys: `color` (the editor's
-  project color, overrides its global registry) and `autoRun` (per-repo auto-run
-  opt-in the daemon reads) and `model` (optional ACP model value selected before
-  the turn, [IN_AUTORUN.md](IN_AUTORUN.md)) and `maxRowsPerFile` (the elephant
+  project color, overrides its global registry), `theme` (`light` | `dark` —
+  Casablanca editor palette; no in-app toggle), `autoRun` (per-repo auto-run
+  opt-in the daemon reads), `model` (optional ACP model value selected before
+  the turn, [IN_AUTORUN.md](IN_AUTORUN.md)), and `maxRowsPerFile` (the elephant
   ceiling, [FUNDAMENTALS.md](../../FUNDAMENTALS.md); declared, no reader yet);
   unknown keys are ignored. `indiana
   casablanca get|set|settings|path` is the CLI face — a per-repo input store, not

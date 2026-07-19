@@ -60,6 +60,7 @@ approval: pending
 | [IN_SCAN.md](IN_SCAN.md) | Exclude `.indiana/` from walk | `test_exclude_indiana_dir` — fixture with `.indiana/scratch.md` containing `::h` → not in results |
 | [IN_SCAN.md](IN_SCAN.md) | `rg`-style: column-0 and inline only | Already covered by E1 |
 | [IN_SCAN.md](IN_SCAN.md) | Non-markdown files skipped | `test_skip_non_markdown` — `.txt`, `.rs`, `.json` files with `::h` → none detected |
+| [IN_SCAN.md](IN_SCAN.md) | `::ignore` opts a file out: no markers, no warnings, no ID injection | `test_ignored_file_contributes_nothing`; forms and negatives: `test_file_ignored_frontmatter`, `test_file_ignored_first_line_comment`, `test_file_ignored_negative_cases`, `test_ignore_token_is_not_a_marker` |
 
 ## E6 — ID injection: write path
 | Ref | Requirement | Test |

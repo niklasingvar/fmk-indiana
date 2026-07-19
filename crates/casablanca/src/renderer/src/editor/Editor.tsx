@@ -19,6 +19,7 @@ import { MarkdownPlugin, MARKDOWN_TRANSFORMERS } from './plugins/MarkdownPlugin'
 import { MarkerAppendPlugin } from './plugins/MarkerAppendPlugin'
 import { MarkerClaimPlugin, type MarkerClaimSignal } from './plugins/MarkerClaimPlugin'
 import { MarkerHighlightPlugin } from './plugins/MarkerHighlightPlugin'
+import { MarkerRevealPlugin } from './plugins/MarkerRevealPlugin'
 import { MentionLinkPlugin } from './plugins/MentionLinkPlugin'
 
 interface Props {
@@ -138,6 +139,7 @@ export function LexicalEditor({ markdown, onChange, onOpenLink, notePath, filePa
       <AutoFocusPlugin />
       <MarkerHighlightPlugin />
       <MarkerAppendPlugin />
+      {notePath && <MarkerRevealPlugin notePath={notePath} />}
       <MarkerClaimPlugin patch={claimPatch ?? null} />
       <MarkdownPlugin markdown={markdown} onChange={onChange} transformers={MARKDOWN_TRANSFORMERS} />
     </LexicalComposer>

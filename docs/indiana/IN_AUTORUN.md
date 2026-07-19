@@ -30,6 +30,7 @@ approval: pending
 ## Transport — ACP
 - The daemon is an ACP *client*; the agent adapter (default `npx -y @zed-industries/claude-code-acp`, fetched/cached on first use — needs Node, [../DISTRO.md](../DISTRO.md)) is the *agent*. Newline-delimited JSON-RPC over the child's stdio — hand-rolled, no async runtime, same stance as [IN_MCP.md](IN_MCP.md).
 - One turn: `initialize` → `session/new { cwd = owning root }` → `session/prompt`. Streamed `session/update` events are logged to `~/.indiana/dispatch/<id>.log` and projected into an in-memory per-job transcript, served to faces via the `jobtranscript` socket command (since-seq polling; dies with the job — [../casablanca/CASABLANCA_AGENT_JOBS.md](../casablanca/CASABLANCA_AGENT_JOBS.md)).
+- At turn end the transcript, outcome, and usage (`usage_update` context/cost plus the prompt response's per-turn tokens, when the adapter sends them) are persisted as one repo-local audit record under `.indiana/chief-of-staff/runs/`, indexed by a `run` action-log line ([COS_PRD.md](../chief-of-staff/COS_PRD.md)).
 - **Full autonomy**: `session/request_permission` is auto-granted (allow-always preferred), and `fs/*` requests are served against the working tree, so edits and `git` run with no human. A per-repo policy is a later refinement.
 - Adapter resolution mirrors the other binaries: standard locations then PATH, overridable by `config.agent.command` (plus `args`, `env`).
 

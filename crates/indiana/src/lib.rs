@@ -8,4 +8,5 @@ pub mod dispatch;
 pub mod mcp;
 pub mod paths;
 pub mod protocol;
+pub mod run_record;
 pub mod service;
