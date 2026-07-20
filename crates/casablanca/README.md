@@ -42,6 +42,11 @@ npm run dev
 On first launch, choose a vault folder (any directory; markdown notes live
 there). Notes autosave as you type.
 
+`npm run dev` opens a separate Electron window — use that. Do not open the
+dev-server URL (`http://localhost:5173`/`5174`) in a browser: it serves only
+the renderer, has no `window.api`, and will always show the "runs in Electron"
+error screen.
+
 ## Phases
 
 1. Scaffold + 3-pane shell

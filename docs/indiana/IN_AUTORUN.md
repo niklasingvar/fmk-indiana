@@ -50,9 +50,14 @@ approval: pending
 
 ## Config
 - Per-repo opt-in: `autoRun: true` in `<repo>/.indiana/casablanca/settings.json` — committable, travels with the repo, set by `indiana casablanca set autoRun true` or by opening the repo in Casablanca. This is the primary control.
-- Per-repo model: optional `model: "sonnet"` in the same file, set by `indiana casablanca set model sonnet`. The daemon selects that value through ACP session config before prompting; unset leaves the adapter default, and unsupported values fail the turn rather than silently using another model.
+- Per-repo model: optional `model: "sonnet"` in the same file, set by `indiana casablanca set model sonnet`. The daemon selects that value through ACP session config before prompting; unset leaves the adapter default, and unsupported values fail the turn rather than silently using another model. Model value strings are adapter-specific (claude: `sonnet`; opencode: `openrouter/anthropic/claude-haiku-4.5`; cursor: `claude-sonnet-5[thinking=true,context=300k,effort=high]`).
+- Per-repo provider: optional `provider: "cursor"` in the same file, set by `indiana casablanca set provider cursor`. Names the agent that runs this repo's turns: built-ins `claude` (the default adapter), `opencode`, and `cursor`, overridable/extendable by `config.agents`. Unset falls back to `config.agent`; an unknown name fails the turn rather than silently using another agent.
 - `config.auto_run: bool` (`~/.indiana/config.json`) — the global default when a repo hasn't set `autoRun`; default off. Reloaded each cycle.
-- `config.agent: { command, args, env }` — how to launch the ACP adapter (machine-level, stays global). Default `npx -y @zed-industries/claude-code-acp`; set `command` to an installed bin with empty `args` to skip npx.
+- `config.agent: { command, args, env, auth_method }` — the ACP adapter for repos that name no provider (machine-level, stays global). Default `npx -y @zed-industries/claude-code-acp`; set `command` to an installed bin with empty `args` to skip npx. `auth_method` (optional) names an ACP auth method to `authenticate` with after `initialize` — for adapters that gate `session/new` behind login.
+- `config.agents: { <name>: { command, args, env, auth_method } }` — named agents selectable per repo via `provider`; a name here wins over the built-in of the same name.
+- Verified built-ins:
+  - opencode: `opencode acp` — same ACP v1 handshake, exposes a `model` config option, uses its own provider auth (`opencode auth login`). Caveat: opencode swallows provider errors — a failed model call still returns `stopReason: end_turn` with zero tokens; the file-based completion check catches it as `failed`, but the reason is only in opencode's own logs (`~/.local/share/opencode/log/`).
+  - cursor: `agent acp` with `auth_method: "cursor_login"` — requires `authenticate` before `session/new`, authenticates via `agent login` / existing Cursor credentials, exposes a `model` config option, reports no `usage` on the prompt response (run records carry no token counts).
 
 ## Recovery
 - A `working` marker with no live turn (daemon restarted mid-run, or a prior cycle crashed) is re-dispatched best-effort on the next scan.

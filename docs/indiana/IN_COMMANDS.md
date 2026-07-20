@@ -10,7 +10,7 @@ approval: pending
 > Single source of truth for the `::` markers. One indiana is one `::` command in the source. They belong to [Indiana](IN_PRD.md): it monitors repos, parses these markers, and compiles them on `indiana copy`. Agents read them over [IN_MCP.md](IN_MCP.md); the [Menulet](../menulet/MENULET_PRD.md) only displays Indiana's output; [Casablanca](../casablanca/CASABLANCA_OVERVIEW.md) emits markers from rendered views but never parses or compiles them.
 
 ## Syntax
-- `::<cmd>` at column 0, or inline at end of a content line.
+- `::<cmd>` at column 0, or inline at end of a content line — the `::` preceded by whitespace. A glued `::` (`std::fs`, `Kind::Action`) is a path separator, never a marker; this is what lets the scan cover code files, where markers ride comments (`// ::fix rename this`).
 - Short or long form, e.g. `::h` == `::hate`.
 - A message follows the token only when the kind takes one (see the table; pure reactions take none).
 - Auto-run flag: `-a` / `--auto` immediately after the token (before the message) asks the daemon to run this marker at once over ACP — `::fix -a banana`. Honored only on agent directives that act directly (`::fix`, `::elaborate`, `::prompt`); on any other kind a leading `-a` is ordinary message text. The daemon claims the marker (`::fix[id:working] -a …` — the flag stays in source; the bracket status gates dispatch), dispatches, and the agent resolves it by deleting the line. Full lifecycle: [IN_AUTORUN.md](IN_AUTORUN.md).

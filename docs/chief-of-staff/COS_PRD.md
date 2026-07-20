@@ -23,7 +23,8 @@ max_lines: 90
 - `log.md` — the action log. Append-only, machine-written, safe to truncate or delete (history only).
 - Log line grammar: `YYYY-MM-DD HH:MM <event> [<id>] <detail…>` (UTC).
 - Events: `capture` · `claimed` · `done` · `failed` · `resolved` · `run` · `task-add` · `task-done`.
-- `runs/<date>-<time>-<job>.md` — one durable audit record per agent turn: outcome, marker files, the streamed transcript (which otherwise dies with the job), and usage when the ACP adapter reports it (per-turn tokens from the prompt response's `usage`; context window and cumulative cost from `usage_update`). Machine-written at turn end, timestamped so a retried id keeps every attempt, safe to delete.
+- `runs/<date>-<time>-<job>.md` — one durable audit record per agent turn, structured-first: the facts (job, outcome, timestamps, markers, per-turn tokens from the prompt response's `usage`, context window and cumulative cost from `usage_update`) live as YAML frontmatter; the markdown body carries the transcript (which otherwise dies with the job). Machine-written at turn end, timestamped so a retried id keeps every attempt; pruned to the newest 200, safe to delete.
+- The record grammar exists in one language: `run_record.rs` writes and parses; `indiana runs [-n N] [--json]` is the face surface. Faces never parse record files themselves.
 - The `run` event indexes the record: `run [<job>] <outcome> · <tokens> · <cost> · <record path>`, usage parts present only when reported.
 
 ## Capture and reconcile
@@ -36,9 +37,10 @@ max_lines: 90
 - Known tradeoff: deleting or gitignoring a whole source file resolves its tasks as `[x]` (gone ≠ done; indistinguishable from marker removal).
 
 ## Faces
-- CLI: `indiana task add [--queue agent|human]` (default human — a typed add is operator intent), `indiana task list [--queue] [--state open|working|done|failed|all]` (default open+working), `indiana task done <id>`, `indiana log [-n N]`. Each takes `--root` and `--json`. Only a confirmed write reports success: a write that loses the mtime race twice fails with "tracker is busy" instead of printing a phantom id.
+- CLI: `indiana task add [--queue agent|human]` (default human — a typed add is operator intent), `indiana task list [--queue] [--state open|working|done|failed|all]` (default open+working), `indiana task done <id>`, `indiana log [-n N]`, `indiana runs [-n N]`. Each takes `--root` and `--json`. Only a confirmed write reports success: a write that loses the mtime race twice fails with "tracker is busy" instead of printing a phantom id.
 - Daemon: dispatch lifecycle appends `claimed`/`done`/`failed` for auto-run and group turns.
 - Casablanca: the tasks panel renders both queues and the recent log, refreshes only when tasks.md/log.md actually change, and jumps to a task's origin. It reads through the CLI `--json` — core computes, faces render. The composer appends markers through the live editor (one writer per open note), never straight to disk beneath a dirty buffer.
+- Casablanca: the Agent runs panel (top-right bolt icon) lists `runs/` records newest first — outcome, tokens, cost — through `indiana runs --json`, and shows the selected record's transcript read raw for display. No daemon involved, so history is browsable while it is offline.
 
 ## Guarantees
 - Machine writes go read → mtime-guard → single-line change or append → atomic replace → one retry — the write.rs discipline. Worst case a write retries on the next scan; nothing is lost.

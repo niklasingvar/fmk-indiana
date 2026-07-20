@@ -23,6 +23,7 @@ approval: pending
 ## Casablanca plumbing
 - Socket client `main/lib/indiana.ts` → IPC invoke channels `indiana:jobs`, `indiana:answer-job`, `indiana:job-transcript` (`shared/ipc.ts`, `main/ipc.ts`) → preload `window.api.indiana` (`preload/index.ts`).
 - `useAgentJobs` polls `jobs` at 1s; an open follow popover polls `jobtranscript` at 1s (`renderer/src/app/agents/useAgentJobs.ts`, `renderer/src/app/agents/JobFollowPopover.tsx`). Compact indicators render left of the stage panel icons (`AgentIndicators.tsx` via `TopBar.tsx`).
+- Batch dispatch is never invisible (`GroupButtons.tsx`): on accept the batch button spins immediately (`launching` bridges the gap until the 1s jobs poll sees the turn, with an 8s grace for turns that end between polls), the button stays a spinner (or `?` while awaiting input) for the whole turn and opens the follow popover on click (`shared/batch-job.ts` maps `group-N-`/`agent-name-` job-id prefixes to buttons), rejection and turn-end show a visible toast under the button — not just a tooltip.
 
 ## Editor adoption ladder
 - `note:changed` (main watcher push) re-reads the open note; `useVault.ts` picks the first matching branch:

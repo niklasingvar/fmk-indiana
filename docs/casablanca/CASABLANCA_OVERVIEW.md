@@ -17,5 +17,5 @@ approval: pending
 
 ## Per-repo settings
 - Repo-local settings live in `.indiana/casablanca/settings.json` ([IN_FOLDER.md](../indiana/IN_FOLDER.md)) — a committable JSON bag, so a repo carries its own editor preferences and the CLI can read/edit them: `indiana casablanca get|set|settings|path`.
-- The editor reads the keys it knows and ignores the rest. Known editor keys: `color` (project identity color, overrides the global registry) and `theme` (`light` | `dark` — no in-app toggle; edit the file). The Indiana daemon reads `autoRun` and optional `model` for repo-local agent dispatch ([IN_AUTORUN.md](../indiana/IN_AUTORUN.md)).
+- The editor reads the keys it knows and ignores the rest. Known editor keys: `color` (project identity color, overrides the global registry) and `theme` (`light` | `dark` — no in-app toggle; edit the file). The Indiana daemon reads `autoRun`, optional `provider` (which agent runs this repo's turns), and optional `model` for repo-local agent dispatch ([IN_AUTORUN.md](../indiana/IN_AUTORUN.md)).
 - App-global state (the project list, which project is active) stays in the editor's own `userData` config, not per-repo.

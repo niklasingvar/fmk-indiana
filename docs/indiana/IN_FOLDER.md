@@ -108,9 +108,10 @@ When `indiana add <path>` or `indiana serve <path>` initialises a root:
   works in roots scaffolded before they existed. `indiana task add|list|done`
   and `indiana log` are the CLI face; `--json` is the agent surface. (A stale
   `todos.db` from the retired `indiana todo` stub is inert; delete freely.)
-  `runs/` holds one machine-written audit record per agent turn — outcome,
-  transcript, token usage ([COS_PRD.md](../chief-of-staff/COS_PRD.md)); created
-  on first dispatch, safe to delete, history only.
+  `runs/` holds one machine-written audit record per agent turn — facts as
+  YAML frontmatter, transcript as body, faced by `indiana runs --json`
+  ([COS_PRD.md](../chief-of-staff/COS_PRD.md)); created on first dispatch,
+  pruned to the newest 200, safe to delete, history only.
 - `.indiana/casablanca/settings.json` — per-repo [Casablanca](../casablanca/CASABLANCA_OVERVIEW.md)
   settings: a committable JSON bag the editor, the daemon, and the CLI share.
   Created on first write, not by scaffolding. Known keys: `color` (the editor's

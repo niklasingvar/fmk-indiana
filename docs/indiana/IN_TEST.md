@@ -20,6 +20,7 @@ approval: pending
 |-----|-------------|------|
 | [IN_COMMANDS.md](IN_COMMANDS.md) | `::<cmd>` at column 0 is a marker | `test_marker_column_zero` — file with `::h` alone on a line → detected as hate |
 | [IN_COMMANDS.md](IN_COMMANDS.md) | `::<cmd>` inline at end of line is a marker | `test_marker_inline` — file with `Some text ::l` → detected as love, scope is the line |
+| [IN_SCAN.md](IN_SCAN.md) | Glued `::` (`std::fs`, `Kind::Action`) is never a marker; whitespace must precede an inline `::` | `test_glued_double_colon_is_not_a_marker`, `test_marker_after_glued_path_still_counts`, `test_code_paths_are_not_markers`; the write path targets the parsed marker, not the first `::` (`test_injection_targets_marker_not_glued_path`) |
 | [IN_COMMANDS.md](IN_COMMANDS.md) | Short and long forms are equivalent | `test_marker_long_form` — `::hate` resolves to same kind as `::h` |
 | [IN_COMMANDS.md](IN_COMMANDS.md) | Optional/required message follows the token | `test_marker_with_message` — `::fix rename this` → kind=fix, message="rename this" |
 | [IN_COMMANDS.md](IN_COMMANDS.md) | Two or more `::` on one line → skip, warn | `test_marker_ambiguous_line` — `::h ::l` on one line → line skipped, warning emitted |
@@ -56,10 +57,12 @@ approval: pending
 ## E5 — Scan: full walk
 | Ref | Requirement | Test |
 |-----|-------------|------|
-| [IN_SCAN.md](IN_SCAN.md) | Startup: full walk of all markdown under repo root | `test_full_walk` — fixture dir with 3 `.md` files across 2 subdirs, one `.txt` file → all 3 `.md` scanned, `.txt` ignored |
+| [IN_SCAN.md](IN_SCAN.md) | Startup: full walk of all files under repo root, every extension | `test_full_walk` — `.md`, `.txt`, and `Makefile` markers across subdirs → all detected |
 | [IN_SCAN.md](IN_SCAN.md) | Exclude `.indiana/` from walk | `test_exclude_indiana_dir` — fixture with `.indiana/scratch.md` containing `::h` → not in results |
 | [IN_SCAN.md](IN_SCAN.md) | `rg`-style: column-0 and inline only | Already covered by E1 |
-| [IN_SCAN.md](IN_SCAN.md) | Non-markdown files skipped | `test_skip_non_markdown` — `.txt`, `.rs`, `.json` files with `::h` → none detected |
+| [IN_SCAN.md](IN_SCAN.md) | Code files scanned; markers ride comments | `test_scan_code_files` — `// ::fix` in `.rs`, `# ::q` in `.py` → detected; tracked IDs inject there too (`test_id_injection_in_code_file`) |
+| [IN_SCAN.md](IN_SCAN.md) | Binary files silently skipped | `test_skip_binary_files` — non-UTF-8 bytes → no markers, no warnings |
+| [IN_SCAN.md](IN_SCAN.md) | `.gitignore` honored; dep/build trees pruned regardless | `test_gitignored_paths_excluded`, `test_prune_dep_dirs_without_gitignore` |
 | [IN_SCAN.md](IN_SCAN.md) | `::ignore` opts a file out: no markers, no warnings, no ID injection | `test_ignored_file_contributes_nothing`; forms and negatives: `test_file_ignored_frontmatter`, `test_file_ignored_first_line_comment`, `test_file_ignored_negative_cases`, `test_ignore_token_is_not_a_marker` |
 
 ## E6 — ID injection: write path
@@ -161,6 +164,8 @@ Behind `--features test-support`; driven against a mock ACP agent for determinis
 | [IN_AUTORUN.md](IN_AUTORUN.md) | Permission requests are auto-granted (allow-always preferred) | `test_grant_permission_prefers_allow_always` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | ACP form question becomes a live job, accepts a human response, and resumes the same turn | `test_autorun_question_pauses_and_resumes` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | Repo-local `model` is selected through ACP before the prompt | `test_autorun_selects_repo_model` |
+| [IN_AUTORUN.md](IN_AUTORUN.md) | `config.agent.auth_method` drives ACP `authenticate` before `session/new` (Cursor CLI) | `test_autorun_authenticates_when_configured` |
+| [IN_AUTORUN.md](IN_AUTORUN.md) | Repo-local `provider` selects a named agent; unknown names fail the turn | `test_autorun_repo_provider_selects_named_agent`, `test_autorun_unknown_provider_fails_turn` |
 | [IN_AUTORUN_ARCHITECTURE.md](IN_AUTORUN_ARCHITECTURE.md) | One save burst launches one turn; distinct markers in one repo run serially | `test_autorun_debounces_save_burst_to_one_turn`, `test_autorun_serializes_turns_per_repo` |
 | [IN_COMMANDS.md](IN_COMMANDS.md) | Positive numeric flags become group metadata and are stripped from messages; `-a` may coexist and is consumed on claim in either order | `test_numeric_group_flag`, `test_numeric_groups_support_multiple_labels`, `test_numeric_group_coexists_with_auto_in_either_order`, `test_claim_group_retains_group_and_strips_auto_in_either_order` |
 | [IN_AUTORUN.md](IN_AUTORUN.md) | Status reports sorted group counts; grouped Copy filters the payload; Run dispatches all members as one turn | `test_group_summary_copy_and_run_one_turn` |
