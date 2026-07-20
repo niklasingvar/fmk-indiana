@@ -17,3 +17,4 @@ updated: 2026-07-06
 ## [2026-07-06] adopt | .indiana/context-model — prepared tree from files/context-model installed as the dogfood instance; INDIANA.md folded into learnings/INBOX.md; stale montmartre folder removed.
 ## [2026-07-19] fix | fundamentals/MARKDOWN_AS_CODE.md — grounded definition in docs-as-code best practice (git + review + CI gates; markdownlint/Vale/lychee); marker removed.
 ## [2026-07-19] fix | test.md — four paragraphs on Indiana test strategy (spec↔test map, fixtures, layers, non-goals); marker removed.
+## [2026-07-20] fix | test.md — halved body (~279→~140 words); marker removed.
