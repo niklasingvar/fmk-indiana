@@ -1,3 +1,4 @@
+// ::ignore
 //! Folder-local command templates. Embedded prompts are the default; a
 //! monitored root may override them with `.indiana/indianas/<command>/prompt.md`.
 //!

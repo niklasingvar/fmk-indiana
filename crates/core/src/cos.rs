@@ -1,3 +1,4 @@
+// ::ignore
 //! Chief-of-staff store — `tasks.md` (Agent/Human queues) plus `log.md`
 //! (append-only run record) under `.indiana/chief-of-staff/` (COS_PRD.md).
 //!

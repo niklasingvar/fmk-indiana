@@ -1,11 +1,15 @@
+// ::ignore
 //! Line parser. Stateless per line except the declared fence state
 //! (IN_PRINCIPLES.md: stateless per line). One indiana per line (IN_SCAN.md).
 //!
 //! A marker sits at column 0, or inline at the end of a *content* line — a
-//! `::` preceded by at least one non-whitespace char. A purely indented
-//! `::h` is therefore neither (not column 0, no preceding content) and is
-//! ignored, satisfying both IN_SCAN.md (no paragraph tracking needed) and
-//! IN_TEST.md E2 (`    ::h` is not a marker).
+//! `::` preceded by whitespace, with at least one non-whitespace char earlier
+//! on the line. A purely indented `::h` is therefore neither (not column 0,
+//! no preceding content) and is ignored, satisfying both IN_SCAN.md (no
+//! paragraph tracking needed) and IN_TEST.md E2 (`    ::h` is not a marker).
+//! The whitespace requirement keeps glued `::` inert — `std::fs`,
+//! `Kind::Action`, `x::f(y)` are path separators, not commands — which is
+//! what lets the scan cover code files (IN_SCAN.md: all files).
 
 use crate::agents::AgentCatalog;
 use crate::markers::{self, Kind, Msg};
@@ -208,6 +212,17 @@ pub fn parse_line_with(line: &str, st: &mut FenceState, agents: &AgentCatalog) -
     scan_markers(line, agents)
 }
 
+/// Byte offset of the one marker's `::` on a content line, `None` when the
+/// line bears no marker (or an ambiguous pair). The write chokepoint uses
+/// this to edit the exact `::` the scan found — never a glued path separator
+/// like `std::fs` earlier on the same line.
+pub fn marker_column(line: &str) -> Option<usize> {
+    match scan_markers(line, &AgentCatalog::default()) {
+        LineResult::Marker(m) => Some(m.column),
+        _ => None,
+    }
+}
+
 /// Find marker candidates on a content line. >1 valid → ambiguous.
 ///
 /// A `::` inside an inline code span (backtick-delimited) is ignored, by the
@@ -231,8 +246,12 @@ fn scan_markers(line: &str, agents: &AgentCatalog) -> LineResult {
                 i = close;
             }
         } else if bytes[i] == b':' && i + 1 < bytes.len() && bytes[i + 1] == b':' {
-            // Position rule: column 0, or preceded by non-whitespace content.
-            let valid_pos = i == 0 || line[..i].chars().any(|c| !c.is_whitespace());
+            // Position rule: column 0, or inline — whitespace immediately
+            // before the `::` and content somewhere earlier on the line.
+            // A glued `::` (`std::fs`, `Kind::Action`) is a path separator.
+            let valid_pos = i == 0
+                || (bytes[i - 1].is_ascii_whitespace()
+                    && line[..i].chars().any(|c| !c.is_whitespace()));
             if valid_pos {
                 if let Some(m) = parse_candidate(line, i, agents) {
                     found.push(m);
@@ -586,6 +605,33 @@ mod tests {
         let m = marker("::fix -0 keep literal");
         assert_eq!(m.group, None);
         assert_eq!(m.message.as_deref(), Some("-0 keep literal"));
+    }
+
+    // --- inline position rule: whitespace before `::` (IN_SCAN.md) ---
+
+    #[test]
+    fn test_glued_double_colon_is_not_a_marker() {
+        // Path separators in code (and prose) never trigger.
+        assert_eq!(parse("use std::fs;"), LineResult::None);
+        assert_eq!(parse("let k = Kind::Action;"), LineResult::None);
+        assert_eq!(parse("let x = path::f(y);"), LineResult::None);
+        assert_eq!(parse("std::f32::MAX"), LineResult::None);
+        assert_eq!(parse("see ns::action for details"), LineResult::None);
+    }
+
+    #[test]
+    fn test_marker_after_glued_path_still_counts() {
+        let m = marker("use std::fs; // ::fix drop this import");
+        assert_eq!(m.kind, Kind::Fix);
+        assert_eq!(m.message.as_deref(), Some("drop this import"));
+    }
+
+    #[test]
+    fn test_marker_column_helper() {
+        assert_eq!(marker_column("::h"), Some(0));
+        assert_eq!(marker_column("use std::fs; // ::fix x"), Some(16));
+        assert_eq!(marker_column("use std::fs;"), None);
+        assert_eq!(marker_column("::h ::l"), None);
     }
 
     #[test]

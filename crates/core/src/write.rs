@@ -1,6 +1,10 @@
-//! Write chokepoint — the only core function that mutates user markdown.
+// ::ignore
+//! Write chokepoint — the only core function that mutates user source files.
+//! Marker position comes from the parser (`marker_column`), never a raw
+//! `find("::")`: on a code line a glued `std::fs` precedes the real marker.
 
 use crate::id::IdGenerator;
+use crate::parser::marker_column;
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::io::{self, Write as _};
@@ -125,7 +129,7 @@ pub fn set_status(path: &Path, line_no: usize, status: &str) -> io::Result<Write
 /// `None` if the line has no marker or the result equals the input (idempotent).
 fn status_line(line: &[u8], status: &str, ids: &mut IdGenerator) -> Option<Vec<u8>> {
     let text = std::str::from_utf8(line).ok()?;
-    let at = text.find("::")?;
+    let at = marker_column(text.trim_end_matches(['\n', '\r']))?;
     let after = &text[at + 2..];
     let token_len = after
         .find(|c: char| !c.is_ascii_alphabetic())
@@ -197,7 +201,7 @@ fn strip_leading_auto_flags(s: &str) -> String {
 
 fn normalize_line(line: &[u8], ids: &mut IdGenerator) -> Option<Vec<u8>> {
     let text = std::str::from_utf8(line).ok()?;
-    let at = text.find("::")?;
+    let at = marker_column(text.trim_end_matches(['\n', '\r']))?;
     let after = &text[at + 2..];
     let token_len = after
         .find(|c: char| !c.is_ascii_alphabetic())
@@ -241,7 +245,7 @@ fn normalize_line(line: &[u8], ids: &mut IdGenerator) -> Option<Vec<u8>> {
 
 fn existing_bracket(line: &[u8]) -> Option<(String, bool)> {
     let text = std::str::from_utf8(line).ok()?;
-    let at = text.find("::")?;
+    let at = marker_column(text.trim_end_matches(['\n', '\r']))?;
     let after = &text[at + 2..];
     let token_len = after
         .find(|c: char| !c.is_ascii_alphabetic())
@@ -388,6 +392,22 @@ mod tests {
         let text = fs::read_to_string(&file).unwrap();
         assert!(text.starts_with("::action["));
         assert!(text.ends_with("] do thing\n"));
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn test_injection_targets_marker_not_glued_path() {
+        // The line's first `::` is a path separator; the bracket must land on
+        // the real marker the scan found (IN_SCAN.md: all files).
+        let dir = tmp();
+        let file = dir.join("main.rs");
+        fs::write(&file, "use std::fs; // ::todo drop this\n").unwrap();
+
+        let result = inject(&[request(&file, 1)], false);
+        assert_eq!(result[&file], WriteResult::Written);
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(text.starts_with("use std::fs; // ::todo["), "got: {text:?}");
+        assert!(text.ends_with("] drop this\n"), "got: {text:?}");
         fs::remove_dir_all(dir).ok();
     }
 

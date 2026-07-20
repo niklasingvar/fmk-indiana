@@ -1,3 +1,4 @@
+// ::ignore
 //! Shared compiled payload. Copy renders this; MCP returns it as structure.
 
 use crate::cursor;

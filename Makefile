@@ -1,3 +1,4 @@
+# ::ignore
 TEST_DIR ?= tmp/indiana-test
 HOST := $(shell rustc -vV | sed -n 's/^host: //p')
 SIDECAR := crates/menulet/src-tauri/binaries/indiana-$(HOST)

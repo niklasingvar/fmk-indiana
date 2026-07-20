@@ -1,3 +1,4 @@
+// ::ignore
 //! Scope resolution — what a marker carries into the payload.
 
 use serde::{Deserialize, Serialize};

@@ -1,3 +1,4 @@
+// ::ignore
 //! The index — a throwaway view over the source (IN_PRINCIPLES.md: source is
 //! truth, index is a cache). Rebuilt from a full scan; never persisted.
 
@@ -5,7 +6,7 @@ use crate::agents::AgentCatalog;
 use crate::markers::Kind;
 use crate::parser::{file_ignored, parse_line_with, FenceState, LineResult, Marker, Status};
 use crate::scope::{self, Scope};
-use crate::walk::walk_markdown;
+use crate::walk::walk_files;
 use crate::write::{self, InjectRequest, WriteResult};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -132,7 +133,7 @@ impl Index {
         // agents, so the catalog is loaded once per build.
         let agents = AgentCatalog::for_root(root);
         let mut first = Index::default();
-        for path in walk_markdown(root) {
+        for path in walk_files(root) {
             first.scan_file_with(&path, &agents);
         }
 
@@ -162,7 +163,7 @@ impl Index {
             first
         } else {
             let mut second = Index::default();
-            for path in walk_markdown(root) {
+            for path in walk_files(root) {
                 second.scan_file_with(&path, &agents);
             }
             second
@@ -214,6 +215,9 @@ impl Index {
     pub fn scan_file_with(&mut self, path: &Path, agents: &AgentCatalog) {
         let text = match std::fs::read_to_string(path) {
             Ok(t) => t,
+            // Not UTF-8 → binary, silently out of scope (IN_SCAN.md: the walk
+            // visits every file; text detection happens here, at read time).
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidData => return,
             Err(e) => {
                 self.warnings
                     .push(format!("{}: unreadable ({e})", path.display()));
@@ -309,7 +313,7 @@ mod tests {
         fs::remove_dir_all(&d).ok();
     }
 
-    // IN_TEST.md E5: full walk of all markdown across subdirs; non-md ignored.
+    // IN_TEST.md E5: full walk of all files across subdirs and extensions.
     #[test]
     fn test_full_walk() {
         let d = tmp();
@@ -317,8 +321,9 @@ mod tests {
         write(&d, "sub/b.md", "::l\n");
         write(&d, "sub/deep/c.md", "::k\n");
         write(&d, "notes.txt", "::h\n");
+        write(&d, "Makefile", "all: ## ::k\n");
         let idx = scan_fixture(&d);
-        assert_eq!(idx.markers.len(), 3);
+        assert_eq!(idx.markers.len(), 5);
         fs::remove_dir_all(&d).ok();
     }
 
@@ -334,14 +339,82 @@ mod tests {
         fs::remove_dir_all(&d).ok();
     }
 
-    // IN_TEST.md E5: non-markdown files skipped.
+    // IN_TEST.md E5: code files are scanned; markers ride comments.
     #[test]
-    fn test_skip_non_markdown() {
+    fn test_scan_code_files() {
         let d = tmp();
-        write(&d, "a.txt", "::h\n");
-        write(&d, "b.rs", "::h\n");
-        write(&d, "c.json", "::h\n");
-        assert!(scan_fixture(&d).markers.is_empty());
+        write(&d, "main.rs", "fn main() {} // ::fix rename this\n");
+        write(&d, "app.py", "import os  # ::q why os here\n");
+        let idx = scan_fixture(&d);
+        assert_eq!(idx.markers.len(), 2);
+        assert_eq!(idx.markers.iter().filter(|m| m.kind == Kind::Fix).count(), 1);
+        assert_eq!(
+            idx.markers.iter().filter(|m| m.kind == Kind::Question).count(),
+            1
+        );
+        fs::remove_dir_all(&d).ok();
+    }
+
+    // IN_SCAN.md: glued `::` is a path separator, never a marker.
+    #[test]
+    fn test_code_paths_are_not_markers() {
+        let d = tmp();
+        write(
+            &d,
+            "lib.rs",
+            "use std::fs;\nlet k = Kind::Action;\nlet x = path::f(y);\nstd::f32::MAX;\n",
+        );
+        let idx = scan_fixture(&d);
+        assert!(idx.markers.is_empty(), "got: {:?}", idx.markers);
+        fs::remove_dir_all(&d).ok();
+    }
+
+    // IN_SCAN.md E5: binary files are silently out of scope.
+    #[test]
+    fn test_skip_binary_files() {
+        let d = tmp();
+        fs::write(d.join("blob.bin"), [0xFFu8, 0xFE, 0x00, b':', b':', b'h']).unwrap();
+        let idx = scan_fixture(&d);
+        assert!(idx.markers.is_empty());
+        assert!(idx.warnings.is_empty(), "binary skip must not warn");
+        fs::remove_dir_all(&d).ok();
+    }
+
+    // IN_SCAN.md E5: gitignored paths are excluded from the walk.
+    #[test]
+    fn test_gitignored_paths_excluded() {
+        let d = tmp();
+        write(&d, ".gitignore", "dist/\n*.log\n");
+        write(&d, "kept.md", "::h\n");
+        write(&d, "dist/out.js", "// ::fix generated\n");
+        write(&d, "run.log", "boot ::l\n");
+        let idx = scan_fixture(&d);
+        assert_eq!(idx.markers.len(), 1);
+        assert_eq!(idx.markers[0].kind, Kind::Hate);
+        fs::remove_dir_all(&d).ok();
+    }
+
+    // IN_SCAN.md E5: node_modules / target pruned even without a .gitignore.
+    #[test]
+    fn test_prune_dep_dirs_without_gitignore() {
+        let d = tmp();
+        write(&d, "kept.md", "::h\n");
+        write(&d, "node_modules/pkg/index.js", "// ::fix vendored\n");
+        write(&d, "target/debug/out.d", "x ::l\n");
+        let idx = scan_fixture(&d);
+        assert_eq!(idx.markers.len(), 1);
+        fs::remove_dir_all(&d).ok();
+    }
+
+    // IN_LINE.md: tracked markers in code files get IDs like markdown ones.
+    #[test]
+    fn test_id_injection_in_code_file() {
+        let d = tmp();
+        write(&d, "main.rs", "fn main() {} // ::todo wire the flag\n");
+        let idx = scan_fixture(&d);
+        assert!(idx.markers[0].id.is_some());
+        let text = fs::read_to_string(d.join("main.rs")).unwrap();
+        assert!(text.contains("// ::todo["), "got: {text:?}");
         fs::remove_dir_all(&d).ok();
     }
 
