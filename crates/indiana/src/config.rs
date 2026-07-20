@@ -17,9 +17,15 @@ pub struct Config {
     /// roadmap's "pausable" control — flip it off to batch instead of run.
     #[serde(default)]
     pub auto_run: bool,
-    /// The ACP agent the daemon drives for auto-run (IN_AUTORUN.md).
+    /// The ACP agent the daemon drives for auto-run (IN_AUTORUN.md). The
+    /// default when a repo names no `provider` in its Casablanca settings.
     #[serde(default)]
     pub agent: AgentConfig,
+    /// Named agents selectable per repo via the `provider` Casablanca setting.
+    /// Overrides the built-in providers (claude, opencode, cursor) on name
+    /// collision; a name found in neither fails the turn.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub agents: HashMap<String, AgentConfig>,
 }
 
 /// How to launch the ACP agent adapter the daemon speaks to over stdio.
@@ -38,6 +44,11 @@ pub struct AgentConfig {
     /// daemon's own environment.
     #[serde(default)]
     pub env: HashMap<String, String>,
+    /// ACP auth method id to pass to `authenticate` after `initialize`.
+    /// Adapters that gate sessions behind login (Cursor CLI: `cursor_login`)
+    /// need it; the default claude-code-acp does not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_method: Option<String>,
 }
 
 fn default_agent_command() -> String {
@@ -57,11 +68,43 @@ impl Default for AgentConfig {
             command: default_agent_command(),
             args: default_agent_args(),
             env: HashMap::new(),
+            auth_method: None,
         }
     }
 }
 
+/// The launch config for a built-in provider name, all verified against the
+/// real adapters (IN_AUTORUN.md). `claude` is the same as the global default.
+fn builtin_provider(name: &str) -> Option<AgentConfig> {
+    let (command, args, auth_method) = match name {
+        "claude" => (default_agent_command(), default_agent_args(), None),
+        "opencode" => ("opencode".into(), vec!["acp".into()], None),
+        "cursor" => (
+            "agent".into(),
+            vec!["acp".into()],
+            Some("cursor_login".into()),
+        ),
+        _ => return None,
+    };
+    Some(AgentConfig {
+        command,
+        args,
+        env: HashMap::new(),
+        auth_method,
+    })
+}
+
 impl Config {
+    /// The agent behind a provider name: the user's `agents` map first, then
+    /// the built-ins. `None` means unknown — the caller fails the turn rather
+    /// than silently substituting another agent.
+    pub fn provider_agent(&self, name: &str) -> Option<AgentConfig> {
+        self.agents
+            .get(name)
+            .cloned()
+            .or_else(|| builtin_provider(name))
+    }
+
     /// Load config, or an empty default if absent / unreadable.
     pub fn load() -> Config {
         std::fs::read_to_string(config_path())
@@ -126,6 +169,33 @@ mod tests {
         assert_eq!(back.agent.command, "/opt/bin/my-acp");
         assert_eq!(back.agent.args, vec!["--flag".to_string()]);
         assert_eq!(back.agent.env.get("ANTHROPIC_API_KEY").unwrap(), "x");
+    }
+
+    #[test]
+    fn test_provider_agent_builtins() {
+        let cfg = Config::default();
+        let opencode = cfg.provider_agent("opencode").unwrap();
+        assert_eq!(opencode.command, "opencode");
+        assert_eq!(opencode.args, vec!["acp"]);
+        assert_eq!(opencode.auth_method, None);
+        let cursor = cfg.provider_agent("cursor").unwrap();
+        assert_eq!(cursor.command, "agent");
+        assert_eq!(cursor.args, vec!["acp"]);
+        assert_eq!(cursor.auth_method.as_deref(), Some("cursor_login"));
+        let claude = cfg.provider_agent("claude").unwrap();
+        assert_eq!(claude.command, "npx");
+        assert!(cfg.provider_agent("goose").is_none(), "unknown → None");
+    }
+
+    #[test]
+    fn test_provider_agent_config_overrides_builtin() {
+        let cfg: Config = serde_json::from_str(
+            r#"{ "agents": { "cursor": { "command": "/opt/agent", "args": [] },
+                             "mine": { "command": "/opt/mine", "args": ["acp"] } } }"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.provider_agent("cursor").unwrap().command, "/opt/agent");
+        assert_eq!(cfg.provider_agent("mine").unwrap().command, "/opt/mine");
     }
 
     #[test]

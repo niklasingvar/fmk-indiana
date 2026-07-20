@@ -1,3 +1,4 @@
+// ::ignore
 //! M10 — MCP stdio face. Black-box JSON-RPC over stdin/stdout.
 
 use std::io::Write;

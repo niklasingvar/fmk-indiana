@@ -220,8 +220,9 @@ fn test_autorun_success_resolves_and_commits() {
 }
 
 // E13: every turn leaves a durable audit record under
-// `.indiana/chief-of-staff/runs/` — outcome, transcript, and token usage —
-// indexed by one `run` line in the action log.
+// `.indiana/chief-of-staff/runs/` — structured frontmatter (outcome, tokens,
+// cost) plus the transcript body — indexed by one `run` line in the action
+// log and served by `indiana runs --json` (the one grammar).
 #[test]
 fn test_run_leaves_audit_record_with_usage() {
     let home = unique("home");
@@ -242,20 +243,35 @@ fn test_run_leaves_audit_record_with_usage() {
     );
     let entry = std::fs::read_dir(&runs).unwrap().next().unwrap().unwrap();
     let record = std::fs::read_to_string(entry.path()).unwrap();
-    assert!(record.contains("- outcome: done"), "record: {record}");
+    assert!(record.contains("outcome: done"), "record: {record}");
     assert!(
-        record.contains("- tokens: in 1234 out 567 tok"),
+        record.contains("tokensIn: 1234") && record.contains("tokensOut: 567"),
         "per-turn tokens from the prompt response: {record}"
     );
     assert!(
-        record.contains("- context: 45000 of 200000 tokens used"),
+        record.contains("contextUsed: 45000") && record.contains("contextSize: 200000"),
         "context window from usage_update: {record}"
     );
-    assert!(record.contains("- cost: 0.1234 USD"), "record: {record}");
+    assert!(record.contains("cost: 0.1234"), "record: {record}");
     assert!(
         record.contains("mock agent working"),
         "transcript survives the job: {record}"
     );
+
+    // `indiana runs --json` is the face surface — one grammar, in Rust.
+    let out = Command::new(BIN)
+        .env("INDIANA_HOME", &home)
+        .args(["runs", "--root"])
+        .arg(&repo)
+        .arg("--json")
+        .output()
+        .unwrap();
+    let listed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let run = &listed.as_array().expect("json array")[0];
+    assert_eq!(run["outcome"], "done", "runs --json: {listed}");
+    assert_eq!(run["tokensIn"], 1234);
+    assert_eq!(run["cost"], 0.1234);
+    assert!(run["file"].as_str().unwrap().ends_with(".md"));
 
     // The action log indexes the record with one `run` line carrying usage.
     assert!(
@@ -535,6 +551,74 @@ fn set_repo_model(repo: &Path, model: &str) {
     .unwrap();
 }
 
+fn set_repo_provider(repo: &Path, provider: &str) {
+    let dir = repo.join(".indiana").join("casablanca");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("settings.json"),
+        serde_json::json!({ "provider": provider }).to_string(),
+    )
+    .unwrap();
+}
+
+/// Config whose default agent cannot launch, with the mock registered as the
+/// named provider `mock` — proving dispatch honors the repo's `provider`.
+fn write_config_with_named_mock(home: &Path, repo: &Path) {
+    let cfg = serde_json::json!({
+        "folders": [repo],
+        "auto_run": true,
+        "agent": { "command": "/nonexistent/adapter", "args": [] },
+        "agents": {
+            "mock": { "command": MOCK, "args": [], "env": { "MOCK_ACP_MODE": "succeed" } }
+        }
+    });
+    std::fs::write(
+        home.join("config.json"),
+        serde_json::to_string_pretty(&cfg).unwrap(),
+    )
+    .unwrap();
+}
+
+// E13: the repo-local `provider` picks a named agent from `config.agents`;
+// the global `config.agent` (here unlaunchable) is only the unset fallback.
+#[test]
+fn test_autorun_repo_provider_selects_named_agent() {
+    let home = unique("home");
+    let repo = git_repo_with("intro\n::fix -a use the named provider\n");
+    write_config_with_named_mock(&home, &repo);
+    set_repo_provider(&repo, "mock");
+    let doc = repo.join("doc.md");
+    let commits_before = git_log_count(&repo);
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+    assert!(
+        wait_until(|| git_log_count(&repo) > commits_before),
+        "named provider never dispatched; doc.md = {:?}",
+        std::fs::read_to_string(&doc)
+    );
+    assert!(!std::fs::read_to_string(&doc).unwrap().contains("::fix"));
+}
+
+// E13: an unknown provider fails the turn (marker → failed) rather than
+// silently falling back to another agent — same stance as unsupported models.
+#[test]
+fn test_autorun_unknown_provider_fails_turn() {
+    let home = unique("home");
+    let repo = git_repo_with("intro\n::fix -a should fail\n");
+    write_config(&home, &repo, "succeed", true); // global agent = working mock
+    set_repo_provider(&repo, "no-such-provider");
+    let doc = repo.join("doc.md");
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+    assert!(
+        wait_until_file(&doc, |t| t.contains(":failed]")),
+        "unknown provider must fail the marker, not fall back; doc.md = {:?}",
+        std::fs::read_to_string(&doc)
+    );
+}
+
 // E13: per-repo opt-in dispatches even when the global default is off.
 #[test]
 fn test_autorun_per_repo_enables_over_global_off() {
@@ -572,6 +656,41 @@ fn test_autorun_per_repo_disables_over_global_on() {
         "::fix -a do nothing yet\n",
         "per-repo autoRun:false must veto the global default"
     );
+}
+
+// E13: an adapter that gates sessions behind ACP `authenticate` (Cursor CLI's
+// `agent acp`) works when `config.agent.auth_method` names its auth method —
+// the client authenticates after `initialize`, before `session/new`.
+#[test]
+fn test_autorun_authenticates_when_configured() {
+    let home = unique("home");
+    let repo = git_repo_with("intro\n::fix -a fix the typo\n");
+    let cfg = serde_json::json!({
+        "folders": [repo],
+        "auto_run": true,
+        "agent": {
+            "command": MOCK,
+            "args": [],
+            "env": { "MOCK_ACP_MODE": "succeed", "MOCK_ACP_REQUIRE_AUTH": "1" },
+            "auth_method": "mock_login",
+        }
+    });
+    std::fs::write(
+        home.join("config.json"),
+        serde_json::to_string_pretty(&cfg).unwrap(),
+    )
+    .unwrap();
+    let doc = repo.join("doc.md");
+    let commits_before = git_log_count(&repo);
+
+    let _d = spawn_serve(&home);
+    assert!(wait_ready(&home));
+    assert!(
+        wait_until(|| git_log_count(&repo) > commits_before),
+        "auth-gated agent never resolved; doc.md = {:?}",
+        std::fs::read_to_string(&doc)
+    );
+    assert!(!std::fs::read_to_string(&doc).unwrap().contains("::fix"));
 }
 
 // E13: the repo-local model is selected through ACP before the prompt runs.

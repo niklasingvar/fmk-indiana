@@ -1,3 +1,4 @@
+// ::ignore
 //! IN_TEST.md E10 — the CLI face. Runs the built binary against a fixture.
 
 use std::fs;

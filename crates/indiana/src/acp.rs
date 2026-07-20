@@ -55,6 +55,9 @@ pub struct AcpAgent<W: Write> {
     stdin: ChildStdin,
     reader: BufReader<ChildStdout>,
     next_id: i64,
+    /// When set, `authenticate` with this method id after `initialize` —
+    /// adapters like Cursor CLI refuse `session/new` until then.
+    auth_method: Option<String>,
     log: W,
 }
 
@@ -84,6 +87,7 @@ impl<W: Write> AcpAgent<W> {
             stdin,
             reader: BufReader::new(stdout),
             next_id: 0,
+            auth_method: cfg.auth_method.clone(),
             log,
         })
     }
@@ -116,6 +120,14 @@ impl<W: Write> AcpAgent<W> {
             on_elicitation,
             on_update,
         )?;
+        if let Some(method_id) = self.auth_method.clone() {
+            self.call(
+                "authenticate",
+                json!({ "methodId": method_id }),
+                on_elicitation,
+                on_update,
+            )?;
+        }
         let session = self.call(
             "session/new",
             json!({ "cwd": cwd.display().to_string(), "mcpServers": [] }),

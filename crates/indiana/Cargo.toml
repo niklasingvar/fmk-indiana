@@ -33,6 +33,7 @@ serde_json = "1"
 notify = "6"
 indiana-protocol = { path = "../indiana-protocol" }
 arboard = "3.6.1"
+serde_yml = "0.0.13"
 
 [dev-dependencies]
 tempfile = "3"

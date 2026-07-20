@@ -111,6 +111,18 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// List agent-run audit records (`.indiana/chief-of-staff/runs/`).
+    Runs {
+        /// Repo root (default: current directory).
+        #[arg(long)]
+        root: Option<PathBuf>,
+        /// Number of records to show, newest first.
+        #[arg(short = 'n', default_value_t = 20)]
+        lines: usize,
+        /// Emit JSON for faces and agents.
+        #[arg(long)]
+        json: bool,
+    },
     /// Read or edit per-repo Casablanca settings (`.indiana/casablanca/settings.json`).
     Casablanca {
         #[command(subcommand)]
@@ -270,6 +282,7 @@ fn main() -> ExitCode {
         } => service_install(),
         Cmd::Task { cmd } => task_cmd(cmd),
         Cmd::Log { root, lines, json } => log_cmd(root, lines, json),
+        Cmd::Runs { root, lines, json } => runs_cmd(root, lines, json),
         Cmd::Casablanca { cmd } => casablanca_cmd(cmd),
         Cmd::Frontmatter { path, write } => frontmatter_cmd(path, write),
     }
@@ -851,6 +864,34 @@ fn task_done(root: Option<PathBuf>, json: bool, id: String) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// List run records through the one Rust grammar (run_record.rs). `--json`
+/// is the face surface: Casablanca and agents read this, never the files'
+/// frontmatter directly.
+fn runs_cmd(root: Option<PathBuf>, lines: usize, json: bool) -> ExitCode {
+    let r = resolve_root(root);
+    let listed = run_record::list(&r, lines);
+    if json {
+        println!("{}", serde_json::to_string_pretty(&listed).unwrap());
+    } else if listed.is_empty() {
+        eprintln!("indiana: no run records");
+    } else {
+        for run in listed {
+            let s = &run.summary;
+            let usage: Vec<String> = [s.token_summary(), s.cost_summary()]
+                .into_iter()
+                .flatten()
+                .collect();
+            let usage = if usage.is_empty() {
+                String::new()
+            } else {
+                format!(" · {}", usage.join(" · "))
+            };
+            println!("{} {} [{}]{usage}", s.started, s.outcome, s.job);
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 fn log_cmd(root: Option<PathBuf>, lines: usize, json: bool) -> ExitCode {

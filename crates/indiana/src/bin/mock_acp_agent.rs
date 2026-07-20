@@ -11,6 +11,10 @@
 //!     daemon observes a surviving `:working` marker and records `:failed`.
 //!   - `question`: ask one ACP form question, then resolve only after the
 //!     client accepts it.
+//!
+//! `MOCK_ACP_REQUIRE_AUTH=1` makes `session/new` fail with the ACP
+//! auth-required error (-32000) until the client calls `authenticate` —
+//! the behaviour of `agent acp` (Cursor CLI).
 
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
@@ -19,6 +23,8 @@ use std::process::Command;
 
 fn main() {
     let mode = std::env::var("MOCK_ACP_MODE").unwrap_or_else(|_| "succeed".to_string());
+    let require_auth = std::env::var("MOCK_ACP_REQUIRE_AUTH").is_ok();
+    let mut authenticated = false;
     let stdin = io::stdin();
     let mut reader = stdin.lock();
     let mut out = io::stdout();
@@ -44,10 +50,29 @@ fn main() {
                 respond(
                     &mut out,
                     id,
-                    json!({ "protocolVersion": 1, "agentCapabilities": {} }),
+                    json!({
+                        "protocolVersion": 1,
+                        "agentCapabilities": {},
+                        "authMethods": [ { "id": "mock_login", "name": "Mock Login" } ],
+                    }),
                 );
             }
+            (Some("authenticate"), Some(id)) => {
+                authenticated = msg["params"]["methodId"].as_str() == Some("mock_login");
+                respond(&mut out, id, json!({}));
+            }
             (Some("session/new"), Some(id)) => {
+                if require_auth && !authenticated {
+                    send(
+                        &mut out,
+                        json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "error": { "code": -32000, "message": "Authentication required" },
+                        }),
+                    );
+                    continue;
+                }
                 cwd = msg["params"]["cwd"].as_str().unwrap_or("").to_string();
                 respond(
                     &mut out,

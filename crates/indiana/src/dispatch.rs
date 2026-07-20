@@ -625,6 +625,7 @@ impl Dispatcher {
         let system_prompt = selector.system_prompt(root);
         let prompt = selector.render(&payload, &system_prompt);
         let model = agent_model(root);
+        let agent = agent_for_root(root, config);
         let ids: HashSet<String> = claimed
             .markers
             .iter()
@@ -636,7 +637,6 @@ impl Dispatcher {
             return 0;
         }
 
-        let agent = config.agent.clone();
         let inflight = Arc::clone(&self.inflight);
         let own_writes = Arc::clone(own_writes);
         let root = root.to_path_buf();
@@ -744,7 +744,7 @@ impl Dispatcher {
         let system_prompt = SystemPrompt::for_root(&root);
         let prompt = render_dispatch(&compile_one(&marker, roots), &system_prompt);
         let model = agent_model(&root);
-        let agent = config.agent.clone();
+        let agent = agent_for_root(&root, config);
         let inflight = Arc::clone(&self.inflight);
         let own_writes = Arc::clone(own_writes);
         let path = path.to_path_buf();
@@ -784,9 +784,11 @@ impl Dispatcher {
     }
 }
 
-/// Run one ACP turn to completion, then reconcile the marker's state.
+/// Run one ACP turn to completion, then reconcile the marker's state. A
+/// provider resolution error arrives as `Err` and fails the turn like any
+/// other dispatch error.
 fn run_turn(
-    agent: &crate::config::AgentConfig,
+    agent: &Result<crate::config::AgentConfig, String>,
     root: &Path,
     path: &Path,
     id: &str,
@@ -800,7 +802,10 @@ fn run_turn(
     let jobs = jobs.clone();
     let mut on_question = |params: &Value| jobs.await_answer(id, params);
     let mut on_update = |params: &Value| jobs.append_update(id, params);
-    let outcome = AcpAgent::spawn(agent, &mut log)
+    let outcome = agent
+        .as_ref()
+        .map_err(|e| io::Error::other(e.clone()))
+        .and_then(|agent| AcpAgent::spawn(agent, &mut log))
         .and_then(|mut a| a.run_turn(root, prompt, model, &mut on_question, &mut on_update));
 
     // Decide by inspecting the file, not the stop reason: the agent resolves a
@@ -848,7 +853,7 @@ fn run_turn(
 }
 
 fn run_batch_turn(
-    agent: &crate::config::AgentConfig,
+    agent: &Result<crate::config::AgentConfig, String>,
     root: &Path,
     paths: &HashSet<PathBuf>,
     ids: &HashSet<String>,
@@ -865,7 +870,10 @@ fn run_batch_turn(
     let jobs = jobs.clone();
     let mut on_question = |params: &Value| jobs.await_answer(job_id, params);
     let mut on_update = |params: &Value| jobs.append_update(job_id, params);
-    let outcome = AcpAgent::spawn(agent, &mut log)
+    let outcome = agent
+        .as_ref()
+        .map_err(|e| io::Error::other(e.clone()))
+        .and_then(|agent| AcpAgent::spawn(agent, &mut log))
         .and_then(|mut a| a.run_turn(root, prompt, model, &mut on_question, &mut on_update));
 
     let catalog = AgentCatalog::for_root(root);
@@ -984,27 +992,38 @@ fn persist_run_record(
         (Some(reason), false) => format!("{detail}; {reason}"),
         (None, _) => detail.to_string(),
     };
-    let record = crate::run_record::RunRecord {
-        job_id,
-        root,
-        markers,
+    let token = |key: &str| tokens.as_ref().and_then(|t| t.get(key)).and_then(Value::as_u64);
+    let summary = crate::run_record::RunSummary {
+        job: job_id.to_string(),
+        outcome: event.to_string(),
+        detail: (!record_detail.is_empty()).then_some(record_detail),
         started,
         ended: cos::now(),
-        outcome: event,
-        detail: record_detail,
-        tokens: tokens.clone(),
-        usage: usage.clone(),
-        events: &events,
+        root: root.display().to_string(),
+        markers,
+        tokens_in: token("inputTokens"),
+        tokens_out: token("outputTokens"),
+        tokens_total: token("totalTokens"),
+        context_used: usage.as_ref().and_then(|u| u.context_used),
+        context_size: usage.as_ref().and_then(|u| u.context_size),
+        cost: usage.as_ref().and_then(|u| u.cost_amount),
+        currency: usage.as_ref().and_then(|u| u.cost_currency.clone()),
     };
-    let Ok(rel) = crate::run_record::write(&record) else {
+    let Ok(rel) = crate::run_record::write(root, &summary, &events) else {
         return; // a missing record never sinks the dispatch outcome
     };
-    own_writes.lock().unwrap().record(&root.join(&rel));
+    {
+        let mut own = own_writes.lock().unwrap();
+        own.record(&root.join(&rel));
+        for removed in crate::run_record::prune(root) {
+            own.record(&removed);
+        }
+    }
     let mut parts = vec![event.to_string()];
-    if let Some(tokens) = crate::run_record::token_summary(tokens.as_ref()) {
+    if let Some(tokens) = summary.token_summary() {
         parts.push(tokens);
     }
-    if let Some(cost) = crate::run_record::cost_summary(usage.as_ref()) {
+    if let Some(cost) = summary.cost_summary() {
         parts.push(cost);
     }
     parts.push(rel.display().to_string());
@@ -1053,6 +1072,23 @@ fn agent_model(root: &Path) -> Option<String> {
     crate::casablanca::get(root, "model")
         .and_then(|value| value.as_str().map(str::trim).map(str::to_string))
         .filter(|model| !model.is_empty())
+}
+
+/// The agent for this repo's turns: the `provider` Casablanca setting names an
+/// entry in `config.agents` or a built-in (claude/opencode/cursor); unset falls
+/// back to the global `config.agent`. An unknown name is an error carried into
+/// the turn, which fails rather than silently using another agent — the same
+/// stance as unsupported models (IN_AUTORUN.md).
+fn agent_for_root(root: &Path, config: &Config) -> Result<crate::config::AgentConfig, String> {
+    match crate::casablanca::get(root, "provider")
+        .and_then(|value| value.as_str().map(str::trim).map(str::to_string))
+        .filter(|provider| !provider.is_empty())
+    {
+        Some(name) => config
+            .provider_agent(&name)
+            .ok_or(format!("unknown provider '{name}'")),
+        None => Ok(config.agent.clone()),
+    }
 }
 
 /// The deepest monitored root that contains `path` — the agent's working dir.
