@@ -11,4 +11,4 @@ approval: approved
 
 ## Human
 - [ ] [mun-sa] — human-queue item: tracked, never executed by agents. (crates/core/templates/indianas/action/prompt.md:10) 2026-07-16
-- [ ] [win-sa] follow up on this (tmp/indiana-test/review.md:3) 2026-07-16
+- [x] [win-sa] follow up on this (tmp/indiana-test/review.md:3) 2026-07-16
