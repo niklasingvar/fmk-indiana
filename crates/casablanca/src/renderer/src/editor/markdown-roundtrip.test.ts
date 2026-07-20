@@ -1,3 +1,4 @@
+// ::ignore
 import { describe, expect, it } from 'vitest'
 import { createHeadlessEditor } from '@lexical/headless'
 import { $convertToMarkdownString } from '@lexical/markdown'

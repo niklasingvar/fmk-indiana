@@ -177,24 +177,31 @@ export interface CosLogResult {
 
 /**
  * One durable agent-run audit record under `.indiana/chief-of-staff/runs/`
- * (COS_PRD.md), summarized for the runs panel list. `file` is the record's
- * filename; the full markdown is fetched on selection.
+ * (COS_PRD.md), as emitted by `indiana runs --json` — the record grammar
+ * lives in Rust only; this is a projection. `file` is the record's filename;
+ * the full markdown is fetched on selection.
  */
 export interface AgentRun {
   file: string
-  jobId: string
-  outcome: 'done' | 'failed' | 'unknown'
-  /** `YYYY-MM-DD HH:MM` (UTC). */
-  started: string
+  job: string
+  outcome: 'done' | 'failed' | string
   /** Stop reason or failure note, when the record carries one. */
   detail?: string
-  /** e.g. `in 1234 out 567 tok` — as written in the record. */
-  tokens?: string
-  /** e.g. `0.4321 USD` — as written in the record. */
-  cost?: string
+  /** `YYYY-MM-DD HH:MM` (UTC). */
+  started: string
+  ended: string
+  root: string
+  markers?: string[]
+  tokensIn?: number
+  tokensOut?: number
+  tokensTotal?: number
+  contextUsed?: number
+  contextSize?: number
+  cost?: number
+  currency?: string
 }
 
-/** `available: false` = no runs folder yet (nothing has run). */
+/** `available: false` = indiana binary missing or the listing failed. */
 export interface AgentRunsResult {
   available: boolean
   runs: AgentRun[]

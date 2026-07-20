@@ -1,3 +1,4 @@
+// ::ignore
 import { describe, expect, it } from 'vitest'
 import { diffMarkerClaims } from './marker-claim'
 

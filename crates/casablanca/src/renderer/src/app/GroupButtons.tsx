@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CopyAllResult } from '@shared/domain'
+import type { AgentJob, CopyAllResult, ElicitationAction } from '@shared/domain'
+import { jobForBatch } from '@shared/batch-job'
+
+import { JobFollowPopover } from './agents/JobFollowPopover'
 
 /** One batch the top bar offers: a numeric group or a named agent persona. */
 export interface Batch {
@@ -81,19 +84,31 @@ export function useBatches(): Batch[] {
 type ButtonStatus =
   | { kind: 'idle' }
   | { kind: 'busy' }
+  /** Dispatch accepted; the daemon job hasn't shown up in the 1s poll yet. */
+  | { kind: 'launching' }
   | { kind: 'done'; ok: boolean; message: string }
+
+/** How long to trust `launching` before conceding the job never appeared. */
+const LAUNCH_GRACE_MS = 8000
 
 function BatchButton({
   batch,
+  job,
   menuOpen,
-  onOpenMenu
+  onOpenMenu,
+  onAnswer
 }: {
   batch: Batch
+  /** The live daemon job for this batch, when one is running. */
+  job: AgentJob | undefined
   menuOpen: boolean
   onOpenMenu: (key: string | null) => void
+  onAnswer: (job: AgentJob, action: ElicitationAction, value?: string) => Promise<void>
 }) {
   const [status, setStatus] = useState<ButtonStatus>({ kind: 'idle' })
+  const [followOpen, setFollowOpen] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hadJob = useRef(false)
 
   useEffect(
     () => () => {
@@ -107,6 +122,21 @@ function BatchButton({
     setStatus({ kind: 'done', ok, message })
     timer.current = setTimeout(() => setStatus({ kind: 'idle' }), STATUS_MS)
   }
+
+  // The job appearing ends `launching`; the job disappearing after a run
+  // reports the turn ending — the user always sees start and end.
+  useEffect(() => {
+    if (job) {
+      hadJob.current = true
+      setStatus((s) => (s.kind === 'launching' ? { kind: 'idle' } : s))
+    } else {
+      setFollowOpen(false)
+      if (hadJob.current) {
+        hadJob.current = false
+        flash(true, `Turn ended for ${batch.title} — see the Agent runs panel`)
+      }
+    }
+  }, [job !== undefined])
 
   const copy = async (): Promise<void> => {
     onOpenMenu(null)
@@ -126,42 +156,87 @@ function BatchButton({
     const res = await batch
       .dispatch()
       .catch(() => ({ accepted: false, count: 0 }))
-    flash(
-      res.accepted,
-      res.accepted
-        ? `Dispatched ${res.count} marker(s) for ${batch.title}`
-        : `Could not dispatch ${batch.title} — daemon offline, batch empty, or a turn is running`
+    if (!res.accepted) {
+      flash(
+        false,
+        `Could not dispatch ${batch.title} — daemon offline, batch empty, or a turn is running`
+      )
+      return
+    }
+    // Keep spinning until the jobs poll picks the turn up (≤1s), then the
+    // job itself drives the spinner. The grace timer covers a turn so fast
+    // it ends between polls.
+    setStatus({ kind: 'launching' })
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(
+      () => setStatus((s) => (s.kind === 'launching' ? { kind: 'idle' } : s)),
+      LAUNCH_GRACE_MS
     )
   }
 
   const empty = batch.count === 0
-  const title =
-    status.kind === 'busy'
-      ? 'Working…'
-      : status.kind === 'done'
-        ? status.message
-        : empty
-          ? `${batch.title} — no indianas`
-          : `Copy ${batch.title} · ${batch.count} indiana(s); right-click to dispatch`
+  const spinning = status.kind === 'busy' || status.kind === 'launching' || job !== undefined
+  const waiting = job?.state === 'awaiting_input'
+  const title = waiting
+    ? `${batch.title} — agent needs an answer, click to reply`
+    : job
+      ? `${batch.title} — agent running, click to follow`
+      : status.kind === 'busy' || status.kind === 'launching'
+        ? `Dispatching ${batch.title}…`
+        : status.kind === 'done'
+          ? status.message
+          : empty
+            ? `${batch.title} — no indianas`
+            : `Copy ${batch.title} · ${batch.count} indiana(s); right-click to dispatch`
 
   return (
     <span className="relative">
       <button
         type="button"
-        disabled={empty || status.kind === 'busy'}
+        disabled={(empty && !job && status.kind !== 'launching') || status.kind === 'busy'}
         title={title}
         aria-label={title}
-        onClick={() => void copy()}
+        aria-busy={spinning}
+        onClick={() => {
+          if (job) {
+            setFollowOpen((open) => !open)
+            return
+          }
+          void copy()
+        }}
         onContextMenu={(e) => {
           e.preventDefault()
-          if (!empty) onOpenMenu(menuOpen ? null : batch.key)
+          if (!empty && !job && status.kind !== 'launching') {
+            onOpenMenu(menuOpen ? null : batch.key)
+          }
         }}
         className={`flex h-5 min-w-5 items-center justify-center rounded px-1 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${
-          status.kind === 'done' && status.ok ? 'bg-white/25' : 'bg-black/15 hover:bg-black/25'
+          waiting || (status.kind === 'done' && status.ok)
+            ? 'bg-white/25'
+            : 'bg-black/15 hover:bg-black/25'
         }`}
       >
-        {batch.label}
+        {waiting ? (
+          <span aria-hidden>?</span>
+        ) : spinning ? (
+          <span
+            aria-hidden
+            className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-white/40 border-t-white"
+          />
+        ) : (
+          batch.label
+        )}
       </button>
+      {status.kind === 'done' && (
+        <span
+          role="status"
+          className={`absolute left-1/2 top-6 z-50 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-[11px] shadow-lg ${
+            status.ok ? 'bg-black/80 text-white' : 'bg-git-deleted text-white'
+          }`}
+        >
+          {status.message}
+        </span>
+      )}
       {menuOpen && (
         <div className="absolute left-0 top-6 z-50 min-w-36 rounded border border-black/20 bg-project py-0.5 shadow-lg">
           <button
@@ -173,6 +248,9 @@ function BatchButton({
           </button>
         </div>
       )}
+      {followOpen && job && (
+        <JobFollowPopover job={job} onAnswer={(action, value) => onAnswer(job, action, value)} />
+      )}
     </span>
   )
 }
@@ -181,9 +259,17 @@ function BatchButton({
  * The centered batch cluster: numeric groups 1…n, one button per agent
  * persona (M = mike, L = lisa, …), each graying out while it has no tagged
  * indianas. Click copies the batch (personas carry their own system prompt);
- * right-click offers a one-item dispatch menu.
+ * right-click offers a one-item dispatch menu. While a batch's turn runs the
+ * button itself is the spinner and opens the follow popover — dispatch is
+ * never invisible.
  */
-export function GroupButtons() {
+export function GroupButtons({
+  jobs,
+  onAnswer
+}: {
+  jobs: AgentJob[]
+  onAnswer: (job: AgentJob, action: ElicitationAction, value?: string) => Promise<void>
+}) {
   const batches = useBatches()
   const [openMenu, setOpenMenu] = useState<string | null>(null)
 
@@ -201,8 +287,10 @@ export function GroupButtons() {
         <BatchButton
           key={batch.key}
           batch={batch}
+          job={jobForBatch(jobs, batch.key)}
           menuOpen={openMenu === batch.key}
           onOpenMenu={setOpenMenu}
+          onAnswer={onAnswer}
         />
       ))}
     </div>

@@ -100,7 +100,7 @@ export function TopBar({
     <header className="flex h-8 shrink-0 select-none items-center gap-2 bg-project px-3 text-xs font-medium text-white/95">
       <span className="max-w-48 shrink-0 truncate drop-shadow-sm">{name}</span>
       <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
-        <GroupButtons />
+        <GroupButtons jobs={jobs} onAnswer={answer} />
         <CopyAllButton />
       </div>
       <AgentIndicators

@@ -1,3 +1,4 @@
+// ::ignore
 import { describe, expect, it } from 'vitest'
 import { parseNoteDocument, serializeNoteDocument } from './note-serialization'
 
